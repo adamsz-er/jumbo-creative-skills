@@ -112,14 +112,34 @@ def sparkline(values: Sequence[Optional[float]], label: str, width: int = 120, h
 
 
 def _axis_text(value: float) -> str:
+    if value == 0:
+        return "0"
     return "{:,.0f}".format(value) if abs(value) >= 100 else "{:,.2f}".format(value)
 
 
+ZERO_DECIMAL_CURRENCIES = frozenset(("JPY", "KRW", "VND", "CLP", "ISK", "UGX", "XAF", "XOF", "XPF", "PYG", "RWF", "VUV", "DJF", "GNF", "KMF", "BIF"))
+
+
+def _trim(value: float) -> str:
+    return ("%.2f" % value).rstrip("0").rstrip(".")
+
+
+def axis_format(kind: str, currency: Optional[str] = None):
+    """A tick formatter in the axis unit: money keeps the currency's own digits, a rate reads 0.8%, a ratio 2.45x; zero is a plain 0 or 0x."""
+    if kind == "money":
+        whole = (currency or "").upper() in ZERO_DECIMAL_CURRENCIES
+        return lambda v: "0" if v == 0 else "{:,.0f}".format(v) if whole or abs(v) >= 100 else "{:,.2f}".format(v)
+    suffix = {"pct": "%", "x": "x"}[kind]
+    return lambda v: "0" + suffix if v == 0 else _trim(v) + suffix
+
+
 def combo_chart(labels: Sequence[str], bars: Optional[Sequence[Optional[float]]], line: Optional[Sequence[Optional[float]]],
-                bar_unit: str, line_unit: str, label: str, width: int = 560, height: int = 280) -> str:
+                bar_unit: str, line_unit: str, label: str, width: int = 560, height: int = 280,
+                bar_fmt=_axis_text, line_fmt=_axis_text) -> str:
     """Bars on the left axis and a line on the right axis over the same x labels; either may be absent.
 
-    A None value is a gap: no bar is drawn and the line breaks, so a missing day never reads as 0.
+    A None value is a gap: no bar is drawn and the line breaks, so a missing day never reads as 0. `bar_fmt` and `line_fmt`
+    write the ticks in each axis's unit; when both axes start at zero the right axis leaves its zero to the left one.
     """
     count = len(labels)
     if not count or not ((bars and any(v is not None for v in bars)) or (line and any(v is not None for v in line))):
@@ -133,13 +153,13 @@ def combo_chart(labels: Sequence[str], bars: Optional[Sequence[Optional[float]]]
         peak = max((v for v in bars if v is not None), default=0) or 1.0
         for frac in (0.0, 0.5, 1.0):
             y = height - bottom - frac * plot_h
-            parts.append('<text x="%d" y="%.1f" text-anchor="end">%s</text>' % (left - 6, y + 4, _axis_text(peak * frac)))
+            parts.append('<text x="%d" y="%.1f" text-anchor="end">%s</text>' % (left - 6, y + 4, bar_fmt(peak * frac)))
         for i, value in enumerate(bars):
             if value is None:
                 continue
             h = max(plot_h * value / peak, 1)
             parts.append('<rect class="bar" x="%.1f" y="%.1f" width="%.1f" height="%.1f"><title>%s: %s %s</title></rect>'
-                         % (left + i * slot + slot * 0.15, height - bottom - h, slot * 0.7, h, esc(labels[i]), _axis_text(value), esc(bar_unit)))
+                         % (left + i * slot + slot * 0.15, height - bottom - h, slot * 0.7, h, esc(labels[i]), bar_fmt(value), esc(bar_unit)))
         parts.append('<text transform="rotate(-90 12 %.1f)" x="12" y="%.1f" text-anchor="middle">%s</text>'
                      % (top + plot_h / 2, top + plot_h / 2, esc(bar_unit)))
     if line:
@@ -148,8 +168,10 @@ def combo_chart(labels: Sequence[str], bars: Optional[Sequence[Optional[float]]]
             low, high = min(real + [0.0]), max(real)
             span = (high - low) or 1.0
             for frac in (0.0, 0.5, 1.0):
+                if frac == 0.0 and low == 0 and bars:
+                    continue
                 y = height - bottom - frac * plot_h
-                parts.append('<text x="%d" y="%.1f">%s</text>' % (width - right + 6, y + 4, _axis_text(low + span * frac)))
+                parts.append('<text x="%d" y="%.1f">%s</text>' % (width - right + 6, y + 4, line_fmt(low + span * frac)))
             path, pen, dots = [], False, []
             for i, value in enumerate(line):
                 if value is None:
@@ -159,7 +181,7 @@ def combo_chart(labels: Sequence[str], bars: Optional[Sequence[Optional[float]]]
                 path.append("%s%.1f %.1f" % ("L" if pen else "M", x, y))
                 pen = True
                 dots.append('<circle class="dot line-dot" cx="%.1f" cy="%.1f" r="3"><title>%s: %s %s</title></circle>'
-                            % (x, y, esc(labels[i]), _axis_text(value), esc(line_unit)))
+                            % (x, y, esc(labels[i]), line_fmt(value), esc(line_unit)))
             parts.append('<path class="line" d="%s"/>' % " ".join(path))
             parts.extend(dots)
             parts.append('<text transform="rotate(90 %d %.1f)" x="%d" y="%.1f" text-anchor="middle">%s</text>'

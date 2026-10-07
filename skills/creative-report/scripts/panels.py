@@ -482,7 +482,8 @@ def over_time(ctx: Ctx) -> Tuple[str, str]:
     line = roas if use_roas else [cm.compute_metrics(t)["cpa"] for _, t in series]
     unit = "ROAS (x)" if use_roas else "CPA (%s)" % (ctx.currency or "account currency")
     chart = charts.combo_chart(labels, spend, line, "Spend (%s)" % (ctx.currency or "account currency"), unit,
-                               "Daily spend with %s" % unit.split(" (")[0])
+                               "Daily spend with %s" % unit.split(" (")[0], bar_fmt=charts.axis_format("money", ctx.currency),
+                               line_fmt=charts.axis_format("x" if use_roas else "money", ctx.currency))
     note = ""
     if len(series) == 1:
         note = '<p class="muted">One day of data: there is no trend to read yet.</p>'
@@ -702,8 +703,10 @@ def fatigue(ctx: Ctx) -> Tuple[str, str]:
             continue
         labels = [d for d, _ in series]
         label = readable_label(ad, ad.get("ad_name"), key)
-        ctr = charts.combo_chart(labels, None, [m["ctr"] for _, m in series], "", "CTR (%)", "CTR by day: %s" % label, width=300, height=190)
-        freq = charts.combo_chart(labels, None, [m["frequency"] for _, m in series], "", "Frequency (x)", "Frequency by day: %s" % label, width=300, height=190)
+        ctr = charts.combo_chart(labels, None, [m["ctr"] for _, m in series], "", "CTR (%)", "CTR by day: %s" % label, width=300, height=190,
+                                  line_fmt=charts.axis_format("pct"))
+        freq = charts.combo_chart(labels, None, [m["frequency"] for _, m in series], "", "Frequency (x)", "Frequency by day: %s" % label, width=300, height=190,
+                                   line_fmt=charts.axis_format("x"))
         multiples.append('<div class="multiple"><h4>%s</h4>%s%s</div>' % (esc(label), ctr, freq))
     parts = []
     if multiples:

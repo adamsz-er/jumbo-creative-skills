@@ -165,6 +165,53 @@ class ChartTicksTest(unittest.TestCase):
         self.assertGreater(ticks(wide), ticks(narrow))
 
 
+def axis_labels(svg):
+    """The text of the y-axis tick labels: left ones end at the axis, right ones start after the plot."""
+    left = re.findall(r'<text x="[\d.]+" y="[\d.]+" text-anchor="end">([^<]*)</text>', svg)
+    right = re.findall(r'<text x="[\d.]+" y="[\d.]+">([^<]*)</text>', svg)
+    return left, right
+
+
+class AxisUnitTest(unittest.TestCase):
+    def test_the_spend_and_roas_chart_prints_ticks_in_their_unit_with_no_decimal_zero(self):
+        html, _ = panels.over_time(panels.Ctx(rows=cm.load_rows(str(FIXTURE)), currency="USD"))
+        left, right = axis_labels(html)
+        self.assertNotIn("0.00", left + right)
+        self.assertEqual(left[0], "0")
+        self.assertTrue(right and all(label.endswith("x") for label in right), right)
+
+    def test_zero_is_not_repeated_on_the_right_axis_when_the_left_axis_has_it(self):
+        html, _ = panels.over_time(panels.Ctx(rows=cm.load_rows(str(FIXTURE)), currency="USD"))
+        left, right = axis_labels(html)
+        self.assertEqual(left.count("0"), 1)
+        self.assertNotIn("0x", right)
+        self.assertEqual(len(right), 2)
+
+    def test_a_line_only_chart_keeps_its_own_zero_in_its_unit(self):
+        import charts
+        svg = charts.combo_chart(["2026-03-01", "2026-03-02"], None, [1.0, 3.0], "", "ROAS (x)", "x", line_fmt=charts.axis_format("x"))
+        self.assertEqual(axis_labels(svg)[1], ["0x", "1.5x", "3x"])
+
+    def test_money_ticks_use_the_currencys_own_digits(self):
+        import charts
+        self.assertEqual(charts.axis_format("money", "USD")(0), "0")
+        self.assertEqual(charts.axis_format("money", "USD")(12.5), "12.50")
+        self.assertEqual(charts.axis_format("money", "USD")(1234.5), "1,234")
+        self.assertEqual(charts.axis_format("money", "JPY")(12.5), "12")
+        self.assertEqual(charts.axis_format("pct")(0.8), "0.8%")
+        self.assertEqual(charts.axis_format("x")(2.45), "2.45x")
+
+    def test_fatigue_charts_use_percent_and_x_ticks(self):
+        ctx = panels.Ctx(rows=cm.load_rows(str(FIXTURE)), verdicts=acme_verdicts(), currency="USD")
+        html, _ = panels.fatigue(ctx)
+        found = list(re.finditer(r"<svg[^>]*aria-label=\"((?:CTR|Frequency)) by day[^\"]*\"[^>]*>(.*?)</svg>", html, re.S))
+        self.assertTrue(found)
+        for match in found:
+            _, right = axis_labels(match.group(2))
+            suffix = "%" if match.group(1) == "CTR" else "x"
+            self.assertTrue(all(label.endswith(suffix) for label in right), (match.group(1), right))
+
+
 class LegendTest(unittest.TestCase):
     def test_pareto_names_both_lines_when_there_is_value(self):
         rows = [ad_row("a", "A", 100, 500), ad_row("b", "B", 80, 300), ad_row("c", "C", 60, 100)]
