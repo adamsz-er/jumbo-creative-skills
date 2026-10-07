@@ -14,9 +14,9 @@ sys.path.insert(0, str(SCRIPT))
 import report  # noqa: E402
 
 FIXTURE = ROOT / "examples" / "acme" / "ads_daily.csv"
-HEADINGS = ("What to do first", "Basis", "Pause, check, iterate, scale, keep", "Funnel diagnosis",
-            "Creative mix", "Notes and missing data")
-BALANCED = ("section", "table", "svg", "div", "ul", "thead", "tbody", "tr", "td", "th")
+HEADINGS = ("Overview analysis", "Key numbers", "Performance over time", "Do these first", "Funnel", "Pareto",
+            "Verdict board", "Fatigue", "Format", "White space", "Briefing", "Data and method", "Missing data and caveats")
+BALANCED = ("section", "table", "svg", "div", "ul", "thead", "tbody", "tr", "td", "th", "article", "details", "nav", "footer")
 
 
 class Balance(HTMLParser):
@@ -57,7 +57,7 @@ class ReportTest(unittest.TestCase):
         cls.verdicts.write_text(run_json("keep-or-kill", "verdicts.py"))
         cls.mix.write_text(run_json("creative-mix", "mix.py"))
         cls.out = tmp / "report.html"
-        code = report.main(["--grade", str(cls.grade), "--verdicts", str(cls.verdicts),
+        code = report.main([str(FIXTURE), "--grade", str(cls.grade), "--verdicts", str(cls.verdicts),
                             "--mix", str(cls.mix), "--profile",
                             str(ROOT / "examples" / "acme" / "brand-profile.md"),
                             "--title", "Acme creative review", "--csv", str(FIXTURE), "-o", str(cls.out)])
@@ -100,21 +100,21 @@ class ReportTest(unittest.TestCase):
         self.assertEqual(parser.stack, [])
 
     def test_basis_and_footer_text(self):
-        self.assertIn("not industry benchmarks", self.html)
-        self.assertIn("Made with jumbo-creative-skills", self.html)
-        self.assertIn("nothing left your machine", self.html)
+        self.assertIn("never benchmarks", self.html)
+        self.assertIn("by Elephant Room", self.html)
+        self.assertIn("only outside request this page makes is the font stylesheet", self.html)
 
     def test_currency_is_read_from_the_export_header(self):
         self.assertIn("Spend (USD)", self.html)
         self.assertIn("CPA (USD)", self.html)
-        self.assertNotIn("Spend (account currency)", self.html)
+        self.assertNotIn("(account currency)", self.html)
 
     def test_currency_falls_back_to_a_plain_label(self):
-        html = report.build_html(rows=[], verdicts=json.loads(self.verdicts.read_text()))
+        html = report.build_html(rows=report.cm.load_rows(str(FIXTURE)), verdicts=json.loads(self.verdicts.read_text()))
         self.assertIn("Spend (account currency)", html)
 
     def test_metric_names_use_display_labels(self):
-        for text in ("CPA top quartile", "ROAS", "Hook rate (%)", "CTR"):
+        for text in ("ROAS", "Hook rate", "CTR", "CPA"):
             self.assertIn(text, self.html)
         self.assertNotRegex(self.html, r"(?<![\w_-])(cpa|roas|ctr|cpm) (top|middle|bottom)")
         self.assertIn('role="img"', self.html)
@@ -124,15 +124,33 @@ class ReportTest(unittest.TestCase):
         self.assertIn("Acme", self.html)
 
     def test_verdict_and_mix_content_rendered(self):
-        self.assertIn("Pause: never worked", self.html)
+        self.assertIn("Pause it:", self.html)
         self.assertIn("ugc-video", self.html)
-        self.assertIn("partnership-haul", self.html)
+        self.assertIn("Pause", self.html)
+        self.assertIn("Scale it gradually", self.html)
 
     def test_html_escapes_input_text(self):
         html = report.build_html(rows=[{"ad_name": "<img src=x onerror=alert(1)> | static | c | bau | p | t | 2026-03-01",
                                         "ad_id": "1", "date": "2026-03-01", "spend": 5.0,
                                         "impressions": 5000.0}])
         self.assertNotIn("<img src=x", html)
+
+    def test_the_committed_example_does_not_claim_a_reconcile_it_never_ran(self):
+        example = (ROOT / "examples" / "acme" / "report.html").read_text(encoding="utf-8")
+        self.assertIn('<span class="status warn">Not reconciled</span>', example)
+        self.assertNotIn('<span class="status ok">', example)
+
+    def test_cli_flags_reach_the_page(self):
+        out = Path(self._tmp.name) / "flags.html"
+        account = Path(self._tmp.name) / "account.json"
+        account.write_text('{"reach": 98765, "frequency": 2.5}')
+        code = report.main([str(FIXTURE), "--verdicts", str(self.verdicts), "--title", "Acme", "--source", "Meta ads connector",
+                            "--attribution", "7-day click", "--completeness", "incomplete:8", "--account", str(account),
+                            "--top-n", "4", "--pareto-share", "75", "--previews", str(Path(self._tmp.name) / "none"), "-o", str(out)])
+        self.assertEqual(code, 0)
+        html = out.read_text(encoding="utf-8")
+        for text in ("Meta ads connector", "7-day click", "Incomplete 8%", "98,765", "N=4", "75%", "placeholders"):
+            self.assertIn(text, html)
 
     def test_csv_mode_runs_and_names_missing_sections(self):
         out = Path(self._tmp.name) / "csv.html"
@@ -141,7 +159,7 @@ class ReportTest(unittest.TestCase):
         for heading in HEADINGS:
             self.assertIn(heading, html)
         self.assertIn("keep-or-kill", html)
-        self.assertIn("creative-mix", html)
+        self.assertEqual(html.count('data-state="empty"'), 5)
         parser = Balance()
         parser.feed(html)
         self.assertEqual((parser.errors, parser.stack), ([], []))

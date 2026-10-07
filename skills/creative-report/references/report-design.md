@@ -1,10 +1,11 @@
 # Report design
 
-`scripts/report.py` fills `assets/report-template.html`. The template holds all styling; the script holds all content. Extend either without touching the other where you can.
+`scripts/report.py` assembles the page and fills `assets/report-template.html`. The template holds all styling, the header frame and the small tab script; `scripts/panels.py` holds one function per panel, `scripts/charts.py` the SVG charts and `scripts/previews.py` the image embedding. Extend any of them without touching the others where you can.
 
 ## Rules
 
-- One self-contained HTML file. Inline CSS and inline SVG, no JavaScript required. The only external request is the Google Fonts stylesheet (Plus Jakarta Sans and Inter), with system fonts as the fallback.
+- One self-contained HTML file. Inline CSS and inline SVG; images are data URIs, never URLs. A small inline script turns the stacked sections into tabs and keeps the hash in sync, and the page reads correctly without it (every section visible, nothing hidden by inline style). The only external request is the Google Fonts stylesheet (Plus Jakarta Sans and Inter), with system fonts as the fallback.
+- Branding: the Elephant Room logo (`assets/er-logo.svg` is the white and amber variant for dark mode, `assets/er-logo-dark.svg` the ink and amber one for light) in the header and the footer, and no other brand mark. The account label is the subject, never the branding.
 - Responsive to a 390 px phone width, light and dark (`prefers-color-scheme`), and print-friendly (`@media print`).
 - Lead with the answer. Every section opens with its point; detail sits underneath.
 - Every number comes from the inputs. Nothing in the page is typed by hand, and a missing value reads `n/a (missing <field>)`, never 0.
@@ -32,21 +33,27 @@ Defined once as CSS custom properties at the top of the template.
 
 Type: Plus Jakarta Sans for headings (tight negative letter-spacing, sentence case), Inter for body. One uppercase eyebrow per section. Radii 12 to 24 px, light shadows. One blue-to-violet gradient-text keyword in the title (the last word of `--title`).
 
-## Section order
+## Layout (the order is part of the spec)
 
-1. What to do first (`headline`)
-2. Basis (`basis_section`)
-3. Pause, check, iterate, scale, keep (`verdict_section`)
-4. Funnel diagnosis (`funnel_section`)
-5. Creative mix (`mix_section`)
-6. Notes and missing data (`notes_section`)
+Header (sticky): logo, "<account label> creative review", date window, data source, currency, attribution, completeness badge, tab bar. Then six tabs, each a stacked `<section id="tab-...">`:
 
-Footer: "Made with jumbo-creative-skills", the generated date, and "Numbers come from your own export; nothing left your machine."
+1. Overview analysis: key numbers (`kpi_strip`), performance over time (`over_time`), do these first (`do_first`), funnel (`funnel`)
+2. Pareto: where the value comes from (`pareto`), the head and the long tail (`head_tail`)
+3. Keep / kill: verdict board (`verdict_board`), fatigue (`fatigue`)
+4. Format, 5. White space, 6. Briefing: placeholders built by `not_built`, labelled "Not built in this version"
 
-## Adding a section
+Footer: data and method (the matched funnel columns, every flag and default used, reconciliation, the missing-data notes), image counts, "by Elephant Room", the generated date and the privacy line.
 
-Write a function that returns `section(eyebrow, heading, inner)` and add it to the list in `build_html`. Put any new missing-data phrase through `collect_notes` so it reaches section 6. Use `bar_chart` and `scatter` for charts: every bar and dot needs a label, a unit and a title. Add a test in `tests/test_report.py` that the heading is present and the HTML stays balanced.
+## Panels and states
+
+Every panel function takes the `Ctx` and returns `(html, state)`: `"data"` when filled and `"empty"` when it shows a labelled empty state with **why** and **how to get it** (`empty_state`). A panel is never dropped. Unknown is never zero: a missing operand reads `n/a (missing <field>)`, reach and frequency read `n/a (needs account-level reach)` without `--account`, and a single day has no sparkline and says so.
+
+The ad card (`ad_card`) is the one component used wherever an ad appears: preview image, readable label (concept · creator · format · ad type, never the raw first name segment), ad id, spend with currency, what placed it, verdict chip, confidence and the plain-English sentence. Lists show the top `--top-n` as cards and collapse the rest into a closed `<details>` capped at `LIST_CAP` rows, so a 500-ad account stays readable.
+
+## Adding a panel
+
+Write `def my_panel(ctx) -> (html, state)` in `panels.py`, add it to `TABS` in the position the spec gives it, and send any new missing-data phrase through `collect_notes` in `report.py` so it reaches the footer. Use the chart helpers in `charts.py`: every bar and dot needs a label, a unit and a title. Add a test with the data state and the empty state in `tests/test_dashboard_panels.py`.
 
 ## Placeholders in the template
 
-`{{title}}`, `{{eyebrow}}`, `{{heading}}`, `{{subtitle}}`, `{{body}}`, `{{generated}}`. Add a new one in the template and in the `fills` dict together.
+`{{title}}`, `{{heading}}`, `{{logo_light}}`, `{{logo_dark}}`, `{{meta}}`, `{{badge}}`, `{{nav}}`, `{{body}}`, `{{footer}}`. Add a new one in the template and in the `fills` dict together; a value is inserted once and never re-scanned, so text from the data cannot become a placeholder.

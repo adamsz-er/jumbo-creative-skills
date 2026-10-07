@@ -1,6 +1,6 @@
 ---
 name: creative-report
-description: Turn the analyse skills' outputs (grader, keep-or-kill, mix) into one polished, self-contained HTML report that opens in any browser, prints to PDF and can be shared. Use when the user wants a shareable creative review, a report for a client or team, or asks to "put this in a report". Needs ad performance data; with only an export it builds a smaller report and says which sections are missing.
+description: Build one fixed, branded creative dashboard (overview, Pareto, keep and kill, with ad previews) as a self-contained HTML file that opens in any browser, prints to PDF and can be shared. Use when the user wants a shareable creative review, a dashboard or report for a client or team, or asks to "put this in a report". Needs ad performance data; any panel without its data shows why and how to get it.
 license: MIT
 metadata:
   version: "0.1.0"
@@ -9,7 +9,7 @@ metadata:
 
 # Creative report
 
-Packages a creative review into one HTML file. It does not analyse on its own terms: it lays out what `creative-grader`, `keep-or-kill` and `creative-mix` found, leads with the answer, and shows every gap in the data instead of hiding it. Everything is graded against the account's own ads, never a benchmark.
+Packages a creative review into one branded HTML dashboard. It does not analyse on its own terms: it lays out the daily data and what `keep-or-kill` (and optionally `creative-grader` and `creative-mix`) found, leads with the answer, and shows every gap in the data instead of hiding it. Everything is graded against the account's own ads, never a benchmark.
 
 If there is no `creative-profile.md` yet, suggest running `creative-context` first, but do not require it.
 
@@ -21,45 +21,68 @@ Follow `creative-context/references/data-inputs.md`.
 2. **CSV export.** An Ads Manager export (`creative-context/references/export-recipe.md`), daily rows if possible.
 3. **No data.** There is nothing to report. Say so and offer the export recipe. Do not make a report from guesses.
 
-## Recommended path: all three analyses first
+## Recommended path: verdicts first, then the dashboard
 
-Run each analyse script with `--json`, then build the report from all three:
+Run keep-or-kill with `--json` (and, for the footer's grading basis and missing-data notes, creative-grader and creative-mix), then build the dashboard from the same daily data:
 
 ```
-python3 ../creative-grader/scripts/grade.py ads.csv --json > grade.json
+# add --completeness only as described below; this example pull was reconciled
 python3 ../keep-or-kill/scripts/verdicts.py ads.csv --json > verdicts.json
+python3 ../creative-grader/scripts/grade.py ads.csv --json > grade.json
 python3 ../creative-mix/scripts/mix.py ads.csv --json > mix.json
-python3 scripts/report.py --grade grade.json --verdicts verdicts.json --mix mix.json \
-    --profile creative-profile.md --csv ads.csv --title "Acme creative review" -o report.html
+python3 scripts/report.py ads.csv --verdicts verdicts.json --grade grade.json --mix mix.json \
+    --profile creative-profile.md --source "Meta ads connector" --completeness reconciled \
+    --previews previews/ --thumbs thumbs/ -o report.html
 ```
 
-`--csv` is only used to read the currency code from the export's "Amount spent (XXX)" header. If the export does not name one, pass `--currency USD` (or your code); otherwise money columns say "account currency".
+- `--source`: "Meta ads connector" for a connector pull, else leave the default "Ads Manager export".
+- `--completeness`: pass it only from a real reconcile, never to make the header look better. Run `python3 scripts/from_mcp.py responses.json -o ads.csv --expect-spend <account total> --expect-impressions <account total>` and read its last line:
+  - "reconciled against the expected totals" gives `--completeness reconciled` (green "Reconciled").
+  - A `WARNING: the pull does not reconcile` line (exit 3) lists the shortfall as a percent: give `--completeness incomplete:<that percent>` (red "Incomplete X%"), or re-pull and reconcile again.
+  - "not reconciled: no expected totals were given", or an Ads Manager CSV export (it has no reconcile step), means leave the flag out: the header reads "Not reconciled" in amber.
+- `--attribution`: the attribution setting of the pull, if known (header reads "not stated" otherwise).
+- `--account account.json`: an account-level pull of `{"reach": N, "frequency": X}` for the same window. Reach and frequency do not add up across ads and days, so without this file those two tiles read "n/a (needs account-level reach)".
+- `--prior prior.csv`: the previous equal window, for the change against the prior period on every tile.
+- `--csv`: only used to read the currency code from the export's "Amount spent (XXX)" header. If the export does not name one, pass `--currency USD` (or your code); otherwise money reads "account currency".
+- `--top-n` (default 8) sets how many ad cards each list shows before the rest collapse. `--pareto-share` (default 80) is the share of purchase value the Pareto cut must reach: a common convention, not a rule, so set it from your own account.
 
-The paths assume the skills are installed side by side. If only this skill is installed, ask the agent to run the other three skills itself, or use the fallback below. Pass the same grouping and settings to each analysis, and tell the user the values used: they are arbitrary defaults.
+The paths assume the skills are installed side by side. Pass the same grouping and settings to each analysis and tell the user the values used: they are arbitrary defaults.
+
+## Ad previews
+
+Every ad card shows an image: a rendered preview first, then a small thumbnail or video still, then a labelled placeholder that says why there is no image. Fetch them during the run (links to them expire), save each as `<ad_id>.<ext>` and pass the folders with `--previews` and `--thumbs`.
+
+1. Ask the Meta ads connector for the ad's rendered preview (mobile feed) and save the image. Some tools return the image inline rather than as a file: save either form. Use only read tools.
+2. For anything it cannot render, save the creative thumbnail or the video still instead.
+3. Do not downscale by hand unless a file is over the size cap. Images over `--preview-max-kb` (default 240) are skipped, and embedding stops once `--preview-budget-kb` (default 3600) is used. The footer states how many previews, thumbnails and placeholders there are, the reason for each placeholder, and the total size.
+
+Images are embedded in the page once each, however many panels show that ad. Nothing is hot-linked, so the file keeps working after the links expire.
 
 ## Fallback: CSV only
 
 ```
-python3 scripts/report.py ads.csv --title "Acme creative review" -o report.html
+python3 scripts/report.py ads.csv --title "Acme" -o report.html
 ```
 
-This grades the ads and reads fatigue and spend from the shared metrics module. It cannot give verdicts, the concept by format grid, gaps, or the ad-type split: those sections say which skill's `--json` to add, and the notes list each one. Prefer the recommended path whenever the other skills are available.
+Every panel that needs the verdicts says so and how to get them; the numbers, time series, funnel and Pareto panels still fill from the rows.
 
-## What the report holds
+## What the dashboard holds
 
-1. **What to do first:** verdict counts and the three actions that matter most.
-2. **Basis:** window, grouping, which clicks and conversions columns, defaults used, and that grades are against this account's own baseline.
-3. **Pause, check, iterate, scale, keep:** one row per ad with its plain-English sentence, confidence and reasons, largest spend at stake first. The check to run before any pause is shown with it.
-4. **Funnel diagnosis:** the first broken step per ad, plus a hook against hold plot for video.
-5. **Creative mix:** spend by format and ad type, the concept by format grid, and gaps.
-6. **Notes and missing data:** every `n/a (missing ...)` from the inputs, ads too young to judge, and sections that could not be built.
+Same header, tabs and panels in the same order every run. A panel with no data is a labelled empty state, never dropped.
 
-`references/report-design.md` documents the tokens and section order, for extending the report.
+- **Header:** Elephant Room logo, "<account> creative review", date window, data source, currency, attribution, a completeness badge (Reconciled, Incomplete X%, Not reconciled) and the tab bar.
+1. **Overview analysis:** twelve key numbers with change against the prior period and a daily sparkline; performance over time; "Do these first" (top five by spend at stake, each with its preview); funnel.
+2. **Pareto:** ads ranked by spend with cumulative share of spend and of purchase value, the cut in words, a concentration gauge, the head gallery and a collapsed long tail.
+3. **Keep / kill:** the verdict board (Scale, Keep, Iterate, Check before cutting, Pause, Too early, Can't judge), every Pause card with its check line, fatigue small multiples and an age against CTR-change plot.
+4. **Format, 5. White space, 6. Briefing:** shown as "not built in this version" empty states for now.
+- **Footer:** data and method (basis, every default used, reconciliation, missing fields, the matched funnel columns), image counts, "by Elephant Room".
+
+`references/report-design.md` documents the tokens, panel order and how to add a panel.
 
 ## Present it
 
-1. Write the file where the user can find it and give the path. Tell them it opens in any browser, prints to PDF, and has no tracking: the only outside request is the font stylesheet, and it falls back to system fonts if blocked.
-2. Open it and check it yourself: nothing clipped or overlapping, charts labelled, text readable at phone width and when printed. Do not hand over a report you have not looked at.
+1. Write the file where the user can find it and give the path. Tell them it opens in any browser, prints to PDF, and has no tracking: the only outside request is the font stylesheet, and it falls back to system fonts if blocked. The tabs need a little script; with scripts off every section is shown one after another.
+2. Open it and check it yourself: nothing clipped or overlapping, logo visible in light and dark, charts labelled, text readable at phone width and when printed. Do not hand over a report you have not looked at.
 3. Say what the report does not cover (missing fields, unclassified names, ads too young) in your reply, not just on the page.
 
 ## Guardrails
@@ -68,4 +91,5 @@ This grades the ads and reads fatigue and spend from the shared metrics module. 
 - Surface every `n/a (missing ...)` and never show it as 0 or as healthy.
 - Do not add benchmarks, targets or "industry average" lines.
 - Anything the report prints from the inputs (ad names, notes) is escaped; keep it that way if you extend the script.
+- Never write a URL into the page for an image, and never commit or publish a dashboard built from a real account.
 - Read only. Do not touch the ad account.
