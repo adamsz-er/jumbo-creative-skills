@@ -321,11 +321,11 @@ class ConnectorFieldsTest(unittest.TestCase):
     def test_aggregation_sums_derived_plays_across_days(self):
         rows = cm.load_rows([
             {"ad_name": "a", "date_start": "2026-03-01", "spend": 10, "impressions": 1000,
-             "cost_per_action_type:video_view": {"value": "0.05", "unit": "USD"}},
+             "cost_per_action_type:video_view": {"value": "0.0512", "unit": "USD"}},
             {"ad_name": "a", "date_start": "2026-03-02", "spend": 20, "impressions": 1000,
-             "cost_per_action_type:video_view": {"value": "0.04", "unit": "USD"}}])
+             "cost_per_action_type:video_view": {"value": "0.0421", "unit": "USD"}}])
         ad = cm.aggregate_by_ad(rows)[0]
-        self.assertAlmostEqual(ad["video_views_3s"], 10 / 0.05 + 20 / 0.04)
+        self.assertAlmostEqual(ad["video_views_3s"], 10 / 0.0512 + 20 / 0.0421)
         self.assertTrue(ad["video_views_3s_source"].startswith("derived"))
 
     def test_csv_columns_still_read_as_before(self):

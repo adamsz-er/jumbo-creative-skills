@@ -36,6 +36,10 @@ Last updated: 2026-03-01
 - Naming convention: concept | format | creator | ad type | product | tone | launch date
 - Store revenue available for MER: no
 
+## Script settings
+- target: cpa=40
+- currency: USD
+
 ## Constraints
 - Claims that need approval: waterproof ratings, warranty terms
 - Creator usage rights: 90 days from first run

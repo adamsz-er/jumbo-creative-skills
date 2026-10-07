@@ -49,6 +49,11 @@ NUMERIC_FIELDS = (
 )
 COST_PER_VIEW = "cost_per_action_type:video_view"
 DERIVED_3S = "derived: spend / cost per 3-second view"
+NOT_DERIVED_3S = "not derived: cost per 3-second view is rounded too coarsely"
+# Largest error, in percent, that rounding of the cost per 3-second view may put into derived plays
+# before they are refused (an arbitrary default: set it from how much error you accept in hook rate).
+# Meta rounds this cost to cents, so a view costing a few cents can be tens of percent out.
+DERIVE_MAX_ERROR = 2.0
 AGE_FROM_CREATED = "created_time"
 AGE_FROM_DELIVERY = "first delivery in window (older ads may be understated)"
 # The original positional convention: what a name of exactly this many parts is read as.
@@ -117,7 +122,8 @@ _ALIASES = {
     # Meta's hosted Ads MCP field names (not in Meta's documentation as of this writing and may change: check in your own session).
     "linkclick": "link_clicks", "omnipurchase": "conversions",
     "omnipurchasevalues": "conversion_value", "omniaddtocart": "add_to_carts",
-    "costperactiontypevideoview": COST_PER_VIEW, "createdtime": "created_time",
+    "costperactiontypevideoview": COST_PER_VIEW, "costpervideoview": COST_PER_VIEW,
+    "createdtime": "created_time", "onsiteconversionleadgrouped": "leads",
 }
 # `id` and `name` are ad fields only on a row that is marked as an ad row.
 _ID_NAME_ALIASES = {"id": "ad_id", "name": "ad_name"}
@@ -177,6 +183,23 @@ def _list_value(items: Any) -> Optional[float]:
     return sum(values) if values else None
 
 
+def rounding_error(value: Any) -> Optional[float]:
+    """Largest relative error, in percent, that rounding to the decimals shown can hide in a positive number.
+
+    "0.02" may be anything from 0.015 to 0.025, so up to 25%; "0.0412" up to about 0.12%.
+    None when the value is not a positive number.
+    """
+    raw = value.get("value") if isinstance(value, dict) else value
+    number = _num(raw)
+    if number is None or number <= 0:
+        return None
+    text = re.sub(r"[,$€£%\s]", "", str(raw)).lower()
+    if "e" in text:
+        return 0.0
+    decimals = len(text.partition(".")[2])
+    return 0.5 * 10 ** -decimals / number * 100
+
+
 def _is_ad_row(raw: Dict[str, Any], level: Optional[str]) -> bool:
     if str(raw.get("level") or level or "").lower() == "ad":
         return True
@@ -220,6 +243,8 @@ def _normalise_row(raw: Dict[str, Any], level: Optional[str] = None) -> Dict[str
             number = _num(value)
             if field == "conversions" and number is not None and "conversions_source" not in out:
                 out["conversions_source"] = str(key)
+            if field == COST_PER_VIEW and out.get(field) is None and number is not None:
+                out["_cost_per_view_error"] = rounding_error(value)
             put(out, field, number)
         elif norm in _WEAK_ALIASES:
             number = _num(value)
@@ -241,9 +266,14 @@ def _normalise_row(raw: Dict[str, Any], level: Optional[str] = None) -> Dict[str
         out["video_views_3s_source"] = str(kept) if kept else "reported"
     else:
         spend, per_view = out.get("spend"), out.get(COST_PER_VIEW)
+        error = out.get("_cost_per_view_error")
         if spend is not None and per_view is not None and per_view > 0:
-            out["video_views_3s"] = spend / per_view
-            out["video_views_3s_source"] = DERIVED_3S
+            if error is not None and error > DERIVE_MAX_ERROR:
+                out["video_views_3s_source"] = "%s (up to %.0f%% out)" % (NOT_DERIVED_3S, error)
+            else:
+                out["video_views_3s"] = spend / per_view
+                out["video_views_3s_source"] = DERIVED_3S
+    out.pop("_cost_per_view_error", None)
     passthrough.update(out)
     return passthrough
 
@@ -268,19 +298,53 @@ def load_rows(path_or_rows: Union[str, "os.PathLike[str]", Iterable[Dict[str, An
     row carries `level` == "ad" or an `ad_name`. Amounts shaped like
     {"value": x, "unit": ...} read as x. When 3-second plays are missing but
     spend and `cost_per_action_type:video_view` exist, plays are derived as
-    spend / cost per view and `video_views_3s_source` says so.
+    spend / cost per view and `video_views_3s_source` says so. The connector's
+    `cost_per_video_view` reads the same way. When the cost is rounded so
+    coarsely that the plays could be more than DERIVE_MAX_ERROR percent out
+    (judged from the decimals shown), nothing is derived and the source says why.
+    A response object holding its rows under "data", "rows" or "ad_entities"
+    (a list, or a JSON string of one) is read too.
     """
     if isinstance(path_or_rows, (str, bytes)) or hasattr(path_or_rows, "__fspath__"):
         if str(path_or_rows).lower().endswith(".json"):
             with open(path_or_rows, encoding="utf-8-sig") as handle:
                 loaded = json.load(handle)
-            raw_rows = loaded.get("data") or loaded.get("rows") or [] if isinstance(loaded, dict) else loaded
+            raw_rows = rows_from_response(loaded)
         else:
             with open(path_or_rows, newline="", encoding="utf-8-sig") as handle:
                 raw_rows = list(csv.DictReader(handle))
     else:
         raw_rows = path_or_rows
     return [_normalise_row(dict(r), level) for r in raw_rows]
+
+
+def rows_from_response(loaded: Any) -> List[Dict[str, Any]]:
+    """The row dicts in a saved response: a list of rows, or an object with "data", "rows" or "ad_entities".
+
+    The Meta ads connector returns its rows as a JSON string under "ad_entities";
+    that string is decoded. Raises ValueError for any other shape.
+    """
+    if isinstance(loaded, dict):
+        found = next((loaded[k] for k in ("data", "rows", "ad_entities") if loaded.get(k) is not None), [])
+        if isinstance(found, str):
+            try:
+                found = json.loads(found)
+            except ValueError:
+                raise ValueError("ad_entities holds text that is not JSON")
+        loaded = found
+    if not isinstance(loaded, list):
+        raise ValueError("expected a list of rows, or an object with a data, rows or ad_entities list")
+    return [r for r in loaded if isinstance(r, dict)]
+
+
+def response_notes(loaded: Any) -> List[str]:
+    """What a saved connector response says about itself besides its rows (its `additional_info`), as lines."""
+    if not isinstance(loaded, dict):
+        return []
+    info = loaded.get("additional_info")
+    if not info:
+        return []
+    return [str(i) for i in info] if isinstance(info, list) else [str(info)]
 
 
 def _pick(row: Dict[str, Any], fields: Sequence[str]) -> Tuple[str, Optional[float]]:
@@ -407,7 +471,9 @@ def aggregate_by_ad(rows: Sequence[Dict[str, Any]],
     daily rows `frequency` is an average per-row frequency, not lifetime
     frequency; export a lifetime row for that. `video_views_3s_source` is
     "derived: ..." when any row's 3-second plays were derived from a cost per
-    view, else "reported", else None.
+    view, else "reported", else None; "not derived: ..." when any row's cost per
+    view was too coarsely rounded, and then the ad's plays are None rather than a
+    sum of some days only.
 
     Name fields come from a column of that name when the data has one (market,
     ad type, ...), else from the ad name (see parse_name; `key_map` extends the
@@ -448,7 +514,15 @@ def aggregate_by_ad(rows: Sequence[Dict[str, Any]],
         ad["age_basis"] = (AGE_FROM_CREATED if created else AGE_FROM_DELIVERY) if ad["age_days"] is not None else None
         sources = {r["video_views_3s_source"] for r in group if r.get("video_views_3s_source")}
         derived = sorted(x for x in sources if x.startswith("derived"))
-        ad["video_views_3s_source"] = derived[0] if derived else ("reported" if sources else None)
+        refused = sorted(x for x in sources if x.startswith("not derived"))
+        if refused:
+            # Plays from only some days would understate the ad, so none are kept.
+            ad["video_views_3s"] = None
+            ad["video_views_3s_source"] = refused[-1]
+        elif derived:
+            ad["video_views_3s_source"] = derived[0]
+        else:
+            ad["video_views_3s_source"] = "reported" if sources else None
         parsed = parse_name(ad["ad_name"], key_map=key_map, learned=learned) if ad["ad_name"] else {}
         ad["conversions_source"] = next((r["conversions_source"] for r in group
                                          if r.get("conversions_source")), None)
@@ -594,14 +668,41 @@ def fatigue_trend(rows: Sequence[Dict[str, Any]], ad_key: str, metric: str = "ct
     }
 
 
+# The account's own ad-type words (--type-map or the profile), read before SYNONYMS. Set it once per run
+# with set_type_map; it holds the user's choices only, never a guess.
+TYPE_MAP: Dict[str, str] = {}
+
+
+def set_type_map(mapping: Optional[Dict[str, str]]) -> None:
+    """Use the account's own ad-type words for this run, e.g. {"atelier": "bau"}; None or {} clears them."""
+    TYPE_MAP.clear()
+    TYPE_MAP.update({str(k).strip().lower(): str(v).strip().lower() for k, v in (mapping or {}).items()})
+
+
+def parse_type_map(text: str) -> Dict[str, str]:
+    """Read "atelier=bau,drop=launch" into a word -> ad type map; each type must be one of AD_TYPES."""
+    result = {}
+    for word, ad_type in parse_key_map(text).items():
+        ad_type = SYNONYMS.get(ad_type.lower(), ad_type.lower())
+        if ad_type not in AD_TYPES:
+            raise ValueError("bad --type-map entry %s=%s: the type must be one of %s" % (word, ad_type, ", ".join(AD_TYPES)))
+        result[word.lower()] = ad_type
+    return result
+
+
 def normalise_ad_type(value: Any) -> str:
-    """Map an ad-type word to one of AD_TYPES through SYNONYMS; an unknown word is kept, lowercased."""
+    """Map an ad-type word to one of AD_TYPES through TYPE_MAP, then SYNONYMS; an unknown word is kept, lowercased."""
     text = str(value).strip().lower()
-    return SYNONYMS.get(text, text)
+    return TYPE_MAP.get(text) or SYNONYMS.get(text, text)
 
 
 def parse_key_map(text: str) -> Dict[str, str]:
-    """Read "PX=concept,KND=ad_type" into {"PX": "concept", "KND": "ad_type"}."""
+    """Read "PX=concept,KND=ad_type,6=tone" into {"PX": "concept", "KND": "ad_type", "6": "tone"}.
+
+    A number names an unkeyed segment by its position in the name, counted from 1
+    (the positions detection reports), so tone or creator between keyed segments
+    gets a field instead of segment_<n>.
+    """
     result: Dict[str, str] = {}
     for pair in (text or "").split(","):
         if not pair.strip():
@@ -690,7 +791,10 @@ def learn_names(names: Sequence[str], key_map: Optional[Dict[str, str]] = None) 
     format words, ad-type words, market codes or dates), `inferred` (the field,
     the computed share of values and the evidence, for each such key),
     `market_positions` (positions where most names carry a market code: a bare
-    code elsewhere is not read as a market) and `date_order` ("dmy" or "mdy"
+    code elsewhere is not read as a market), `market_positions_by_separator`
+    (the same per separator, counted from the start and, as negative numbers,
+    from the end, so a name missing a segment, or a second convention with
+    another separator, still has its market found) and `date_order` ("dmy" or "mdy"
     when some date in the names settles day-versus-month order, else None).
     When nothing is read as the concept, the one unmapped key with free-text
     values (more than one distinct value, none of the kinds above) is read as the
@@ -708,6 +812,8 @@ def learn_names(names: Sequence[str], key_map: Optional[Dict[str, str]] = None) 
     values: Dict[str, List[str]] = {}
     hits: Dict[str, int] = {}
     positions: Dict[int, int] = {}
+    by_separator: Dict[str, Dict[int, int]] = {}
+    per_separator: Dict[str, int] = {}
     seen_orders = set()
     concept_keyed = False
     counted = 0
@@ -716,8 +822,11 @@ def learn_names(names: Sequence[str], key_map: Optional[Dict[str, str]] = None) 
         if separator is None:
             continue
         counted += 1
+        per_separator[separator] = per_separator.get(separator, 0) + 1
+        found = by_separator.setdefault(separator, {})
+        parts = _split(name, separator)
         in_name = set()
-        for position, part in enumerate(_split(name, separator), start=1):
+        for position, part in enumerate(parts, start=1):
             match = _KEYED.match(part)
             value = match.group(2).strip() if match else part
             if match and match.group(1).upper() not in known:
@@ -730,6 +839,8 @@ def learn_names(names: Sequence[str], key_map: Optional[Dict[str, str]] = None) 
                 concept_keyed = True
             elif not match and part.upper() in MARKET_CODES:
                 positions[position] = positions.get(position, 0) + 1
+                for place in (position, position - len(parts) - 1):
+                    found[place] = found.get(place, 0) + 1
             dmy = _DAY_FIRST.match(value)
             if dmy and int(dmy.group(1)) > 12 >= int(dmy.group(2)):
                 seen_orders.add("dmy")
@@ -738,7 +849,7 @@ def learn_names(names: Sequence[str], key_map: Optional[Dict[str, str]] = None) 
     order = next(iter(seen_orders)) if len(seen_orders) == 1 else None
     checks = (
         ("format", "format words", lambda v: v.lower() in FORMAT_WORDS),
-        ("ad_type", "ad-type words", lambda v: v.lower() in SYNONYMS),
+        ("ad_type", "ad-type words", lambda v: v.lower() in SYNONYMS or v.lower() in TYPE_MAP),
         ("market", "market codes", lambda v: v.upper() in MARKET_CODES),
         ("launch_date", "dates", lambda v: _name_date(v, order)[1] in ("ok", "ambiguous")),
     )
@@ -769,21 +880,30 @@ def learn_names(names: Sequence[str], key_map: Optional[Dict[str, str]] = None) 
         "key_map": {k: v["field"] for k, v in inferred.items()}, "inferred": inferred,
         "concept_candidates": candidates,
         "market_positions": {p for p, c in positions.items() if c * 2 > counted} if counted else None,
+        "market_positions_by_separator": {sep: {p for p, c in found.items() if c * 2 > per_separator[sep]}
+                                          for sep, found in by_separator.items()},
         "date_order": order,
     }
 
 
-def _shape_field(part: str, position: int, learned: Dict[str, Any]) -> Optional[str]:
+def _shape_field(part: str, position: int, learned: Dict[str, Any],
+                 separator: Optional[str] = None, length: Optional[int] = None) -> Optional[str]:
     if _name_date(part, learned.get("date_order"))[1] != "no":
         return "launch_date"
     allowed = learned.get("market_positions")
+    places = {position}
+    by_separator = learned.get("market_positions_by_separator") or {}
+    if separator in by_separator:
+        allowed = by_separator[separator]
+        if length:
+            places.add(position - length - 1)
     if part.upper() in MARKET_CODES:
         # An upper-case code is read anywhere unless markets are known to sit elsewhere; a lower-case
         # one (it, no, me are also words) only where most names carry a market.
         if part == part.upper():
-            if allowed is None or position in allowed:
+            if allowed is None or places & allowed:
                 return "market"
-        elif allowed is not None and position in allowed:
+        elif allowed is not None and places & allowed:
             return "market"
     if part.lower() in FORMAT_WORDS:
         return "format"
@@ -858,7 +978,8 @@ def _read_name(ad_name: Optional[str], pattern: Optional[Sequence[str]] = None,
             result["keys"].append((key, field, key in keys))
             assign(field, match.group(2).strip(), position)
         else:
-            assign(_shape_field(part, position, learned), part, position)
+            assign(keys.get(str(position)) or _shape_field(part, position, learned, separator, len(parts)),
+                   part, position)
     return result
 
 
@@ -869,7 +990,7 @@ def _is_read(fields: Dict[str, Any]) -> bool:
 
 def parse_name(ad_name: Optional[str], pattern: Optional[Sequence[str]] = None,
                key_map: Optional[Dict[str, str]] = None,
-               learned: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+               learned: Optional[Dict[str, Any]] = None, require_read: bool = True) -> Dict[str, str]:
     """Split an ad name into naming-convention fields; {} unless it yields a format, concept or ad type.
 
     Names split on " | ", "|", " _ ", "_" or " - " (whichever the name uses).
@@ -886,9 +1007,11 @@ def parse_name(ad_name: Optional[str], pattern: Optional[Sequence[str]] = None,
     (LEGACY_PATTERN) reads positionally, as does any name when `pattern` (an
     ordered field list) is given, which then needs an exact part count. An
     ad_type goes through SYNONYMS; a type that is not known is kept as written.
+    With require_read=False the fields of a name that yields none of those three
+    are returned too (a market or date read by shape), for filtering by market.
     """
     read = _read_name(ad_name, pattern, key_map, learned)
-    if read is None or (not pattern and not _is_read(read["fields"])):
+    if read is None or (require_read and not pattern and not _is_read(read["fields"])):
         return {}
     return dict(read["fields"])
 
@@ -1230,6 +1353,152 @@ def detect_currency(path: Any) -> Optional[str]:
         return None
     found = re.search(r"amount spent\s*\(([A-Za-z]{3})\)", header, re.I)
     return found.group(1).upper() if found else None
+
+
+SETTINGS_HEADING = "script settings"
+
+
+def read_settings(path: Any) -> Dict[str, str]:
+    """The "## Script settings" block of creative-profile.md as {name: value}.
+
+    Each line reads "- name: value" (or "name: value"), for example
+    "- key-map: PX=concept,6=tone" or "- target: cpa=40". A blank value, or
+    "unknown", is skipped. The block ends at the next heading. {} when the file
+    has no such block.
+    """
+    settings: Dict[str, str] = {}
+    inside = False
+    with open(path, encoding="utf-8-sig") as handle:
+        for line in handle:
+            heading = re.match(r"^#{1,6}\s+(.*?)\s*$", line)
+            if heading:
+                inside = heading.group(1).strip().lower() == SETTINGS_HEADING
+                continue
+            entry = re.match(r"^\s*(?:[-*]\s+)?([A-Za-z][\w-]*)\s*:\s*(.*?)\s*$", line) if inside else None
+            if entry and entry.group(2) and entry.group(2).lower() != "unknown":
+                settings[entry.group(1).lower()] = entry.group(2).strip("`")
+    return settings
+
+
+def apply_settings(args: Any, path: Any) -> List[str]:
+    """Fill each argument the user left unset from the profile's script settings; returns what was taken.
+
+    A setting fills `args.<name>` (dashes read as underscores) only when the
+    script has that argument and it is unset, so a flag on the command line
+    always wins. Settings a script has no argument for are left alone.
+    """
+    taken = []
+    for name, value in read_settings(path).items():
+        attr = name.replace("-", "_")
+        if hasattr(args, attr) and getattr(args, attr) in (None, "", []):
+            setattr(args, attr, [value] if isinstance(getattr(args, attr), list) else value)
+            taken.append("%s: %s" % (name, value))
+    return taken
+
+
+def parse_where(texts: Optional[Sequence[str]]) -> List[Tuple[str, List[str]]]:
+    """Read ["market=AU", "format=video,image"] into [("market", ["AU"]), ("format", ["video", "image"])]."""
+    result = []
+    for text in texts or ():
+        field, sep, values = str(text).partition("=")
+        wanted = [v.strip() for v in values.split(",") if v.strip()]
+        if not sep or not field.strip() or not wanted:
+            raise ValueError("bad --where %r: write field=value, for example market=AU or format=video,image" % text)
+        result.append((_snake(field), wanted))
+    return result
+
+
+def describe_where(where: Sequence[Tuple[str, Sequence[str]]]) -> Optional[str]:
+    """The scope a --where list keeps, in words: "market AU; format video or image"; None for no filter."""
+    return "; ".join("%s %s" % (f.replace("_", " "), " or ".join(v)) for f, v in where) or None
+
+
+def filter_rows(rows: Sequence[Dict[str, Any]], where: Sequence[Tuple[str, Sequence[str]]],
+                key_map: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
+    """Keep the rows whose field matches one of the wanted values, for every (field, values) in `where`.
+
+    A field is read from a column of that name when the row has a value there,
+    else from the ad name (parse_name, read against all the names). Matching
+    ignores case; ad types go through normalise_ad_type on both sides. A field
+    that no row carries raises GroupColumnError, so a typo never empties the
+    analysis silently.
+    """
+    if not where:
+        return list(rows)
+    names = sorted({str(r["ad_name"]) for r in rows if r.get("ad_name")})
+    learned = learn_names(names, key_map)
+    parsed = {n: parse_name(n, key_map=key_map, learned=learned, require_read=False) for n in names}
+
+    def value(row: Dict[str, Any], field: str) -> Optional[str]:
+        for key, cell in row.items():
+            if _snake(key) == field and cell not in (None, ""):
+                return str(cell)
+        return parsed.get(str(row.get("ad_name")), {}).get(field)
+
+    def norm(field: str, text: str) -> str:
+        return normalise_ad_type(text) if field == "ad_type" else text.strip().lower()
+
+    kept = list(rows)
+    for field, wanted in where:
+        if not any(value(r, field) for r in kept):
+            raise GroupColumnError("--where column %s not in the data (neither a column nor a name field)" % field)
+        allowed = {norm(field, w) for w in wanted}
+        kept = [r for r in kept if value(r, field) is not None and norm(field, value(r, field)) in allowed]
+    return kept
+
+
+def add_run_arguments(parser: Any, profile: bool = True) -> None:
+    """The flags every analysis script shares: --profile, --type-map and --where (--key-map stays per script)."""
+    if profile:
+        parser.add_argument("--profile", help="creative-profile.md: its Script settings block fills any flag left unset")
+    parser.add_argument("--type-map", help="the account's own ad-type words, e.g. atelier=bau,drop=launch")
+    parser.add_argument("--where", action="append", default=[],
+                        help="keep only rows where a column or name field matches, e.g. market=AU (repeatable; "
+                             "commas list more than one value)")
+
+
+def prepare_run(args: Any, rows: Sequence[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, str]], List[str]]:
+    """Apply a script's shared flags: (rows kept, key map, notes on what was applied).
+
+    The profile fills unset flags first, then the type map is set for the run,
+    then --where filters the rows. Raises ValueError (or GroupColumnError) on a
+    bad value, so the script can print it and stop.
+    """
+    notes = []
+    if getattr(args, "profile", None):
+        taken = apply_settings(args, args.profile)
+        if taken:
+            notes.append("from the profile: " + "; ".join(taken))
+    set_type_map(parse_type_map(args.type_map) if getattr(args, "type_map", None) else None)
+    key_map = parse_key_map(args.key_map) if getattr(args, "key_map", None) else None
+    where = parse_where(getattr(args, "where", None))
+    kept = filter_rows(rows, where, key_map)
+    scope = describe_where(where)
+    if scope:
+        notes.append("scope: %s (%d of %d rows)" % (scope, len(kept), len(rows)))
+    return kept, key_map, notes
+
+
+def parse_targets(text: Optional[str]) -> Dict[str, float]:
+    """Read "cpa=40,roas=3" into {"cpa": 40.0, "roas": 3.0}: the user's own payback targets, never a benchmark."""
+    targets: Dict[str, float] = {}
+    for metric, value in parse_key_map(text or "").items():
+        try:
+            number = float(value)
+        except ValueError:
+            raise ValueError("bad --target %s=%s: the target must be a number" % (metric, value))
+        if number <= 0:
+            raise ValueError("bad --target %s=%s: the target must be above 0" % (metric, value))
+        targets[resolve_metric(metric.lower())] = number
+    return targets
+
+
+def meets_target(ad: Dict[str, Any], metric: str, target: float) -> Optional[bool]:
+    """Whether the ad reaches the user's target on a metric; None when the metric is n/a for the ad."""
+    value = ad.get(metric)
+    if value is None:
+        return None
+    return value >= target if metric in HIGHER_IS_BETTER else value <= target
 
 
 DEFAULT_GROUP_BY = ("format", "ad_type")

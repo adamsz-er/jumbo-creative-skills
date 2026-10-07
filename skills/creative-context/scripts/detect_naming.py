@@ -107,10 +107,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--min-match-rate", type=float, default=cm.MATCH_RATE_ASK,
                         help="ask the user below this percent of names read (arbitrary default; set from your account)")
     parser.add_argument("--json", action="store_true", help="print JSON instead of a report")
+    parser.add_argument("--profile", help="creative-profile.md: its Script settings block (key-map, type-map) fills "
+                                          "any flag left unset, so a confirmed answer is never asked again")
+    parser.add_argument("--type-map", help="the account's own ad-type words, e.g. atelier=bau")
     args = parser.parse_args(argv)
     try:
+        if args.profile:
+            cm.apply_settings(args, args.profile)
+        cm.set_type_map(cm.parse_type_map(args.type_map) if args.type_map else None)
         key_map = cm.parse_key_map(args.key_map) if args.key_map else None
-    except ValueError as exc:
+    except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
     names = read_names(args.path)

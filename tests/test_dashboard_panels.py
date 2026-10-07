@@ -53,7 +53,8 @@ def ad_row(ad_id, name, spend, value, day="2026-03-01", **extra):
 
 
 def acme_verdicts():
-    out = subprocess.run([sys.executable, str(ROOT / "skills" / "keep-or-kill" / "scripts" / "verdicts.py"), str(FIXTURE), "--json"],
+    out = subprocess.run([sys.executable, str(ROOT / "skills" / "keep-or-kill" / "scripts" / "verdicts.py"), str(FIXTURE), "--json",
+                          "--profile", str(ROOT / "examples" / "acme" / "brand-profile.md")],
                          capture_output=True, text=True)
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout)
@@ -297,7 +298,7 @@ class KpiTest(unittest.TestCase):
 
     def test_hook_rate_is_marked_derived_when_three_second_plays_were_derived(self):
         rows = cm.load_rows([{"ad_name": "a | video | c | bau | p | t | 2026-03-01", "ad_id": "1", "date": "2026-03-01", "spend": 100.0,
-                              "impressions": 10000.0, "cost_per_action_type:video_view": 0.5}])
+                              "impressions": 10000.0, "cost_per_action_type:video_view": 0.5123}])
         self.assertEqual(rows[0]["video_views_3s_source"].split(":")[0], "derived")
         derived, _ = panels.kpi_strip(panels.Ctx(rows=rows, currency="USD"))
         self.assertIn("Hook rate (derived)", derived)
