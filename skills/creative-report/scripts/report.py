@@ -122,8 +122,32 @@ def heading_for(label: Optional[str], scope: Optional[str] = None) -> str:
     return (esc(" ".join(words[:-1])) + " " if len(words) > 1 else "") + '<span class="grad">%s</span>' % esc(words[-1]), text
 
 
+MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+ICON_ATTRS = 'class="ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+TAB_ICONS = {
+    "overview": '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
+    "pareto": '<line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/>',
+    "keep-kill": '<path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>',
+    "format": ('<rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/>'
+               '<line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/>'
+               '<line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/>'),
+    "white-space": '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>',
+    "briefing": ('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>'
+                 '<line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>'),
+}
+
+
+def format_window(start: Optional[str], end: Optional[str]) -> str:
+    """"7 Sep \u2013 6 Oct 2026"; both years are named only when the window crosses a year."""
+    if not start or not end:
+        return "n/a (no dates)"
+    first, last = dt.date.fromisoformat(start), dt.date.fromisoformat(end)
+    head = "%d %s" % (first.day, MONTHS[first.month - 1]) + ("" if first.year == last.year else " %d" % first.year)
+    return "%s \u2013 %d %s %d" % (head, last.day, MONTHS[last.month - 1], last.year)
+
+
 def nav_html() -> str:
-    links = "".join('<a href="#tab-%s">%s</a>' % (tab_id, esc(title)) for tab_id, title, _ in panels.TABS)
+    links = "".join('<a href="#tab-%s"><svg %s>%s</svg>%s</a>' % (tab_id, ICON_ATTRS, TAB_ICONS[tab_id], esc(title)) for tab_id, title, _ in panels.TABS)
     return '<nav class="tabs" aria-label="Dashboard sections">%s</nav>' % links
 
 
@@ -136,8 +160,7 @@ def tabs_html(ctx: Ctx) -> str:
             inner.append('<section class="card panel" id="panel-%s" data-state="%s"><p class="eyebrow">%s</p><h3>%s</h3>%s</section>'
                          % (panel_id, state, esc(eyebrow), esc(heading), content))
         banner = panels.overview_banner(ctx) if tab_id == "overview" else ""
-        out.append('<section class="tab" id="tab-%s" aria-labelledby="h-%s"><h2 class="tab-title" id="h-%s">%s</h2>%s%s</section>'
-                   % (tab_id, tab_id, tab_id, esc(title), banner, "".join(inner)))
+        out.append('<section class="tab" id="tab-%s" aria-label="%s">%s%s</section>' % (tab_id, esc(title), banner, "".join(inner)))
     return "".join(out)
 
 
@@ -215,8 +238,8 @@ def build_html(rows: Optional[Sequence[Dict[str, Any]]] = None, grade: Optional[
     body = tabs_html(ctx)
     pool, data, bar = panels.pool_html(ctx), panels.data_block(ctx), panels.filter_bar(ctx)
     caps = {"max_kb": ctx.previews.max_kb, "budget_kb": ctx.previews.budget_kb}
-    meta = "".join('<li><span>%s</span> %s</li>' % (esc(k), esc(v)) for k, v in (
-        ("Window", window), ("Data source", source), ("Currency", currency or "account currency (not stated)"),
+    meta = "".join('<div class="scope-seg"><span class="scope-label">%s</span> <b>%s</b></div>' % (esc(k), esc(v)) for k, v in (
+        ("Window", format_window(start, end)), ("Currency", currency or "account currency (not stated)"), ("Source", source),
         ("Attribution", attribution)))
     fills = {"title": esc(page_title), "heading": heading, "sprite": ctx.previews.sprite(), "brand": lockup("h"),
              "filterbar": bar, "dialog": panels.DIALOG, "data": data, "pool": pool, "meta": meta, "badge": badge, "nav": nav_html(), "body": body,

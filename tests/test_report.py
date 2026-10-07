@@ -74,8 +74,8 @@ class ReportTest(unittest.TestCase):
             self.assertIn(heading, self.html)
 
     def test_tokens_and_svg(self):
-        self.assertIn("#7c3aed", self.html)
-        self.assertIn("#0a0227", self.html)
+        self.assertIn("--accent: hsl(251 97% 60%)", self.html)
+        self.assertIn("--bar: hsl(222 47% 8%)", self.html)
         self.assertIn("<svg", self.html)
         self.assertIn("prefers-color-scheme: dark", self.html)
         self.assertIn("@media print", self.html)

@@ -107,7 +107,7 @@ def sparkline(values: Sequence[Optional[float]], label: str, width: int = 120, h
             continue
         path.append("%s%.1f %.1f" % ("L" if pen else "M", 2 + i * step, height - 3 - (value - low) / span * (height - 6)))
         pen = True
-    return ('<svg class="spark" viewBox="0 0 %d %d" role="img" aria-label="%s"><path d="%s"/></svg>'
+    return ('<svg class="spark" viewBox="0 0 %d %d" preserveAspectRatio="none" role="img" aria-label="%s"><path d="%s"/></svg>'
             % (width, height, esc(label), " ".join(path)))
 
 

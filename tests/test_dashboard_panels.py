@@ -553,7 +553,7 @@ class PageStructureTest(unittest.TestCase):
         self.assertIn('fill="#1a1a1a"', light)
         self.assertIn('fill="white"', dark)
         self.assertIn("Acme creative <span class=\"grad\">review</span>", header)
-        self.assertIn("2026-03-01 to 2026-03-30", header)
+        self.assertIn("1 Mar \u2013 30 Mar 2026", header)
         self.assertIn("USD", header)
         self.assertIn("Meta ads connector", header)
         self.assertIn("7-day click", header)
@@ -742,3 +742,210 @@ class OverviewBannerTest(unittest.TestCase):
         self.assertNotIn("unavailable in this pull", reader_text(outside))
         self.assertNotIn("none was supplied", reader_text(outside))
 
+
+
+def squash(css):
+    return re.sub(r"\s+", " ", css)
+
+
+class ShellTest(unittest.TestCase):
+    """The redesigned frame: tokens, top bar, scope bar, sub-nav, filter row, KPI strip, cards, responsive and print."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.rows = cm.load_rows(str(FIXTURE))
+        cls.verdicts = acme_verdicts()
+        cls.html = report.build_html(rows=cls.rows, verdicts=cls.verdicts, grade=acme_grade(), currency="USD", title="Acme",
+                                     source="Meta ads connector", attribution="7-day click", completeness="reconciled")
+        cls.css = squash(re.search(r"<style>(.*?)</style>", cls.html, re.S).group(1))
+        cls.header = re.search(r'<header class="top">.*?</header>', cls.html, re.S).group(0)
+
+    def block(self, opener):
+        """The body of the first CSS rule or at-rule that starts with `opener`."""
+        start = self.css.index(opener) + len(opener)
+        depth, i = 1, start
+        while depth:
+            depth += {"{": 1, "}": -1}.get(self.css[i], 0)
+            i += 1
+        return self.css[start:i - 1]
+
+    def test_light_tokens_are_the_default(self):
+        root = self.block(":root {")
+        for token in ("--bg: #ffffff", "--surface: #ffffff", "--surface-muted: hsl(210 40% 96.1%)", "--text: hsl(222 47% 11%)",
+                      "--text-muted: hsl(215 16% 47%)", "--border: hsl(220 13% 91%)", "--accent: hsl(251 97% 60%)",
+                      "--accent-soft: hsl(251 97% 60% / .10)", "--danger: hsl(0 84% 60%)", "--bar: hsl(222 47% 8%)",
+                      "--bar-border: hsl(217 33% 18%)", "--bar-text: hsl(210 20% 96%)"):
+            self.assertIn(token, root)
+
+    def test_dark_follows_the_system_unless_a_theme_is_chosen_and_never_uses_pure_black(self):
+        system = self.block('@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {')
+        chosen = self.block(':root[data-theme="dark"] {')
+        for dark in (system, chosen):
+            for token in ("--bg: hsl(222 35% 5%)", "--surface: hsl(222 28% 11%)", "--surface-raised: hsl(222 28% 14%)",
+                          "--surface-muted: hsl(222 25% 17%)", "--text: hsl(210 20% 96%)", "--text-muted: hsl(217 18% 68%)",
+                          "--border: hsl(222 18% 29%)", "--accent: hsl(251 91% 64%)"):
+                self.assertIn(token, dark)
+            self.assertNotRegex(dark, r"#000\b|#000000|hsl\(\d+ \d+% 0%\)")
+
+    def test_delta_pill_tokens_in_both_themes(self):
+        root = self.block(":root {")
+        for token in ("--up-bg: #dcfce7", "--up-fg: #15803d", "--down-bg: #fee2e2", "--down-fg: #b91c1c", "--flat-bg: hsl(220 13% 91%)", "--flat-fg: hsl(220 9% 46%)"):
+            self.assertIn(token, root)
+        dark = self.block(':root[data-theme="dark"] {')
+        for token in ("--up-bg: hsl(160 84% 51% / .10)", "--up-fg: hsl(160 84% 51%)", "--down-bg: hsl(0 91% 71% / .10)", "--down-fg: hsl(0 91% 71%)"):
+            self.assertIn(token, dark)
+
+    def test_type_radius_and_series_tokens(self):
+        self.assertIn("family=DM+Sans:wght@400;500;600;700", self.html)
+        self.assertIn("family=Roboto+Mono", self.html)
+        self.assertNotIn("Plus+Jakarta", self.html)
+        root = self.block(":root {")
+        self.assertIn('--font-body: "DM Sans", "Inter", system-ui', root)
+        self.assertIn('--font-mono: "Roboto Mono"', root)
+        for n, color in enumerate(("#6366f1", "#10b981", "#f59e0b", "#8b5cf6", "#06b6d4", "#f43f5e"), 1):
+            self.assertIn("--series-%d: %s" % (n, color), root)
+        self.assertIn("--series-neutral: #64748b", root)
+        self.assertIn("--radius: 10px", root)
+        self.assertIn("--radius-sm: 6px", root)
+        self.assertRegex(self.css, r"html \{[^}]*font-size: 15px")
+        self.assertRegex(self.css, r"body \{[^}]*font-variant-numeric: tabular-nums")
+
+    def test_charts_read_the_series_tokens(self):
+        self.assertRegex(self.css, r"svg \.bar \{[^}]*fill: var\(--series-1\)")
+        self.assertRegex(self.css, r"svg\.spark path \{[^}]*stroke: var\(--series-1\)")
+        self.assertRegex(self.css, r"svg \.line \{[^}]*stroke: var\(--series-2\)")
+
+    def test_cards_have_a_border_a_soft_shadow_and_a_tinted_hover_without_movement(self):
+        self.assertRegex(self.css, r"section\.card \{[^}]*border: 1px solid var\(--border\)[^}]*border-radius: var\(--radius\)")
+        self.assertIn("--shadow: 0 1px 2px rgb(0 0 0 / .05)", self.block(":root {"))
+        self.assertIn("--hover-border: hsl(251 97% 60% / .4)", self.block(":root {"))
+        self.assertIn("--hover-shadow: 0 4px 12px hsl(251 97% 60% / .08)", self.block(":root {"))
+        hover = self.block(".kpi:hover {")
+        self.assertIn("border-color: var(--hover-border)", hover)
+        self.assertIn("box-shadow: var(--hover-shadow)", hover)
+        self.assertNotIn("transform", hover)
+
+    def test_the_top_bar_is_one_row_lockup_title_badge_and_theme_toggle(self):
+        bar = re.search(r'<div class="topbar">.*?</div>\s*<div class="scope-bar"', self.header, re.S).group(0)
+        order = [bar.index(m) for m in ('class="lockup"', "<h1>", 'class="status ok"', 'data-action="theme"')]
+        self.assertEqual(order, sorted(order))
+        self.assertIn("Acme creative <span class=\"grad\">review</span>", bar)
+        self.assertRegex(self.css, r"\.topbar \{[^}]*height: 56px")
+        self.assertRegex(self.css, r"\.page \{[^}]*max-width: 1536px[^}]*padding:[^;}]*24px")
+
+    def test_the_theme_toggle_is_a_labelled_button_that_sets_data_theme_and_survives_blocked_storage(self):
+        button = re.search(r'<button[^>]*data-action="theme"[^>]*>', self.header).group(0)
+        self.assertIn('type="button"', button)
+        self.assertIn("aria-label=", button)
+        script = re.search(r"<script>(.*?)</script>", self.html, re.S).group(1)
+        self.assertIn('setAttribute("data-theme"', script)
+        self.assertRegex(script, r"try \{[^}]*localStorage[^}]*\} catch")
+        self.assertRegex(self.css, r"\.theme-toggle \{[^}]*display: none")
+        self.assertRegex(self.css, r"\.js \.theme-toggle \{[^}]*display: inline-flex")
+
+    def test_the_dark_logos_follow_the_chosen_theme_as_well_as_the_system(self):
+        self.assertIn(':root[data-theme="dark"] .logo-light { display: none; }', self.css)
+        self.assertIn(':root[data-theme="dark"] .logo-dark { display: inline-block; }', self.css)
+        self.assertIn(':root:not([data-theme="light"]) .logo-dark { display: inline-block; }', self.css)
+
+    def test_the_scope_bar_reads_window_currency_source_and_attribution(self):
+        bar = re.search(r'<div class="scope-bar".*?</div>\s*</header>', self.header, re.S).group(0)
+        segments = re.findall(r'<div class="scope-seg"><span class="scope-label">([^<]*)</span> <b>([^<]*)</b></div>', bar)
+        self.assertEqual(segments, [("Window", "1 Mar – 30 Mar 2026"), ("Currency", "USD"), ("Source", "Meta ads connector"), ("Attribution", "7-day click")])
+        self.assertRegex(self.css, r"\.scope-bar \{[^}]*background: var\(--bar\)[^}]*border-radius: 12px")
+        self.assertRegex(self.css, r"\.scope-seg \{[^}]*border-right: 1px solid var\(--bar-border\)")
+        self.assertRegex(self.css, r"\.scope-bar \{[^}]*flex-wrap: wrap")
+
+    def test_a_window_across_two_years_names_both(self):
+        self.assertEqual(report.format_window("2025-12-30", "2026-01-02"), "30 Dec 2025 – 2 Jan 2026")
+        self.assertEqual(report.format_window("2026-09-07", "2026-10-06"), "7 Sep – 6 Oct 2026")
+        self.assertEqual(report.format_window(None, None), "n/a (no dates)")
+
+    def test_the_sub_nav_lists_six_tabs_each_with_a_stroke_icon_and_sits_beside_the_content(self):
+        nav = re.search(r'<nav class="tabs".*?</nav>', self.html, re.S).group(0)
+        links = re.findall(r"<a [^>]*>.*?</a>", nav, re.S)
+        self.assertEqual(len(links), 6)
+        for link in links:
+            self.assertRegex(link, r'<svg class="ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"[^>]*stroke="currentColor"')
+        self.assertNotIn("<nav", self.header)
+        self.assertLess(self.html.index('<nav class="tabs"'), self.html.index('<main'))
+        self.assertRegex(self.css, r"nav\.tabs \{[^}]*position: sticky[^}]*top: 16px")
+        self.assertRegex(self.css, r"\.shell \{[^}]*grid-template-columns: 208px minmax\(0, 1fr\)")
+        self.assertRegex(self.css, r'nav\.tabs a\[aria-current="true"\] \{[^}]*background: var\(--accent-soft\)[^}]*color: var\(--accent\)')
+
+    def test_under_1024px_the_sub_nav_becomes_a_segmented_control(self):
+        narrow = self.block("@media (max-width: 1023px) {")
+        self.assertIn("grid-template-columns: minmax(0, 1fr)", narrow)
+        self.assertRegex(narrow, r"nav\.tabs \{[^}]*position: static[^}]*background: var\(--surface-muted\)")
+        self.assertRegex(narrow, r'nav\.tabs a\[aria-current="true"\] \{[^}]*background: var\(--surface-raised\)[^}]*box-shadow: 0 1px 3px rgb\(0 0 0 / \.06\)')
+
+    def test_there_is_no_tab_name_heading_above_the_first_card(self):
+        self.assertNotIn('class="tab-title"', self.html)
+        self.assertRegex(self.html, r'<section class="tab" id="tab-overview" aria-label="Overview analysis">')
+        first = re.search(r'<section class="tab" id="tab-pareto"[^>]*>(.*?)<h3>', self.html, re.S).group(1)
+        self.assertTrue(first.strip().startswith('<section class="card panel"'))
+
+    def test_section_cards_use_eyebrow_title_and_the_agreed_padding_and_gap(self):
+        self.assertRegex(self.css, r"section\.card \{[^}]*padding: 20px[^}]*margin: 16px 0")
+        self.assertRegex(self.css, r"section\.panel > h3:first-of-type \{[^}]*font-size: 20px[^}]*font-weight: 600")
+        self.assertRegex(self.css, r"\.eyebrow \{[^}]*font: 600 12px[^}]*text-transform: uppercase[^}]*color: var\(--accent\)")
+
+    def test_the_filter_row_is_one_sticky_row_with_search_filters_clear_count_and_view_controls(self):
+        main_at = self.html.index("<main")
+        row = re.search(r'<div class="filterbar".*?</div>\s*(?=<div class="fb-status")', self.html[:main_at], re.S).group(0)
+        parts = [row.index(m) for m in ('type="search"', "<details", "Filters", 'data-action="clear"', 'class="fb-count"', 'data-action="group"', 'data-action="sort"')]
+        self.assertEqual(parts, sorted(parts))
+        self.assertIn("fb-clear", re.search(r'<button[^>]*data-action="clear"[^>]*>', row).group(0))
+        self.assertRegex(self.css, r"\.fb-clear \{[^}]*display: none")
+        self.assertRegex(self.css, r"\.fb-clear\.show \{[^}]*display: inline-block")
+        self.assertLess(self.html.index('<nav class="tabs"'), self.html.index('class="filterbar"'))
+        self.assertRegex(self.css, r"\.js \.filterbar \{[^}]*position: sticky[^}]*top: 0[^}]*background: var\(--bg\)[^}]*border-bottom")
+        self.assertRegex(self.css, r"\.filterbar \{[^}]*display: none")
+
+    def test_the_popover_holds_the_smart_views_and_the_facets_and_the_summary_sits_below_unpinned(self):
+        pop = re.search(r'<details class="facets".*?</details>', self.html, re.S).group(0)
+        for text in ("Money at risk", "Ready to scale", "Verdict", "account-wide"):
+            self.assertIn(text, pop)
+        status = re.search(r'<div class="fb-status".*?</div>\s*</div>|<div class="fb-status".*?</p>\s*</div>', self.html, re.S).group(0)
+        self.assertIn('class="fb-summary"', status)
+        self.assertNotRegex(self.css, r"\.fb-status \{[^}]*position: sticky")
+        self.assertRegex(self.css, r"\.fb-summary \{[^}]*white-space: nowrap")
+
+    def test_the_filter_row_height_is_bounded_on_desktop_and_phone(self):
+        self.assertRegex(self.css, r"\.filterbar \{[^}]*max-height: 56px")
+        phone = self.block("@media (max-width: 480px) {")
+        self.assertRegex(phone, r"\.filterbar \{[^}]*max-height: 96px")
+        self.assertRegex(phone, r"\.fb-search \{[^}]*flex: 1 1 100%")
+
+    def test_headings_clear_the_sticky_row(self):
+        self.assertRegex(self.css, r"section\.panel \{[^}]*scroll-margin-top: 72px")
+        self.assertNotIn("top.style.top", self.html)
+        self.assertNotIn("function pin", self.html)
+
+    def test_the_kpi_strip_is_an_auto_fill_grid_of_compact_tiles(self):
+        self.assertRegex(self.css, r"\.kpis \{[^}]*grid-template-columns: repeat\(auto-fill, minmax\(180px, 1fr\)\)[^}]*gap: 12px")
+        self.assertRegex(self.css, r"\.kpi-name \{[^}]*font: 600 12px[^}]*letter-spacing: \.04em[^}]*text-transform: uppercase[^}]*color: var\(--text-muted\)")
+        self.assertRegex(self.css, r"\.kpi-value \{[^}]*font: 700 24px")
+        self.assertRegex(self.css, r"svg\.spark \{[^}]*width: 100%[^}]*height: 28px")
+        self.assertRegex(self.css, r"\.kpi\.unknown \.kpi-value \{[^}]*color: var\(--text-muted\)")
+        self.assertNotRegex(self.css, r"\.kpi\.unknown \{[^}]*dashed")
+        for tone in ("up", "down", "flat"):
+            self.assertRegex(self.css, r"\.pill\.%s \{[^}]*background: var\(--%s-bg\)[^}]*color: var\(--%s-fg\)" % (tone, tone, tone))
+
+    def test_at_390px_nothing_forces_a_sideways_scroll(self):
+        phone = self.block("@media (max-width: 480px) {")
+        self.assertRegex(phone, r"\.page \{[^}]*padding:[^;}]*16px")
+        self.assertRegex(self.css, r"\.content \{[^}]*min-width: 0")
+        self.assertRegex(self.css, r"\.scroll \{[^}]*overflow-x: auto")
+        self.assertRegex(self.css, r"@media \(max-width: 640px\) \{ table\.stack thead \{ display: none; \}[^@]*table\.stack td \{")
+
+    def test_print_keeps_light_tokens_hides_the_chrome_and_prints_every_tab(self):
+        printed = self.block("@media print {")
+        self.assertIn(':root, :root[data-theme="dark"], :root:not([data-theme="light"]) {', printed)
+        for token in ("--bg: #ffffff", "--surface: #ffffff", "--text: hsl(222 47% 11%)", "--bar: #ffffff"):
+            self.assertIn(token, printed)
+        hidden = " ".join(re.findall(r"([^{}]*)\{ display: none !important; \}", printed))
+        for selector in ("nav.tabs", ".filterbar", ".fb-status", ".theme-toggle"):
+            self.assertIn(selector, hidden)
+        self.assertRegex(self.html, r"@media print[^@]*section\.tab\[hidden\]\s*\{\s*display: block !important")
+        self.assertEqual(self.css.count("@media print"), 1)

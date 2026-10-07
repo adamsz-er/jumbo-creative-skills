@@ -4,38 +4,36 @@
 
 ## Rules
 
-- One self-contained HTML file. Inline CSS and inline SVG; images are data URIs, never URLs. A small inline script turns the stacked sections into tabs and keeps the hash in sync, and the page reads correctly without it (every section visible, nothing hidden by inline style). The only external request is the Google Fonts stylesheet (Plus Jakarta Sans and Inter), with system fonts as the fallback.
-- Branding: a lockup of the Jumbo wordmark (`assets/jumbo-logo.svg` for light, `assets/jumbo-logo-dark.svg` for dark: same drawing, lighter gradient stops), a thin divider, "by" and the Elephant Room logo (`assets/er-logo.svg` is the white and amber variant for dark mode, `assets/er-logo-dark.svg` the ink and amber one for light), in the header (28 px) and the footer (20 px), and no other brand mark. Every gradient and clip id gets a per-instance suffix. The account label is the subject, never the branding.
-- Responsive to a 390 px phone width, light and dark (`prefers-color-scheme`), and print-friendly (`@media print`).
+- One self-contained HTML file. Inline CSS and inline SVG; images are data URIs, never URLs. A small inline script turns the stacked sections into tabs and keeps the hash in sync, and the page reads correctly without it (every section visible, nothing hidden by inline style). The only external request is the Google Fonts stylesheet (DM Sans and Roboto Mono), with Inter and system fonts as the fallback.
+- Branding: a lockup of the Jumbo wordmark (`assets/jumbo-logo.svg` for light, `assets/jumbo-logo-dark.svg` for dark: same drawing, lighter gradient stops), a thin divider, "by" and the Elephant Room logo (`assets/er-logo.svg` is the white and amber variant for dark mode, `assets/er-logo-dark.svg` the ink and amber one for light), in the top bar (28 px) and the footer (20 px), and no other brand mark. Every gradient and clip id gets a per-instance suffix. The account label is the subject, never the branding.
+- Responsive to a 390 px phone width, light and dark (`prefers-color-scheme`, or `data-theme` once the toggle has set it), and print-friendly (`@media print`: light tokens, no nav, filter row or toggle, every tab in order).
 - Lead with the answer. Every section opens with its point; detail sits underneath.
-- Every number comes from the inputs. Nothing in the page is typed by hand, and a missing value reads `n/a (missing <field>)`, never 0.
+- Every number comes from the inputs. Nothing in the page is typed by hand, and a missing value reads `n/a`, with its reason on a muted line (`n/a (missing <field>)` in running text), never 0.
+- Reader words: ads, never rows; never a command flag (they live in `SKILL.md`). A metric missing for every ad gets one banner at the top of Overview and a plain "n/a" in its tile; a metric present on only some ads says "recorded on N of M ads; the rest had none in this window".
 - Escape every string that came from the data.
 
 ## Tokens
 
-Defined once as CSS custom properties at the top of the template.
+Defined once as CSS custom properties at the top of the template; the values are borrowed from a production analytics UI, so charts, tiles and tables read as one family.
 
-| Token | Value | Use |
-|---|---|---|
-| violet accent | `#7c3aed` | eyebrows, accents, keep bars |
-| violet button | `#6d28d9` | buttons if you add any |
-| violet 50 / 100 / 200 | `#f5f3ff` / `#ede9fe` / `#ddd6fe` | soft surfaces, chips, dark-mode text |
-| violet 600 / 900 | `#7c3aed` / `#4c1d95` | accent text on light |
-| ink 50 | `#f8f8fb` | page base (never flat white), with a soft radial violet glow |
-| ink 200 | `#e2e1ea` | dividers |
-| ink 500 | `#6b6889` | body text |
-| ink 900 | `#0a0227` | headings; dark-mode base |
-| dark elevated | `#1a103d` | dark-mode cards |
-| success | `#059669` | scale |
-| error | `#dc2626` | kill |
-| warning | `#e8ad00` | iterate |
-| info | `#343CED` | check before cutting, gradient start |
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--bg` / `--surface` | `#ffffff` | `hsl(222 35% 5%)` / `hsl(222 28% 11%)` | page and cards (dark depth is lightness, never `#000`) |
+| `--surface-raised` | `#ffffff` | `hsl(222 28% 14%)` | popovers, the active segmented chip |
+| `--surface-muted` | `hsl(210 40% 96.1%)` | `hsl(222 25% 17%)` | track behind the segmented control, table heads |
+| `--text` / `--text-muted` | `hsl(222 47% 11%)` / `hsl(215 16% 47%)` | `hsl(210 20% 96%)` / `hsl(217 18% 68%)` | copy and labels |
+| `--border` | `hsl(220 13% 91%)` | `hsl(222 18% 29%)` | 1 px card and row borders |
+| `--accent` / `--accent-soft` | `hsl(251 97% 60%)` / 10% | `hsl(251 91% 64%)` | the one violet accent: eyebrows, active nav, links |
+| `--bar`, `--bar-border`, `--bar-text` | `hsl(222 47% 8%)`, `hsl(217 33% 18%)`, `hsl(210 20% 96%)` | same | the dark scope bar, in both themes |
+| `--up-*`, `--down-*`, `--flat-*` | `#dcfce7`/`#15803d`, `#fee2e2`/`#b91c1c`, `hsl(220 13% 91%)`/`hsl(220 9% 46%)` | 10% washes of green and red | delta pills |
+| `--series-1` to `-6`, `--series-neutral` | `#6366f1 #10b981 #f59e0b #8b5cf6 #06b6d4 #f43f5e`, `#64748b` | same | chart bars, lines and dots |
+| `--danger`, success, warning, info | `hsl(0 84% 60%)`, `#059669`, `#e8ad00`, `#343CED` | | verdict badges and the Reconciled / Incomplete badge |
 
-Type: Plus Jakarta Sans for headings (tight negative letter-spacing, sentence case), Inter for body. One uppercase eyebrow per section. Radii 12 to 24 px, light shadows. One blue-to-violet gradient-text keyword in the title (the last word of `--title`).
+Type: DM Sans (400 to 700) with Inter and system fallbacks, Roboto Mono for code; root 15 px; every number tabular. Radius 10 px cards, 6 px controls, 999 px pills; spacing on a 4 px grid. Cards have a 1 px border and `0 1px 2px rgb(0 0 0 / .05)`; hover tints the border and adds a soft violet shadow, with no movement. A tile's delta pill is green when the change is good (down for CPM and CPA) and neutral for spend, impressions, reach and frequency.
 
 ## Layout (the order is part of the spec)
 
-Header (sticky): logo, "<account label> creative review", date window, data source, currency, attribution, completeness badge, tab bar. Then six tabs, each a stacked `<section id="tab-...">`:
+App shell, 1536 px wide: a 56 px top bar (lockup, "<account> · <scope> creative review", completeness badge, theme toggle); the dark scope bar (window, currency, source, attribution); then a 208 px sticky left sub-nav beside the content column, with the sticky filter row above the first card. Under 1024 px the sub-nav is a segmented control. Six tabs, each a `<section id="tab-...">` whose first card opens it (no separate tab heading):
 
 1. Overview analysis: key numbers (`kpi_strip`), performance over time (`over_time`), do these first (`do_first`), ways to improve (`ways_to_improve`), funnel (`funnel`)
 2. Pareto: where the value comes from (`pareto`), the head and the long tail (`head_tail`)
@@ -48,9 +46,9 @@ Footer: data and method (the matched funnel columns, every flag and default used
 
 ## Panels and states
 
-Every panel function takes the `Ctx` and returns `(html, state)`: `"data"` when filled and `"empty"` when it shows a labelled empty state with **why** and **how to get it** (`empty_state`). A panel is never dropped. Unknown is never zero: a missing operand reads `n/a (missing <field>)`, reach and frequency read `n/a (needs account-level reach)` without `--account`, and a single day has no sparkline and says so.
+Every panel function takes the `Ctx` and returns `(html, state)`: `"data"` when filled and `"empty"` when it shows a labelled empty state with **why** and **how to get it** (`empty_state`). A panel is never dropped. Unknown is never zero: a missing operand reads `n/a (missing <field>)`, reach and frequency read `n/a` without an account-level figure (one banner on Overview says why), and a single day has no sparkline and says so.
 
-The ad card (`ad_card`) is the one component used wherever an ad appears: preview image, readable label (concept · creator · format · ad type, never the raw first name segment), ad id, spend with currency, what placed it, verdict chip, confidence and the plain-English sentence. Lists show the top `--top-n` as cards and collapse the rest into a closed `<details>` capped at `LIST_CAP` rows, so a 500-ad account stays readable.
+The ad card (`ad_card`) is the one component used wherever an ad appears: preview image, readable label (concept · creator · format · ad type, never the raw first name segment), ad id, spend with currency, what placed it, verdict chip, confidence and the plain-English sentence. Lists show the top N (`--top-n`) as cards and collapse the rest into a closed `<details>` capped at `LIST_CAP` ads, so a 500-ad account stays readable.
 
 ## Adding a panel
 
@@ -58,20 +56,21 @@ Write `def my_panel(ctx) -> (html, state)` in `panels.py`, add it to `TABS` in t
 
 ## Placeholders in the template
 
-`{{title}}`, `{{heading}}`, `{{sprite}}`, `{{brand}}`, `{{meta}}`, `{{badge}}`, `{{nav}}`, `{{filterbar}}`, `{{body}}`, `{{footer}}`, `{{dialog}}`, `{{pool}}`, `{{data}}`. Add a new one in the template and in the `fills` dict together; a value is inserted once and never re-scanned, so text from the data cannot become a placeholder.
+`{{title}}`, `{{heading}}`, `{{sprite}}`, `{{brand}}`, `{{meta}}` (the scope-bar segments), `{{badge}}`, `{{nav}}`, `{{filterbar}}`, `{{body}}`, `{{footer}}`, `{{dialog}}`, `{{pool}}`, `{{data}}`. Add a new one in the template and in the `fills` dict together; a value is inserted once and never re-scanned, so text from the data cannot become a placeholder.
 
 ## Interaction layer
 
 Everything below needs the page script; with scripts off every panel and card shows, grouped by verdict.
 
 - **One JSON block.** `interact.payload_json` writes every ad (not only the top N) into `<script type="application/json" id="ad-data">`, with `<`, `>` and `&` turned into unicode escapes so no ad name can close the tag. The script reads that block only and builds the page with DOM calls, never by writing data into markup or code. A missing value is `null`, never 0. Verdict values in the block, the chips and the link are the board's own words: scale, keep, iterate, check, pause, too-early, cant-judge.
+- **The filter row** is one sticky row (search, "Filters (n)" popover, Clear, "N of M ads", group, sort, previews only) with the summary line under it, not sticky. The popover holds the smart views and the facets; with scripts off the row is not shown and every ad stays visible. The theme toggle sets `data-theme` and keeps the choice in `localStorage` inside try/catch, so a blocked store only forgets it.
 - **Facets** come from the block: a facet shows when it has at least `FACET_MIN_VALUES` values and is known for `FACET_KNOWN` of the ads (both arbitrary). Within a facet chips are OR, across facets AND; counts follow the other active facets. The smart views are the `PRESETS` tuple; "Biggest spenders" keeps `BIGGEST_N` ads (an arbitrary default).
 - **Link state.** `#tab-keep-kill?verdict=pause%2Ccheck&q=boot&group=format&sort=roas` reopens the same view. Search, facets, `tiring`, `top`, `weak`, `group`, `sort` and `previews` are read back and validated.
-- **Same numbers in Python and the browser.** Group and filtered-summary subtotals are ratios of sums (ROAS = purchase value / spend, CPA = spend / purchases). `interact.group_subtotals` renders the scripts-off view and the script recomputes it from the block; a test runs both on one fixture and compares.
+- **Same numbers in Python and the browser.** Group and filtered-summary subtotals are ratios of sums over every ad in view (ROAS = purchase value / spend, CPA = spend / purchases; an ad with no recorded value or purchases adds none; n/a only when no ad has any), the same basis as the key-number tiles. `interact.group_subtotals` renders the scripts-off view and the script recomputes it from the block; a test runs both on one fixture and compares.
 - **The pool.** `{{pool}}` is an inert `<template>` holding every ad's full card, so a regrouped gallery can show any ad as a card; ads past the top N of a group are rebuilt as rows from the block. It adds roughly 5 KB per ad to the file. The "Open this ad" dialog clones the card's `<details>` body, so the two cannot drift.
 - **How to improve** is `interact.improvement`: the verdict's next step, then the fix for the first weak funnel step from the grade output, then the other weak metrics. An ad with no grade data says "Not enough data to suggest a fix." and nothing else.
 - **Words, not ids.** `interact.plain_ids` turns field ids in generated wording into the words a reader knows (3-second plays, purchase value) and `interact.humanise` reads a slug as words (UGC video, BAU); the raw value stays in the data attributes and the page JSON. Hook and hold rate, and the funnel's video steps, are read over video ads only and say how many ads that is.
-- **Ratios over partial data.** ROAS and CPA are ratios of sums over the ads that have both operands; when that is fewer than the ads shown the text says "(X of Y ads)".
+- **Ratios over partial data.** One basis everywhere: ROAS and CPA divide over all ads in view, so a partly missing operand shows in the value, not in a suffix. Tiles say how many ads recorded the field ("recorded on N of M ads; the rest had none in this window").
 
 ## Tabs 4 to 6
 

@@ -406,11 +406,11 @@ class StructureTest(Fixture):
         for text in ("ads", "of spend", "ROAS", "CPA"):
             self.assertIn(text, gallery)
         self.assertIn("more", gallery)
-        for tag in re.findall(r"<[a-z][^>]*>", self.html.split("<main>")[1].split("</main>")[0]):
+        for tag in re.findall(r"<[a-z][^>]*>", re.search(r"<main[^>]*>(.*?)</main>", self.html, re.S).group(1)):
             self.assertNotRegex(tag, r"\bhidden\b")
             self.assertNotRegex(tag, r'style="[^"]*(display\s*:\s*none|visibility\s*:\s*hidden)')
         self.assertRegex(self.html, r"\.filterbar \{[^}]*display: none")
-        self.assertRegex(self.html, r"\.js \.filterbar \{[^}]*display: block")
+        self.assertRegex(self.html, r"\.js \.filterbar \{[^}]*display: flex")
 
     def test_the_inline_script_is_valid_javascript(self):
         if not HAS_NODE:
@@ -423,7 +423,7 @@ class StructureTest(Fixture):
         self.assertEqual(done.returncode, 0, done.stderr)
 
     def test_filter_chips_are_toggle_buttons_and_the_bar_is_labelled(self):
-        bar = re.search(r'<div class="filterbar".*?(?=</header>)', self.html, re.S).group(0)
+        bar = re.search(r'<div class="filterbar".*?(?=<main)', self.html, re.S).group(0)
         self.assertIn("aria-label=", bar.split(">")[0])
         buttons = re.findall(r"<button[^>]*>", bar)
         self.assertTrue(buttons)
@@ -437,9 +437,10 @@ class StructureTest(Fixture):
             self.assertIn(label, bar)
         self.assertIn("account-wide", bar)
 
-    def test_filter_bar_sits_in_the_sticky_header_after_the_tabs(self):
-        header = re.search(r'<header class="top">.*?</header>', self.html, re.S).group(0)
-        self.assertLess(header.index('<nav class="tabs"'), header.index('class="filterbar"'))
+    def test_the_filter_row_opens_the_content_column_beside_the_tabs_and_is_not_in_the_header(self):
+        self.assertNotIn("filterbar", re.search(r'<header class="top">.*?</header>', self.html, re.S).group(0))
+        self.assertLess(self.html.index('<nav class="tabs"'), self.html.index('class="filterbar"'))
+        self.assertLess(self.html.index('class="filterbar"'), self.html.index("<main"))
 
     def test_the_dialog_is_labelled_and_the_script_fills_it_from_the_details_it_mirrors(self):
         dialog = re.search(r"<dialog[^>]*>.*?</dialog>", self.html, re.S).group(0)
@@ -495,8 +496,8 @@ class StructureTest(Fixture):
         self.assertIn("hook-writer", card)
         self.assertIn('data-action="copy-prompt"', card)
 
-    def test_the_gallery_has_group_sort_and_previews_only_controls(self):
-        gallery = re.search(r'id="panel-all-ads".*?</section>\s*</section>', self.html, re.S).group(0)
+    def test_the_filter_row_has_group_sort_and_previews_only_controls(self):
+        gallery = re.search(r'<div class="filterbar".*?(?=<main)', self.html, re.S).group(0)
         for text in ('data-action="group"', 'data-action="sort"', 'data-action="previews-only"', "Previews only"):
             self.assertIn(text, gallery)
         for option in ("Verdict", "Format", "Concept", "Ad type", "Creator"):
@@ -574,6 +575,12 @@ class ScriptLogicTest(Fixture):
         self.assertEqual(out["roas_text"], "1.50x")
         self.assertEqual(out["cpa_text"], "20.00")
         self.assertNotIn("roas_suffix", out)
+
+    def test_the_filter_count_adds_the_search_and_every_chip_and_view(self):
+        body = ("var s = CR.emptyState(); var none = CR.activeCount(s); s.q = 'x'; s.facets.format = ['static', 'video']; s.facets.verdict = ['pause'];"
+                "s.fat = true; s.top = 5; var many = CR.activeCount(s);"
+                "console.log(JSON.stringify({none: none, many: many, active: CR.active(s)}));")
+        self.assertEqual(json.loads(node_run(self.html, body)), {"none": 0, "many": 6, "active": True})
 
     def test_search_matches_label_name_and_id_case_insensitively(self):
         body = ("var ads = [{id: '99', label: 'Sunrise Story', name: 'x | y'}, {id: '5', label: 'other', name: 'Boot-Launch'}];"
