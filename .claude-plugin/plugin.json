@@ -1,0 +1,11 @@
+{
+  "name": "jumbo-creative",
+  "version": "0.1.0",
+  "description": "Skills that teach any brand to analyse and make Meta ad creative, graded against the account's own baseline rather than generic benchmarks.",
+  "author": {
+    "name": "adamsz-er"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/adamsz-er/jumbo-creative-skills",
+  "keywords": ["meta-ads", "creative", "advertising", "skills"]
+}
