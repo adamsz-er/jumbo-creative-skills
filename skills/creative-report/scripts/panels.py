@@ -225,6 +225,11 @@ def _image(ctx: Ctx, ad_id: Any, label: str, fmt: str, big: bool = False) -> str
 PROMPT_CLASSES = ("iterate", "check", "kill")
 
 
+def verdict_chip(cls: str) -> str:
+    """The tinted verdict chip, with a plain-words tooltip saying what the verdict means."""
+    return '<span class="badge %s" title="%s">%s</span>' % (cls, esc(interact.VERDICT_TIPS[cls]), esc(VERDICT_LABEL[cls]))
+
+
 def entry_for(ctx: Ctx, rec: Dict[str, Any]) -> Dict[str, Any]:
     """The verdict entry for a record, or a bare entry when the ad was not judged."""
     return ctx.verdict_index.get(rec["id"]) or {"ad": rec["id"], "ad_name": rec["name"]}
@@ -242,7 +247,7 @@ def ad_detail(ctx: Ctx, key: str, label: str, fmt: str, full: Dict[str, Any], ba
     judged = "verdict_id" in full
     cls = entry_class(full) if judged else None
     fix = interact.improvement(grade, full if judged else None)
-    chip = '<span class="badge %s">%s</span>' % (cls, esc(VERDICT_LABEL[cls])) if cls else ""
+    chip = verdict_chip(cls) if cls else ""
     sentence = say(strip_confidence(str(full["sentence"]), full.get("confidence"))) if full.get("sentence") else "n/a (no verdict sentence)"
     reasons = full.get("reasons") or []
     why = '<ul class="reasons">%s</ul>' % "".join("<li>%s</li>" % say(r) for r in reasons) if reasons else '<p class="muted">n/a (no verdict reasons supplied)</p>'
@@ -291,7 +296,7 @@ def ad_card(ctx: Ctx, entry: Dict[str, Any], driver: str = "", next_step: bool =
     spend = (ctx.ad_index.get(key) or {}).get("spend", entry.get("spend"))
     judged = "verdict_id" in entry
     cls = entry_class(entry) if judged else None
-    chip = ('<span class="badge %s">%s</span>' % (cls, esc(VERDICT_LABEL[cls]))) if cls else ""
+    chip = verdict_chip(cls) if cls else ""
     conf = ('<span class="conf" title="%s">%s</span>' % (esc(entry.get("confidence_reason") or ""), esc(entry["confidence"]))
             if entry.get("confidence") else "")
     if entry.get("group_size"):
@@ -858,8 +863,8 @@ def verdict_board(ctx: Ctx) -> Tuple[str, str]:
     for cls, name in BOARD:
         ordered = sorted(columns[cls], key=lambda e: -_stake(e))
         cards = [ad_card(ctx, e, driver="Spend at stake: %s" % ctx.money(e.get("spend_at_stake"))) for e in ordered[:ctx.top_n]]
-        cols.append('<div class="col col-%s"><h3><span class="badge %s">%s</span> <span class="count">%d</span></h3>%s%s</div>'
-                    % (cls, cls, esc(name), len(ordered), "".join(cards) or '<p class="muted">No ads in this column.</p>',
+        cols.append('<div class="col col-%s"><h3>%s <span class="count">%d</span></h3>%s%s</div>'
+                    % (cls, verdict_chip(cls), len(ordered), "".join(cards) or '<p class="muted">No ads in this column.</p>',
                        compact_list(ctx, ordered[ctx.top_n:], "%s ads" % name.lower())))
     lead = '<p class="muted">Each column shows its top %d ads by spend at stake (N=%d, a default you can change when you rebuild the report); the rest are collapsed.</p>' % (ctx.top_n, ctx.top_n)
     return note + basis + lead + '<div class="board">%s</div>' % "".join(cols), "data"
@@ -1085,7 +1090,7 @@ def preview_tile(ctx: Ctx, ad_id: Any) -> str:
     fmt = str(rec.get("format") or "")
     verdict = ctx.verdict_index.get(key)
     cls = entry_class(verdict) if verdict and "verdict_id" in verdict else None
-    chip = '<span class="badge %s">%s</span>' % (cls, esc(VERDICT_LABEL[cls])) if cls else ""
+    chip = verdict_chip(cls) if cls else ""
     return ('<figure class="pv-tile" data-ad="%s"><div class="pv-btn" data-open="%s">%s</div>'
             '<figcaption>%s%s</figcaption></figure>'
             % (esc(key), esc(key), _image(ctx, key, rec["label"], fmt), esc(rec["label"]), chip))

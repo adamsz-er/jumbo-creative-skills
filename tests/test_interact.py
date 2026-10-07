@@ -121,6 +121,48 @@ class Fixture(unittest.TestCase):
         cls.ctx = panels.Ctx(rows=cls.rows, verdicts=cls.verdicts, grade=cls.grade, currency="USD")
 
 
+CHIP_COLOURS = {"scale": ("#dbeafe", "#1d4ed8", "#bfdbfe"), "keep": ("#ede9fe", "#6d28d9", "#ddd6fe"), "iterate": ("#fef3c7", "#b45309", "#fde68a"),
+                "check": ("#e0f2fe", "#0369a1", "#bae6fd"), "kill": ("#fee2e2", "#b91c1c", "#fecaca"), "early": ("#f3f4f6", "#4b5563", "#e5e7eb"),
+                "cant": ("#f3f4f6", "#4b5563", "#e5e7eb")}
+
+
+class VerdictChipTest(Fixture):
+    def test_every_verdict_class_has_a_plain_tooltip(self):
+        self.assertEqual(set(interact.VERDICT_TIPS), {cls for cls, _ in interact.BOARD})
+        for cls, tip in interact.VERDICT_TIPS.items():
+            self.assertGreater(len(tip.split()), 5, cls)
+            self.assertNotRegex(tip, r"[_{}]")
+
+    def test_the_chip_carries_its_label_and_tooltip_escaped(self):
+        chip = panels.verdict_chip("check")
+        self.assertEqual(chip, '<span class="badge check" title="%s">Check before cutting</span>' % panels.esc(interact.VERDICT_TIPS["check"]))
+
+    def test_the_card_the_open_view_the_board_header_and_the_tile_use_the_chip_with_its_tooltip(self):
+        entry = next(e for e in self.verdicts["ads"] if panels.entry_class(e) == "iterate")
+        card = panels.ad_card(self.ctx, entry)
+        self.assertGreaterEqual(card.count(panels.verdict_chip("iterate")), 2)
+        board, _ = panels.verdict_board(self.ctx)
+        for cls, name in interact.BOARD:
+            self.assertIn('<span class="badge %s" title="' % cls, board)
+        tile = panels.preview_tile(self.ctx, entry["ad"])
+        self.assertIn(panels.verdict_chip("iterate"), tile)
+
+    def test_the_page_data_carries_the_tooltips_for_the_script(self):
+        _, data = page_data(self.html)
+        self.assertEqual(set(data["verdict_tips"]), set(interact.PUBLIC_LABEL))
+        self.assertEqual(data["verdict_tips"]["pause"], interact.VERDICT_TIPS["kill"])
+
+    def test_the_chips_are_tinted_in_light_and_dark(self):
+        template = (ASSETS / "report-template.html").read_text()
+        for cls, (bg, fg, edge) in CHIP_COLOURS.items():
+            for value in (bg, fg, edge):
+                self.assertIn("--v-%s-%s: %s;" % (cls, {bg: "bg", fg: "fg", edge: "bd"}[value], value), template)
+            self.assertRegex(template, r"\.badge\.%s \{[^}]*background: var\(--v-%s-bg\)[^}]*color: var\(--v-%s-fg\)[^}]*border-color: var\(--v-%s-bd\)" % ((cls,) * 4))
+        dark = re.findall(r"--v-scale-bg: hsl\(217 91% 60% / \.12\);", template)
+        self.assertEqual(len(dark), 2)
+        self.assertIn("font: 600 11px/1.4", re.search(r"\.badge \{[^}]*\}", template).group(0))
+
+
 class LogoTest(Fixture):
     def lockup_spans(self, region, label):
         return re.findall(r'<span class="logo-(light|dark)" role="img" aria-label="%s">(.*?)</span>' % label, region, re.S)

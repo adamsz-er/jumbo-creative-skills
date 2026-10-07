@@ -35,6 +35,15 @@ NEXT_STEP = {
     "early": "Give it more delivery before judging it.",
     "cant": "Add the missing data, then run keep-or-kill again.",
 }
+VERDICT_TIPS = {
+    "scale": "Pays back well against your similar ads, so it can take more budget.",
+    "keep": "Holding up against your similar ads, so leave it running.",
+    "iterate": "The idea has something but this version is weak, so brief a new version.",
+    "check": "Looks weak, but it may feed your other ads, so check before cutting it.",
+    "kill": "Weak against your similar ads, so pause it once tracking and the site are ruled out.",
+    "early": "Too little delivery so far to judge it fairly.",
+    "cant": "The data needed to judge it is missing, so it cannot be graded yet.",
+}
 PAUSE_CHECK = "Rule out tracking, the site and the audience first."
 # What a reader sees in a link, a filter chip or the page data: the board's own words, never the internal class name.
 PUBLIC_ID = {"kill": "pause", "early": "too-early", "cant": "cant-judge"}
@@ -327,7 +336,8 @@ def display_names(records: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, str]
 def payload(records: Sequence[Dict[str, Any]], currency: Optional[str], top_n: int, default_group: str) -> Dict[str, Any]:
     return {"ads": list(records), "presets": list(PRESETS), "names": display_names(records), "weak_steps": WEAK_VALUES, "currency": currency,
             "unit_note": "" if currency else " (account currency)", "top_n": top_n,
-            "defaults": {"group": default_group, "sort": "stake"}, "verdict_labels": PUBLIC_LABEL}
+            "defaults": {"group": default_group, "sort": "stake"}, "verdict_labels": PUBLIC_LABEL,
+            "verdict_tips": {PUBLIC_ID.get(cls, cls): VERDICT_TIPS[cls] for cls, _ in BOARD}}
 
 
 def payload_json(data: Dict[str, Any]) -> str:
