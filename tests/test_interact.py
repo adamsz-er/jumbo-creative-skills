@@ -39,6 +39,11 @@ def record(ad_id, spend, **extra):
     return base
 
 
+PARTIAL_ROWS = [{"ad_id": i, "ad_name": "ad %s | static | c | bau | p | t | 2026-03-01" % i, "date": "2026-03-01", "spend": float(sp),
+                 "impressions": 10000.0, "conversion_value": float(v), "conversions": float(c)}
+                for i, sp, v, c in (("a", 100, 500, 5), ("b", 80, 300, 4), ("c", 60, 100, 2), ("d", 40, 60, 1))]
+
+
 def page_data(html):
     block = re.search(r'<script type="application/json" id="ad-data">(.*?)</script>', html, re.S)
     assert block, "no ad-data block"
@@ -254,6 +259,44 @@ class SubtotalTest(unittest.TestCase):
     def test_other_group_keys_sort_by_spend_and_put_unknown_last(self):
         recs = [record(1, 10, format="static"), record(2, 90, format="video"), record(3, 500)]
         self.assertEqual([g["key"] for g in interact.group_subtotals(recs, "format")], ["video", "static", None])
+
+
+class OneBasisTest(unittest.TestCase):
+    RECS = [record("a", 100, verdict="keep", conversions=10.0, conversion_value=300.0),
+            record("b", 100, verdict="keep", conversions=5.0, conversion_value=None),
+            record("c", 100, verdict="keep", conversions=None, conversion_value=300.0)]
+
+    def test_roas_and_cpa_divide_over_every_ad_and_a_missing_value_counts_as_none(self):
+        total = interact.totals_of(self.RECS, 300.0)
+        self.assertAlmostEqual(total["roas"], 600 / 300)
+        self.assertAlmostEqual(total["cpa"], round(300 / 15, 2))
+        self.assertEqual(total["roas_text"], "2.00x")
+        self.assertEqual(total["cpa_text"], "%.2f" % (300 / 15))
+
+    def test_no_ad_count_suffix_is_ever_added(self):
+        total = interact.totals_of(self.RECS, 300.0)
+        self.assertNotIn(" ads)", total["roas_text"] + total["cpa_text"])
+        self.assertNotIn("roas_suffix", total)
+        self.assertNotIn("cpa_n", total)
+
+    def test_roas_and_cpa_are_na_only_when_no_ad_has_any_value_or_purchase(self):
+        bare = [record("a", 100, verdict="keep"), record("b", 50, verdict="keep")]
+        total = interact.totals_of(bare, 150.0)
+        self.assertIsNone(total["roas"])
+        self.assertIsNone(total["cpa"])
+        self.assertEqual(total["roas_text"], "n/a (missing purchase value)")
+        self.assertEqual(total["cpa_text"], "n/a (missing purchases)")
+        zero = interact.totals_of([record("a", 100, conversions=0.0, conversion_value=0.0)], 100.0)
+        self.assertEqual(zero["cpa_text"], "n/a (zero purchases)")
+
+    def test_the_unfiltered_summary_equals_the_kpi_tiles_when_some_ads_have_no_value(self):
+        rows = [dict(r, conversion_value=None, conversions=None) if r["ad_id"] in ("c", "d") else r for r in PARTIAL_ROWS]
+        ctx = panels.Ctx(rows=rows, currency="USD")
+        total = interact.totals_of(ctx.records, None, ctx.money)
+        html, _ = panels.kpi_strip(ctx)
+        tile = {name: value for name, value in re.findall(r'<p class="kpi-name">([^<]*)</p>.*?<p class="kpi-value">([^<]*)</p>', html, re.S)}
+        self.assertEqual(total["roas_text"], tile["ROAS"])
+        self.assertEqual(total["cpa_text"], tile["CPA (USD)"])
 
 
 class ImprovementTest(unittest.TestCase):
@@ -522,6 +565,16 @@ class ScriptLogicTest(Fixture):
         self.assertEqual(out["none"]["roas_text"], "n/a (missing purchase value)")
         self.assertEqual(out["none"]["cpa_text"], "n/a (missing purchases)")
 
+    def test_summary_divides_over_every_ad_with_no_count_suffix(self):
+        body = ("var ads = [{spend: 100, conversions: 10, conversion_value: 300}, {spend: 100, conversions: null, conversion_value: null}];"
+                "var s = CR.summary(ads, 2, 200); console.log(JSON.stringify(s));")
+        out = json.loads(node_run(self.html, body))
+        self.assertAlmostEqual(out["roas"], 1.5)
+        self.assertAlmostEqual(out["cpa"], 20.0)
+        self.assertEqual(out["roas_text"], "1.50x")
+        self.assertEqual(out["cpa_text"], "20.00")
+        self.assertNotIn("roas_suffix", out)
+
     def test_search_matches_label_name_and_id_case_insensitively(self):
         body = ("var ads = [{id: '99', label: 'Sunrise Story', name: 'x | y'}, {id: '5', label: 'other', name: 'Boot-Launch'}];"
                 "function q(t) { var s = CR.emptyState(); s.q = t; return CR.visible(ads, s).map(function (a) { return a.id; }); }"
@@ -605,12 +658,12 @@ class ReviewScriptTest(Fixture):
                 record("c", 100, verdict="keep", conversions=None, conversion_value=300.0)]
         py = interact.group_subtotals(recs, "verdict")[0]
         js = self.js("console.log(JSON.stringify(CR.subtotals(%s, 'verdict', 300)[0]));" % json.dumps(recs))
-        for field in ("roas_text", "cpa_text", "roas_n", "cpa_n"):
+        for field in ("roas_text", "cpa_text"):
             self.assertEqual(js[field], py[field], field)
         self.assertAlmostEqual(js["roas"], py["roas"], places=4)
         self.assertAlmostEqual(js["cpa"], py["cpa"], places=2)
-        self.assertEqual(py["roas_text"], "3.00x (2 of 3 ads)")
-        self.assertEqual(py["cpa_text"], "%.2f (2 of 3 ads)" % (200 / 15))
+        self.assertEqual(py["roas_text"], "2.00x")
+        self.assertEqual(py["cpa_text"], "%.2f" % (300 / 15))
 
 
 class ReviewPythonTest(Fixture):

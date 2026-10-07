@@ -482,14 +482,15 @@ section.panel > h4 { margin-top: 18px; }
     return sum;
   }
   function ratioSums(ads, numF, denF, numName, denName) {
-    var top = 0, bottom = 0, k = 0, known = false;
+    var top = null, bottom = null;
     ads.forEach(function (a) {
-      if (present(a[numF])) { known = true; }
-      if (present(a[numF]) && present(a[denF])) { top += a[numF]; bottom += a[denF]; k += 1; }
+      if (present(a[numF])) { top = (top || 0) + a[numF]; }
+      if (present(a[denF])) { bottom = (bottom || 0) + a[denF]; }
     });
-    if (!k) { return { value: null, n: 0, suffix: "", why: "n/a (missing " + (known ? denName : numName) + ")" }; }
-    if (bottom === 0) { return { value: null, n: k, suffix: "", why: "n/a (zero " + denName + ")" }; }
-    return { value: top / bottom, n: k, suffix: k < ads.length ? " (" + k + " of " + ads.length + " ads)" : "", why: null };
+    if (top === null) { return { value: null, why: "n/a (missing " + numName + ")" }; }
+    if (bottom === null) { return { value: null, why: "n/a (missing " + denName + ")" }; }
+    if (bottom === 0) { return { value: null, why: "n/a (zero " + denName + ")" }; }
+    return { value: top / bottom, why: null };
   }
   function summary(ads, count, totalSpend) {
     var spend = total(ads, "spend"), conv = total(ads, "conversions"), value = total(ads, "conversion_value");
@@ -498,8 +499,8 @@ section.panel > h4 { margin-top: 18px; }
     return {
       ads: ads.length, of: count, spend: spend, conversions: conv, conversion_value: value,
       share: totalSpend && spend !== null ? spend / totalSpend * 100 : null,
-      roas: roas.value, cpa: cpa.value, roas_n: roas.n, cpa_n: cpa.n, roas_suffix: roas.suffix, cpa_suffix: cpa.suffix,
-      roas_text: roas.why || roas.value.toFixed(2) + "x" + roas.suffix, cpa_text: cpa.why || cpa.value.toFixed(2) + cpa.suffix
+      roas: roas.value, cpa: cpa.value,
+      roas_text: roas.why || roas.value.toFixed(2) + "x", cpa_text: cpa.why || cpa.value.toFixed(2)
     };
   }
   function groupAds(ads, key) {
@@ -750,7 +751,7 @@ section.panel > h4 { margin-top: 18px; }
   function totalSpend() { return CR.total(DATA.ads, "spend") || 0; }
   function groupLine(s) {
     return s.ads + " ads · " + money(s.spend, 0) + " spend · " + (s.share === null ? "n/a" : Math.round(s.share) + "%") +
-      " of spend · ROAS " + s.roas_text + " · CPA " + (s.cpa === null ? s.cpa_text : money(s.cpa, 2) + s.cpa_suffix);
+      " of spend · ROAS " + s.roas_text + " · CPA " + (s.cpa === null ? s.cpa_text : money(s.cpa, 2));
   }
   function rowsDetails(list) {
     var d = el("details", "rest");
@@ -842,7 +843,7 @@ section.panel > h4 { margin-top: 18px; }
     if (!vis.length) { return text + "."; }
     text += " · " + (s.share === null ? "n/a" : Math.round(s.share) + "%") + " of spend · spend " + money(s.spend, 0) +
       ", purchases " + (s.conversions === null ? "n/a (missing purchases)" : fmt(s.conversions, 0)) +
-      ", ROAS " + s.roas_text + ", CPA " + (s.cpa === null ? s.cpa_text : money(s.cpa, 2) + s.cpa_suffix) + ".";
+      ", ROAS " + s.roas_text + ", CPA " + (s.cpa === null ? s.cpa_text : money(s.cpa, 2)) + ".";
     var extra = [];
     if (state.fat) { extra.push("tiring out"); }
     if (state.weak) { extra.push("weak step: " + state.weak); }

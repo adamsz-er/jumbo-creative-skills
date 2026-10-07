@@ -305,30 +305,30 @@ def _money_sum(records: Sequence[Dict[str, Any]], field: str) -> Optional[float]
 
 
 def ratio_of_sums(records: Sequence[Dict[str, Any]], num: str, den: str, num_words: str, den_words: str, digits: int = 4) -> Dict[str, Any]:
-    """Sum of num over sum of den across the ads that have both; says how many ads that was when it is not all of them."""
-    pairs = [r for r in records if r.get(num) is not None and r.get(den) is not None]
-    if not pairs:
-        known = any(r.get(num) is not None for r in records)
-        return {"value": None, "n": 0, "suffix": "", "why": "n/a (missing %s)" % (den_words if known else num_words)}
-    top, bottom = sum(r[num] for r in pairs), sum(r[den] for r in pairs)
+    """Sum of num over sum of den across every ad in view; an ad with no recorded num or den adds none. n/a only when no ad has any."""
+    tops = [r[num] for r in records if r.get(num) is not None]
+    bottoms = [r[den] for r in records if r.get(den) is not None]
+    if not tops:
+        return {"value": None, "why": "n/a (missing %s)" % num_words}
+    if not bottoms:
+        return {"value": None, "why": "n/a (missing %s)" % den_words}
+    top, bottom = sum(tops), sum(bottoms)
     if bottom == 0:
-        return {"value": None, "n": len(pairs), "suffix": "", "why": "n/a (zero %s)" % den_words}
-    suffix = " (%d of %d ads)" % (len(pairs), len(records)) if len(pairs) < len(records) else ""
-    return {"value": round(top / bottom, digits), "exact": top / bottom, "n": len(pairs), "suffix": suffix, "why": None}
+        return {"value": None, "why": "n/a (zero %s)" % den_words}
+    return {"value": round(top / bottom, digits), "exact": top / bottom, "why": None}
 
 
 def totals_of(records: Sequence[Dict[str, Any]], total_spend: Optional[float], money: Optional[Callable[..., str]] = None) -> Dict[str, Any]:
-    """Ads, spend, share of account spend, ROAS and CPA of a set of ads: ratios of sums over the ads that have both operands."""
+    """Ads, spend, share of account spend, ROAS and CPA of a set of ads: ratios of sums over every ad in the set."""
     spend, conv, value = _money_sum(records, "spend"), _count(_sum(records, "conversions")), _money_sum(records, "conversion_value")
     roas = ratio_of_sums(records, "conversion_value", "spend", "purchase value", "spend")
     cpa = ratio_of_sums(records, "spend", "conversions", "spend", "purchases", 2)
     show_money = money or (lambda v, d=0: "%.*f" % (d, v))
     return {"ads": len(records), "spend": spend, "conversions": conv, "conversion_value": value,
             "share": None if not total_spend or spend is None else spend / total_spend * 100,
-            "roas": roas["value"], "cpa": cpa["value"], "roas_n": roas["n"], "cpa_n": cpa["n"],
-            "roas_suffix": roas["suffix"], "cpa_suffix": cpa["suffix"],
-            "roas_text": roas["why"] or "%.2fx%s" % (roas["exact"], roas["suffix"]),
-            "cpa_text": cpa["why"] or "%s%s" % (show_money(cpa["exact"], 2), cpa["suffix"])}
+            "roas": roas["value"], "cpa": cpa["value"],
+            "roas_text": roas["why"] or "%.2fx" % roas["exact"],
+            "cpa_text": cpa["why"] or show_money(cpa["exact"], 2)}
 
 
 def group_records(records: Sequence[Dict[str, Any]], key: str) -> List[Dict[str, Any]]:
