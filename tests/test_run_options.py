@@ -242,7 +242,7 @@ class GroupSizeCardTest(unittest.TestCase):
         entry = {"ad": "1", "ad_name": "a", "verdict_id": "keep", "verdict": "Keep", "confidence": "Early read",
                  "sentence": "Keep it running.", "group_size": 6, "thin": True, "spend_at_stake": 5}
         html = panels.ad_card(panels.Ctx(verdicts={"ads": [entry]}), entry)
-        self.assertIn("vs 6 similar ads: small group", html)
+        self.assertIn("compared with 6 similar ads: small group", html)
 
 
 if __name__ == "__main__":

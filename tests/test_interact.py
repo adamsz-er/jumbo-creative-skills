@@ -237,6 +237,233 @@ class MetricPillTest(Fixture):
         self.assertTrue(all(text == "n/a" and "--heat" not in attrs for _, attrs, text in pills))
 
 
+def template_text():
+    return (ASSETS / "report-template.html").read_text()
+
+
+def css_rule(selector):
+    found = re.search(r"(?m)^%s \{([^}]*)\}" % re.escape(selector), template_text())
+    assert found, "no rule for %s" % selector
+    return found.group(1)
+
+
+class CardDesignTest(Fixture):
+    def entry_of(self, cls):
+        return next(e for e in self.verdicts["ads"] if panels.entry_class(e) == cls)
+
+    def test_the_card_stacks_preview_label_tags_numbers_and_the_verdict_footer(self):
+        entry = self.entry_of("iterate")
+        card = panels.ad_card(self.ctx, entry)
+        order = [card.index(m) for m in ('class="ad-img"', "<h4>", 'class="ad-tags"', 'class="metrics"', 'class="ad-foot"', '<details class="open-ad">')]
+        self.assertEqual(order, sorted(order))
+        self.assertIn('<span class="fmt-badge">', card.split("</div>")[0])
+        self.assertRegex(card, r'<span class="v-corner"><span class="badge iterate"')
+        self.assertRegex(card, r'<p class="ad-tags"><span class="ad-tag">BAU</span>')
+        self.assertEqual(len(re.findall(r'class="m-row"', card)), 5)
+        foot = card.split('<div class="ad-foot">')[1]
+        self.assertIn("compared with 6 similar ads", foot)
+        self.assertIn('class="sentence"', foot)
+
+    def test_a_non_judged_ad_has_no_verdict_chip_corner_and_no_tone(self):
+        steady = next(r for r in self.ctx.records if not r["fatiguing"])
+        card = panels.ad_card(self.ctx, {"ad": steady["id"], "ad_name": "x"})
+        self.assertNotIn("v-corner", card)
+        self.assertNotIn("data-tone", card)
+        tiring = next(r for r in self.ctx.records if r["fatiguing"])
+        self.assertIn('data-tone="warn"', panels.ad_card(self.ctx, {"ad": tiring["id"], "ad_name": "x"}))
+
+    def test_the_card_tone_follows_the_verdict_and_tiring(self):
+        for cls, tone in (("scale", "scale"), ("iterate", "warn")):
+            self.assertIn('data-tone="%s"' % tone, panels.ad_card(self.ctx, self.entry_of(cls)), cls)
+        pause = {"ad": "120000000002", "ad_name": "x", "verdict_id": "pause_weak"}
+        self.assertIn('data-tone="pause"', panels.ad_card(self.ctx, pause))
+        self.assertEqual(panels.card_tone("keep", True), "warn")
+        self.assertEqual(panels.card_tone("keep", False), "")
+        self.assertEqual(panels.card_tone("kill", True), "pause")
+        self.assertEqual(panels.card_tone("scale", True), "scale")
+        self.assertEqual(panels.card_tone(None, None), "")
+
+    def test_a_card_with_no_preview_is_a_tile_with_the_format_word_and_no_preview_and_the_reason_for_screen_readers(self):
+        card = panels.ad_card(self.ctx, self.entry_of("scale"))
+        self.assertRegex(card, r'<div class="ph" role="img" aria-label="[^"]*preview unavailable: no preview fetched"[^>]*><span class="ph-format">[^<]+</span><span class="ph-note">No preview</span></div>')
+
+    def test_the_card_css_matches_the_design(self):
+        card = css_rule(".ad-card")
+        for text in ("border-radius: var(--radius)", "overflow: hidden", "border: 1px solid var(--border)", "background: var(--surface)"):
+            self.assertIn(text, card)
+        self.assertIn("border-color: var(--hover-border)", css_rule(".ad-card:hover"))
+        img = css_rule(".ad-img")
+        self.assertIn("aspect-ratio: 3 / 4", img)
+        self.assertIn("var(--surface-muted)", img)
+        self.assertIn("height: 100%", css_rule(".ad-img svg.pv"))
+        fmt = css_rule(".fmt-badge")
+        for text in ("rgb(0 0 0 / .6)", "font: 500 10px", "padding: 2px 6px", "border-radius: 4px", "text-transform: capitalize", "bottom: 8px", "left: 8px"):
+            self.assertIn(text, fmt)
+        self.assertIn("top: 8px", css_rule(".v-corner"))
+        self.assertIn("right: 8px", css_rule(".v-corner"))
+        body = css_rule(".ad-body")
+        self.assertIn("padding: 12px", body)
+        title = css_rule(".ad-body h4")
+        for text in ("font: 500 13px", "-webkit-line-clamp: 2", "min-height: 2lh"):
+            self.assertIn(text, title)
+        for text in ("font: 500 10px", "border-radius: 4px", "var(--surface-muted)"):
+            self.assertIn(text, css_rule(".ad-tag"))
+        pill = css_rule(".m-pill")
+        for text in ("border-radius: 999px", "var(--heat, transparent)"):
+            self.assertIn(text, pill)
+        self.assertIn("justify-content: space-between", css_rule(".m-row"))
+        self.assertIn("font-size: 12px", css_rule(".m-row"))
+
+    def test_the_card_tones_have_light_and_dark_tokens(self):
+        text = template_text()
+        for token in ("--tone-scale-bd: #86efac;", "--tone-scale-bg: rgb(240 253 244 / .6);", "--tone-warn-bd: #fcd34d;", "--tone-warn-bg: rgb(255 251 235 / .6);"):
+            self.assertIn(token, text)
+        self.assertEqual(text.count("--tone-scale-bg: hsl(160 84% 51% / .06);"), 2)
+        self.assertEqual(text.count("--tone-warn-bg: hsl(38 92% 50% / .06);"), 2)
+        self.assertIn("border-left: 4px solid var(--danger)", css_rule('.ad-card[data-tone="pause"]'))
+
+    def test_the_placeholder_has_the_gradient_and_hides_its_second_line_in_a_narrow_tile(self):
+        ph = css_rule(".ph")
+        self.assertIn("linear-gradient(135deg, hsl(258 92% 68% / .15), hsl(246 100% 50% / .15))", ph)
+        self.assertIn("font: 700 14px", css_rule(".ph-format"))
+        self.assertIn("font: 400 12px", css_rule(".ph-note"))
+        self.assertRegex(template_text(), r"@container \(max-width: 139px\) \{ \.ph-note \{ display: none; \} \}")
+        self.assertIn("container-type: inline-size", css_rule(".ad-img"))
+
+    def test_one_card_is_used_in_every_list_and_strips_use_its_compact_form(self):
+        for name in ("do_first", "verdict_board", "all_ads", "head_tail"):
+            html, _ = getattr(panels, name)(self.ctx)
+            self.assertIn('<article class="ad-card" ', html, name)
+            self.assertNotIn("pv-tile", html, name)
+        strip = panels.preview_strip(self.ctx, self.ctx.ads)
+        self.assertEqual(strip.count('<article class="ad-card compact"'), 3)
+        self.assertNotIn("pv-tile", strip)
+        html, _ = panels.ready_briefs(self.ctx)
+        self.assertNotIn("pv-grid", html)
+
+    def test_the_compact_card_shows_label_spend_and_roas_and_opens_the_shared_dialog(self):
+        card = panels.compact_card(self.ctx, "120000000001")
+        self.assertEqual(re.findall(r'<span class="m-label">([^<]+)</span>', card), ["Spend", "ROAS"])
+        self.assertIn('<div class="ad-img" data-open="120000000001">', card)
+        self.assertNotIn("open-body", card)
+        self.assertEqual(panels.compact_card(self.ctx, "nope"), "")
+
+    def test_the_grid_columns_gaps_and_strip_columns(self):
+        grid = css_rule(".ad-grid")
+        self.assertIn("repeat(auto-fill, minmax(220px, 1fr))", grid)
+        self.assertIn("gap: 12px", grid)
+        strip = css_rule(".ad-grid.strip")
+        self.assertIn("minmax(160px, 1fr)", strip)
+        self.assertNotIn("max-width", strip)
+
+
+class AllAdsViewTest(Fixture):
+    def many(self, n):
+        rows = [{"ad_id": str(1000 + i), "ad_name": "c%d | static | bau | p | t | 2026-03-01" % i, "date": "2026-03-01", "spend": 10.0 + i,
+                 "impressions": 1000.0, "conversion_value": 40.0 + i, "conversions": 2.0} for i in range(n)]
+        return panels.Ctx(rows=rows, currency="USD")
+
+    def test_a_small_account_opens_as_a_grid_and_a_big_one_as_a_table_and_both_views_are_in_the_page(self):
+        for count, view in ((12, "grid"), (60, "grid"), (61, "table")):
+            html, _ = panels.all_ads(self.many(count))
+            self.assertIn('<div class="allads" data-view="%s">' % view, html, count)
+            self.assertEqual(html.count('class="view-grid"'), html.count('class="view-table"'))
+            self.assertGreaterEqual(html.count('class="view-table"'), 1)
+
+    def test_the_switch_is_a_labelled_group_of_two_pressed_buttons_for_the_default_view(self):
+        html, _ = panels.all_ads(self.many(12))
+        group = re.search(r'<div class="view-switch" role="group" aria-label="View">(.*?)</div>', html, re.S).group(1)
+        self.assertEqual(re.findall(r'<button type="button" class="seg-btn" aria-pressed="(\w+)" data-view-pick="(\w+)">(\w+)</button>', group),
+                         [("true", "grid", "Grid"), ("false", "table", "Table")])
+        html, _ = panels.all_ads(self.many(61))
+        self.assertIn('aria-pressed="true" data-view-pick="table"', html)
+
+    def test_the_table_lists_every_ad_with_its_numbers_right_aligned_and_the_label_opening_the_ad(self):
+        ctx = self.many(70)
+        html, _ = panels.all_ads(ctx)
+        table = re.search(r'<div class="view-table">(.*?)</div></section>', html, re.S).group(1)
+        self.assertEqual(table.count("<tr data-ad="), 70)
+        self.assertEqual(re.findall(r"<th[^>]*>([^<]*)</th>", table), ["Ad", "Format", "Verdict", "Spend", "ROAS", "CPA", "CTR", "Hook rate"])
+        self.assertEqual(len(re.findall(r'<th class="num">', table)), 5)
+        self.assertIn('<td class="adname"><button type="button" class="link" data-open="1000">', table)
+        row = re.search(r"<tr data-ad=\"1000\">(.*?)</tr>", table, re.S).group(1)
+        self.assertIn('<td class="num" data-label="ROAS">4.00x</td>', row)
+        self.assertEqual(row.count('class="num"'), 5)
+
+    def test_the_grid_view_keeps_its_cards_capped_and_the_rest_in_the_compact_list(self):
+        html, _ = panels.all_ads(self.many(20))
+        grid = re.search(r'<div class="view-grid">(.*?)</div><div class="view-table">', html, re.S).group(1)
+        self.assertEqual(grid.count('<article class="ad-card" '), panels.TOP_N_CARDS)
+        self.assertIn("more ads (compact list)", grid)
+
+    def test_the_switch_is_hidden_without_the_script_and_the_other_view_is_hidden(self):
+        self.assertIn("display: none", css_rule(".view-switch"))
+        self.assertIn("display: inline-flex", css_rule(".js .view-switch"))
+        self.assertRegex(template_text(), r'\.allads\[data-view="grid"\] \.view-table, \.allads\[data-view="table"\] \.view-grid \{ display: none; \}')
+
+    def test_the_page_data_carries_the_default_view_for_the_script(self):
+        _, data = page_data(report.build_html(rows=self.rows, verdicts=self.verdicts, grade=self.grade, currency="USD"))
+        self.assertEqual(data["defaults"]["view"], "grid")
+
+    @unittest.skipUnless(HAS_NODE, "node is not installed")
+    def test_the_view_lives_in_the_link_only_when_it_is_not_the_default(self):
+        html = report.build_html(rows=self.rows, verdicts=self.verdicts, grade=self.grade, currency="USD")
+        out = node_run(html, "var d = {group: 'verdict', sort: 'stake', view: 'grid'}; var s = CR.emptyState(d); var plain = CR.toHash('t', s, d);"
+                             "s.view = 'table'; var h = CR.toHash('t', s, d); var back = CR.fromHash(h, d).view;"
+                             "var bad = CR.fromHash('#t?view=bogus', d).view; var t = {group: 'verdict', sort: 'stake', view: 'table'};"
+                             "console.log(JSON.stringify([plain, h, back, bad, CR.emptyState(t).view, CR.toHash('t', CR.emptyState(t), t)]));")
+        self.assertEqual(json.loads(out), ["t", "t?view=table", "table", "grid", "table", "t"])
+
+    def test_the_script_builds_the_table_view_when_it_regroups_the_gallery(self):
+        script = re.search(r"<script>(.*?)</script>", self.html, re.S).group(1)
+        for text in ("adsTable(", 'el("div", "view-table")', 'el("div", "view-grid")', "data-view-pick", 'setAttribute("data-view", state.view)'):
+            self.assertIn(text, script)
+
+
+class DialogDesignTest(Fixture):
+    def test_the_dialog_is_wide_scrolls_inside_and_has_a_header_with_the_name_the_chip_and_close(self):
+        dialog = css_rule("dialog.ad-dialog")
+        for text in ("max-width: 1024px", "width: calc(100% - 32px)", "max-height: 90vh", "padding: 0", "overflow: auto"):
+            self.assertIn(text, dialog)
+        self.assertIn("padding: 20px 24px", css_rule(".dlg-head"))
+        shell = re.search(r"<dialog[^>]*>.*?</dialog>", self.html, re.S).group(0)
+        for text in ('id="ad-dialog-title"', 'class="dlg-sub"', 'class="dlg-chip"', 'data-action="close-dialog"'):
+            self.assertIn(text, shell)
+
+    def test_the_open_view_has_the_preview_and_a_numbers_table_side_by_side_from_768px(self):
+        card = panels.ad_card(self.ctx, self.verdicts["ads"][0])
+        body = card.split('<div class="open-body"')[1]
+        media, main = body.split('<div class="ob-main">')
+        self.assertIn('class="ob-media"', media)
+        self.assertRegex(main, r'<h5>Numbers</h5><dl class="ob-dl"><dt>Spend</dt><dd>[^<]+</dd>')
+        for label in ("ROAS", "CPA", "CTR", "Hook rate", "Impressions", "Age", "Ad ID"):
+            self.assertIn("<dt>%s</dt>" % label, main)
+        self.assertLess(main.index("<h5>Numbers</h5>"), main.index("<h5>Verdict</h5>"))
+        self.assertLess(main.index("<h5>Verdict</h5>"), main.index("<h5>How to improve</h5>"))
+        self.assertRegex(template_text(), r"@media \(min-width: 768px\) \{[^@]*dialog\.ad-dialog \.ob-top \{ display: grid; grid-template-columns: minmax\(0, 480px\) minmax\(0, 1fr\)")
+        self.assertIn("max-width: 480px", css_rule(".open-body .ob-media svg.pv, .open-body .ob-media .ph"))
+        self.assertIn("border-radius: 12px", css_rule(".open-body .ob-media svg.pv, .open-body .ob-media .ph"))
+
+    def test_the_numbers_table_leaves_out_video_rates_for_a_still_and_reads_n_a_with_the_reason(self):
+        still = next(a for a in self.ctx.ads if "video" not in str(a["format"]))
+        card = panels.ad_card(self.ctx, {"ad": still["ad_id"], "ad_name": still["ad_name"]})
+        body = card.split('<div class="open-body"')[1]
+        self.assertNotIn("<dt>Hook rate</dt>", body)
+        self.assertIn("<dt>CPM</dt>", body)
+        rows = [{"ad_id": "1", "ad_name": "x | static | bau", "date": "2026-03-01", "spend": 5.0, "impressions": 100.0}]
+        card = panels.ad_card(panels.Ctx(rows=rows, currency="USD"), {"ad": "1", "ad_name": "x | static | bau"})
+        self.assertIn("<dt>ROAS</dt><dd>n/a (missing purchase value)</dd>", card)
+
+    def test_the_open_body_carries_the_title_the_raw_name_and_the_verdict_chip_for_the_header(self):
+        card = panels.ad_card(self.ctx, self.verdicts["ads"][0])
+        self.assertRegex(card, r'<div class="open-body" data-title="[^"]+" data-raw="durability-test \| ugc-video[^"]*"><span class="ob-chip"><span class="badge ')
+
+    def test_the_script_fills_the_header_and_still_closes_on_escape_and_backdrop_and_returns_focus(self):
+        script = re.search(r"<script>(.*?)</script>", self.html, re.S).group(1)
+        for text in ('data-title', 'data-raw', ".dlg-sub", ".dlg-chip", ".ob-chip", 'event.target === dialog', "opener.focus()", "showModal"):
+            self.assertIn(text, script)
+
+
 class LogoTest(Fixture):
     def lockup_spans(self, region, label):
         return re.findall(r'<span class="logo-(light|dark)" role="img" aria-label="%s">(.*?)</span>' % label, region, re.S)
@@ -651,18 +878,18 @@ class StructureTest(Fixture):
         for card in cards:
             self.assertEqual(card.count('<details class="open-ad">'), 1)
             self.assertIn("<summary>Open this ad</summary>", card)
-            body = re.search(r'<div class="open-body">(.*)</div></details>', card, re.S).group(1)
+            body = re.search(r'<div class="open-body"[^>]*>(.*)</div></details>', card, re.S).group(1)
             for text in ("Graded metrics", "Funnel for this ad", "Technical detail", "Age", "How to improve", "Confidence"):
                 self.assertIn(text, body, text)
         card = next(c for c in cards if 'data-ad="120000000001"' in c)
-        body = re.search(r'<div class="open-body">(.*)</div></details>', card, re.S).group(1)
+        body = re.search(r'<div class="open-body"[^>]*>(.*)</div></details>', card, re.S).group(1)
         for text in ("among your weakest", "among your best", "Hook rate", "25.52%", "Impressions", "3-second plays", "Refresh it, keep the idea",
                      "29 days", "Change the first 3 seconds", "Also weak: hold rate, CTR, add-to-cart rate."):
             self.assertIn(text, body, text)
-        self.assertRegex(body, r'<svg class="(pv|ph) big"')
+        self.assertRegex(body, r'<(svg|div) class="(pv|ph) big"')
 
     def test_the_preview_in_the_open_view_is_larger_than_the_card_thumbnail(self):
-        self.assertRegex(self.html, r"\.open-body svg\.pv, \.open-body svg\.ph \{[^}]*max-width: 460px")
+        self.assertRegex(self.html, r"\.open-body \.ob-media svg\.pv, \.open-body \.ob-media \.ph \{[^}]*max-width: 480px")
 
     def test_the_format_badge_sits_on_the_preview_corner(self):
         card = panels.ad_card(self.ctx, self.verdicts["ads"][0])
@@ -933,7 +1160,7 @@ class ReviewPythonTest(Fixture):
 
     def test_the_open_view_leads_with_plain_words_and_files_the_technical_reasons_away(self):
         card = panels.ad_card(self.ctx, self.verdicts["ads"][0])
-        body = card.split('<div class="open-body">')[1]
+        body = card.split('<div class="open-body"')[1]
         self.assertLess(body.index("Confidence"), body.index("Technical detail"))
         self.assertLess(body.index("How to improve"), body.index("Technical detail"))
         tech = re.search(r'<details class="tech"><summary>Technical detail[^<]*</summary>(.*?)</details>', body, re.S).group(1)
@@ -941,7 +1168,7 @@ class ReviewPythonTest(Fixture):
         self.assertNotIn("compared with format", body.split("Technical detail")[0])
 
     def test_the_open_view_is_two_columns_on_a_wide_screen_only(self):
-        self.assertRegex(self.html, r"@media \(min-width: 721px\) \{[^@]*dialog\.ad-dialog \.ob-top \{[^}]*grid-template-columns")
+        self.assertRegex(self.html, r"@media \(min-width: 768px\) \{[^@]*dialog\.ad-dialog \.ob-top \{[^}]*grid-template-columns")
         self.assertIn('<div class="ob-top"><div class="ob-media">', panels.ad_card(self.ctx, self.verdicts["ads"][0]))
 
 

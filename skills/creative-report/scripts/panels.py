@@ -204,23 +204,23 @@ def strip_confidence(sentence: str, confidence: Optional[str]) -> str:
     return sentence
 
 
-OPEN_MAX_PX = 460  # the largest an ad's preview is shown in the open view
+OPEN_MAX_PX = 480  # the largest an ad's preview is shown in the open view
 
 
 def _image(ctx: Ctx, ad_id: Any, label: str, fmt: str, big: bool = False) -> str:
+    """The ad's image, filling its frame (cropped to it); an ad with no image gets a plain tile that says so."""
     alt = "%s (%s)" % (label, fmt or "format not known")
     found = ctx.previews.resolve(ad_id)
     size = " big" if big else ""
     if found["symbol"]:
         limit = ' style="max-width:%dpx"' % min(int(found["width"]), OPEN_MAX_PX) if big else ""
-        return ('<svg class="pv%s" role="img" aria-label="%s" viewBox="0 0 %d %d" width="%d" height="%d"%s><use href="#%s" width="%d" height="%d"/></svg>'
-                % (size, esc(alt), found["width"], found["height"], found["width"], found["height"], limit, esc(found["symbol"]), found["width"], found["height"]))
-    return ('<svg class="ph%s" viewBox="0 0 300 300" width="300" height="300" role="img" aria-label="%s">'
-            '<rect class="ph-bg" x="0" y="0" width="300" height="300" rx="16"/>'
-            '<text class="ph-format" x="150" y="140" text-anchor="middle">%s</text>'
-            '<text x="150" y="172" text-anchor="middle">preview unavailable:</text>'
-            '<text x="150" y="192" text-anchor="middle">%s</text></svg>'
-            % (size, esc(alt + ", preview unavailable: " + str(found["reason"])), esc((fmt or "format n/a").upper()), esc(found["reason"])))
+        return ('<svg class="pv%s" role="img" aria-label="%s" viewBox="0 0 %d %d" preserveAspectRatio="xMidYMid %s" width="%d" height="%d"%s>'
+                '<use href="#%s" width="%d" height="%d"/></svg>'
+                % (size, esc(alt), found["width"], found["height"], "meet" if big else "slice", found["width"], found["height"], limit,
+                   esc(found["symbol"]), found["width"], found["height"]))
+    why = alt + ", preview unavailable: " + str(found["reason"])
+    return ('<div class="ph%s" role="img" aria-label="%s" title="%s"><span class="ph-format">%s</span><span class="ph-note">No preview</span></div>'
+            % (size, esc(why), esc(str(found["reason"])), esc(interact.format_label(fmt))))
 
 
 PROMPT_CLASSES = ("iterate", "check", "kill")
@@ -242,13 +242,36 @@ def _table_of(rows: Sequence[Sequence[str]], header: Sequence[Tuple[str, bool]])
     return table(header, body, stack=True)
 
 
+DETAIL_METRICS = (("Spend", "spend", "money0"), ("Purchases", "conversions", "int"), ("Purchase value", "conversion_value", "money0"),
+                  ("ROAS", "roas", "x2"), ("CPA", "cpa", "money2"), ("CTR", "ctr", "pct"), ("CPM", "cpm", "money2"),
+                  ("Hook rate", "hook_rate", "pct"), ("Hold rate", "hold_rate", "pct"), ("Impressions", "impressions", "int"))
+
+
+def _detail_pairs(ctx: Ctx, key: str, fmt: str, full: Dict[str, Any], base: Dict[str, Any]) -> List[Tuple[str, str]]:
+    """What the open view's numbers table shows: the ad's own figures, then its age and id; n/a says why."""
+    ad = ctx.ad_index.get(key)
+    video = interact.is_video(fmt)
+    pairs: List[Tuple[str, str]] = []
+    for label, metric, kind in DETAIL_METRICS:
+        if ad is None:
+            continue
+        if metric in interact.VIDEO_METRICS and video is False:
+            continue
+        pairs.append((label, _kpi_text(ctx, ad, metric, kind)))
+    age = full.get("age_days") if full.get("age_days") is not None else base.get("age_days")
+    basis = full.get("age_basis") or base.get("age_basis")
+    pairs.append(("Age", "%d days%s" % (age, " (%s)" % basis if basis else "") if age is not None else "n/a (age is not in the data)"))
+    pairs.append(("Ad ID", key))
+    return pairs
+
+
 def ad_detail(ctx: Ctx, key: str, label: str, fmt: str, full: Dict[str, Any], base: Dict[str, Any], name: Any = None) -> str:
-    """The "Open this ad" view: the plain answer first (preview, verdict, confidence, how to improve), then the numbers, then the technical reasons."""
+    """The "Open this ad" view: preview beside the numbers, the verdict and how to improve it; graded metrics, the funnel and the technical reasons below."""
     grade = ctx.grade_index.get(key)
     judged = "verdict_id" in full
     cls = entry_class(full) if judged else None
     fix = interact.improvement(grade, full if judged else None)
-    chip = verdict_chip(cls) if cls else ""
+    chip = '<span class="ob-chip">%s</span>' % verdict_chip(cls) if cls else ""
     sentence = say(strip_confidence(str(full["sentence"]), full.get("confidence"))) if full.get("sentence") else "n/a (no verdict sentence)"
     reasons = full.get("reasons") or []
     why = '<ul class="reasons">%s</ul>' % "".join("<li>%s</li>" % say(r) for r in reasons) if reasons else '<p class="muted">n/a (no verdict reasons supplied)</p>'
@@ -258,9 +281,7 @@ def ad_detail(ctx: Ctx, key: str, label: str, fmt: str, full: Dict[str, Any], ba
                if bands else '<p class="muted">not graded: no grade data for this ad. Run the creative-grader skill and add its grades when you rebuild this report.</p>')
     funnel_rows = interact.ad_funnel(ctx.ad_index.get(key), fmt)
     funnel_table = _table_of([(f["step"], f["count"], f["share"]) for f in funnel_rows], [("Step", False), ("Count", True), ("Share of impressions", True)])
-    age = full.get("age_days") if full.get("age_days") is not None else base.get("age_days")
-    basis = full.get("age_basis") or base.get("age_basis")
-    age_text = "%d days%s" % (age, " (%s)" % basis if basis else "") if age is not None else "n/a (age is not in the data)"
+    numbers = '<dl class="ob-dl">%s</dl>' % "".join("<dt>%s</dt><dd>%s</dd>" % (esc(k), esc(v)) for k, v in _detail_pairs(ctx, key, fmt, full, base))
     lines = []
     if fix["lead"]:
         lines.append('<p><b>First:</b> %s</p>' % esc(fix["lead"]))
@@ -277,13 +298,13 @@ def ad_detail(ctx: Ctx, key: str, label: str, fmt: str, full: Dict[str, Any], ba
                   '<button type="button" class="btn" data-action="copy-prompt">Make the next version</button></div>'
                   % esc(interact.next_version_prompt(ctx.record_index.get(key) or {"label": label, "format": fmt}, grade)))
     raw = '<p class="raw-name muted">Ad name: %s</p>' % esc(name) if name else ""
-    return ('<details class="open-ad"><summary>Open this ad</summary><div class="open-body">%s<div class="ob-top"><div class="ob-media">%s</div>'
-            '<div class="ob-main"><p class="chips">%s</p><p class="sentence">%s</p><h5>Confidence</h5><p>%s</p>'
+    return ('<details class="open-ad"><summary>Open this ad</summary><div class="open-body" data-title="%s" data-raw="%s">%s%s<div class="ob-top"><div class="ob-media">%s</div>'
+            '<div class="ob-main"><h5>Numbers</h5>%s<h5>Verdict</h5><p class="sentence">%s</p><h5>Confidence</h5><p>%s</p>'
             '<h5>How to improve</h5><div class="improve">%s</div>%s</div></div>'
-            '<h5>Graded metrics</h5>%s<h5>Funnel for this ad</h5>%s<h5>Age</h5><p>%s</p>'
+            '<h5>Graded metrics</h5>%s<h5>Funnel for this ad</h5>%s'
             '<details class="tech"><summary>Technical detail: why this verdict</summary>%s</details></div></details>'
-            % (raw, _image(ctx, key, label, fmt, big=True), chip, sentence, esc(conf), "".join(lines), prompt,
-               metrics, funnel_table, esc(age_text), why))
+            % (esc(label), esc(name or ""), chip, raw, _image(ctx, key, label, fmt, big=True), numbers, sentence, esc(conf), "".join(lines), prompt,
+               metrics, funnel_table, why))
 
 
 CARD_METRICS = (("spend", "Spend"), ("roas", "ROAS"), ("cpa", "CPA"), ("ctr", "CTR"))
@@ -318,22 +339,39 @@ def metric_rows(ctx: Ctx, ad_id: Any, fmt: Any, only: Optional[Sequence[str]] = 
     return '<div class="metrics">%s</div>' % "".join(rows)
 
 
+def card_tone(cls: Optional[str], fatiguing: Any) -> str:
+    """Which tint a card carries: scale reads green, pause red, and iterate or a tiring ad amber; nothing else is tinted."""
+    if cls == "kill":
+        return "pause"
+    if cls == "scale":
+        return "scale"
+    return "warn" if cls == "iterate" or fatiguing else ""
+
+
+def _card_frame(ctx: Ctx, key: str, name: Any, fmt: str, cls: Optional[str], image: str, open_id: bool = False) -> Tuple[str, str]:
+    """The article's opening attributes and the image block with its format chip (bottom left) and verdict chip (top right)."""
+    tone = card_tone(cls, (ctx.record_index.get(key) or {}).get("fatiguing"))
+    attrs = ' data-ad="%s"%s%s' % (esc(key), ' data-tone="%s"' % tone if tone else "", ' title="%s"' % esc(name) if name else "")
+    badge = interact.format_label(fmt) + (" %s" % clock(ctx.video_lengths[key]) if key in ctx.video_lengths else "")
+    corner = '<span class="v-corner">%s</span>' % verdict_chip(cls) if cls else ""
+    opener = ' data-open="%s"' % esc(key) if open_id else ""
+    return attrs, '<div class="ad-img"%s><span class="fmt-badge">%s</span>%s%s</div>' % (opener, esc(badge), corner, image)
+
+
 def ad_card(ctx: Ctx, entry: Dict[str, Any], driver: str = "", next_step: bool = False) -> str:
-    """The one ad component: image, label, id, spend, what placed it, verdict, confidence and sentence."""
+    """The one ad component: preview with its format and verdict chips, label, key numbers, confidence, the verdict sentence and its actions."""
     base = _fields_for(ctx, entry)
     ad_id = entry.get("ad") or base.get("ad_id")
     key = str(ad_id)
     name = entry.get("ad_name") or entry.get("name") or base.get("ad_name")
     label = ctx.label(key, base, name)
     fmt = str(base.get("format") or "")
-    spend = (ctx.ad_index.get(key) or {}).get("spend", entry.get("spend"))
     judged = "verdict_id" in entry
     cls = entry_class(entry) if judged else None
-    chip = verdict_chip(cls) if cls else ""
     conf = ('<span class="conf" title="%s">%s</span>' % (esc(entry.get("confidence_reason") or ""), esc(entry["confidence"]))
             if entry.get("confidence") else "")
     if entry.get("group_size"):
-        conf += '<span class="conf group%s">vs %d similar ads%s</span>' % (
+        conf += '<span class="conf group%s">compared with %d similar ads%s</span>' % (
             " thin" if entry.get("thin") else "", entry["group_size"], ": small group" if entry.get("thin") else "")
     sentence = ('<p class="sentence">%s</p>' % say(strip_confidence(str(entry["sentence"]), entry.get("confidence")))
                 if entry.get("sentence") else "")
@@ -348,12 +386,30 @@ def ad_card(ctx: Ctx, entry: Dict[str, Any], driver: str = "", next_step: bool =
     full_cls = entry_class(full) if "verdict_id" in full else None
     action = ('<p class="card-actions"><button type="button" class="btn" data-action="copy-prompt">Make the next version</button></p>'
               if full_cls in PROMPT_CLASSES else "")
-    badge = interact.format_label(fmt) + (" %s" % clock(ctx.video_lengths[key]) if key in ctx.video_lengths else "")
-    title = ' title="%s"' % esc(name) if name else ""
-    return ('<article class="ad-card" data-ad="%s"%s><div class="ad-img"><span class="fmt-badge">%s</span>%s</div><div class="ad-body"><h4>%s</h4>'
-            '<p class="adid">Ad ID %s</p>%s%s<p class="chips">%s%s</p>%s%s%s%s%s</div></article>'
-            % (esc(key), title, esc(badge), _image(ctx, ad_id, label, fmt), esc(label), esc(ad_id if ad_id is not None else "n/a"),
-               metric_rows(ctx, key, fmt), drive, chip, conf, sentence, step, check, action, ad_detail(ctx, key, label, fmt, full, base, name)))
+    rec = ctx.record_index.get(key) or {}
+    tags = "".join('<span class="ad-tag">%s</span>' % esc(t) for t in (interact.humanise(rec.get("ad_type")), rec.get("market")) if t)
+    attrs, image = _card_frame(ctx, key, name, fmt, cls, _image(ctx, ad_id, label, fmt))
+    foot = '<div class="ad-foot">%s%s%s%s%s</div>' % ('<p class="chips">%s</p>' % conf if conf else "", sentence, step, check, action)
+    return ('<article class="ad-card"%s>%s<div class="ad-body"><h4>%s</h4>%s%s%s%s%s</div></article>'
+            % (attrs, image, esc(label), '<p class="ad-tags">%s</p>' % tags if tags else "", metric_rows(ctx, key, fmt), drive, foot,
+               ad_detail(ctx, key, label, fmt, full, base, name)))
+
+
+COMPACT_METRICS = ("spend", "roas")
+
+
+def compact_card(ctx: Ctx, ad_id: Any) -> str:
+    """The same card in small form for strips: preview, label and two numbers. Clicking it opens the shared ad dialog."""
+    key = str(ad_id)
+    rec = ctx.record_index.get(key)
+    if rec is None:
+        return ""
+    fmt = str(rec.get("format") or "")
+    verdict = ctx.verdict_index.get(key)
+    cls = entry_class(verdict) if verdict and "verdict_id" in verdict else None
+    attrs, image = _card_frame(ctx, key, rec.get("name"), fmt, cls, _image(ctx, key, rec["label"], fmt), open_id=True)
+    return ('<article class="ad-card compact"%s>%s<div class="ad-body"><h4>%s</h4>%s</div></article>'
+            % (attrs, image, esc(rec["label"]), metric_rows(ctx, key, fmt, only=COMPACT_METRICS)))
 
 
 def card_grid(cards: Sequence[str]) -> str:
@@ -965,12 +1021,42 @@ def ways_to_improve(ctx: Ctx) -> Tuple[str, str]:
 
 
 GROUP_LABELS = dict(interact.FACETS)
+GRID_MAX_ADS = 60  # arbitrary default: up to this many ads the All ads panel opens as a grid of cards, above it as a table
+TABLE_COLUMNS = (("Ad", False), ("Format", False), ("Verdict", False), ("Spend", True), ("ROAS", True), ("CPA", True), ("CTR", True), ("Hook rate", True))
+
+
+def default_view(ctx: Ctx) -> str:
+    return "grid" if len(ctx.records) <= GRID_MAX_ADS else "table"
+
+
+def ads_table(ctx: Ctx, records: Sequence[Dict[str, Any]]) -> str:
+    """Every ad of a group as a table row: label (opens the ad), format, verdict, spend, ROAS, CPA, CTR and hook rate."""
+    body = []
+    for rec in records:
+        key = rec["id"]
+        ad = ctx.ad_index.get(key)
+        cls = entry_class(ctx.verdict_index[key]) if key in ctx.verdict_index and "verdict_id" in ctx.verdict_index[key] else None
+        numbers = [_kpi_text(ctx, ad, m, kind) if ad else "n/a" for m, kind in (("spend", "money0"), ("roas", "x2"), ("cpa", "money2"), ("ctr", "pct"), ("hook_rate", "pct"))]
+        cells = ['<td class="adname"><button type="button" class="link" data-open="%s">%s</button></td>' % (esc(key), esc(rec["label"])),
+                 '<td data-label="Format">%s</td>' % esc(interact.format_label(rec.get("format"))),
+                 '<td data-label="Verdict">%s</td>' % (verdict_chip(cls) if cls else "")]
+        cells += ['<td class="num" data-label="%s">%s</td>' % (esc(head), esc(text)) for (head, _), text in zip(TABLE_COLUMNS[3:], numbers)]
+        body.append('<tr data-ad="%s">%s</tr>' % (esc(key), "".join(cells)))
+    return table(TABLE_COLUMNS, body, stack=True)
+
+
+def view_switch(view: str) -> str:
+    """Grid | Table: a segmented control; both views are in the page, so it only needs the script to flip between them."""
+    return ('<div class="view-switch" role="group" aria-label="View">%s</div>'
+            % "".join('<button type="button" class="seg-btn" aria-pressed="%s" data-view-pick="%s">%s</button>'
+                      % ("true" if view == pick else "false", pick, label) for pick, label in (("grid", "Grid"), ("table", "Table"))))
 
 
 def all_ads(ctx: Ctx) -> Tuple[str, str]:
     if not ctx.records:
         return empty_state("There are no ads to list.", "Pass an Ads Manager export or the connector pull as the data file, or the keep-or-kill output.")
     group = default_group(ctx)
+    view = default_view(ctx)
     total = sum(r.get("spend") or 0 for r in ctx.records)
     groups = interact.group_records(ctx.records, group) if group != "none" else [{"key": "all", "label": "All ads", "records": ctx.records}]
     sections = []
@@ -979,15 +1065,18 @@ def all_ads(ctx: Ctx) -> Tuple[str, str]:
         ordered = interact.by_stake(g["records"])
         entries = [entry_for(ctx, r) for r in ordered]
         sections.append(
-            '<section class="group" data-group="%s"><header class="group-head"><h4>%s</h4><p class="group-sub">%d ads &middot; %s spend &middot; %s of spend &middot; ROAS %s &middot; CPA %s%s</p></header>%s%s</section>'
+            '<section class="group" data-group="%s"><header class="group-head"><h4>%s</h4><p class="group-sub">%d ads &middot; %s spend &middot; %s of spend &middot; ROAS %s &middot; CPA %s%s</p></header>'
+            '<div class="view-grid">%s%s</div><div class="view-table">%s</div></section>'
             % (esc(g["key"] if g["key"] is not None else "unknown"), esc(g["label"]), sub["ads"], esc(ctx.money(sub["spend"])),
                "n/a" if sub["share"] is None else "%.0f%%" % sub["share"], esc(sub["roas_text"]), esc(sub["cpa_text"]),
                "".join(" &middot; %s" % esc(n) for n in (sub["roas_note"], sub["cpa_note"]) if n),
-               card_grid([ad_card(ctx, e) for e in entries[:ctx.top_n]]), compact_list(ctx, entries[ctx.top_n:], "ads", cap=None)))
-    lead = ('<p class="muted">Every ad, shown %s and sorted by spend at stake until you change it. The top %d of each group show as cards (N=%d, a default you can change when you rebuild the report), the rest as a compact list. '
-            'Each group header adds up its own spend, with ROAS and CPA as ratios of sums.</p>'
+               card_grid([ad_card(ctx, e) for e in entries[:ctx.top_n]]), compact_list(ctx, entries[ctx.top_n:], "ads", cap=None),
+               ads_table(ctx, ordered)))
+    lead = ('<p class="muted">Every ad, shown %s and sorted by spend at stake until you change it. The top %d of each group show as cards in the grid view (N=%d, a default you can change when you rebuild the report), the rest as a compact list; '
+            'the table view lists every ad. Each group header adds up its own spend, with ROAS and CPA as ratios of sums.</p>'
             % ("grouped by verdict" if group == "verdict" else "in one list", ctx.top_n, ctx.top_n))
-    return (lead + '<div id="allads-static">%s</div><div id="allads-live" aria-live="polite"></div>' % "".join(sections)), "data"
+    return ('%s<div class="allads" data-view="%s">%s<div id="allads-static">%s</div><div id="allads-live" aria-live="polite"></div></div>'
+            % (lead, view, view_switch(view), "".join(sections))), "data"
 
 
 SEARCH_ICON = ('<svg class="ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" '
@@ -1030,8 +1119,9 @@ def filter_bar(ctx: Ctx) -> str:
             % (SEARCH_ICON, popover, view_controls(ctx, "fb-view-row")))
 
 
-DIALOG = ('<dialog class="ad-dialog" id="ad-dialog" aria-labelledby="ad-dialog-title"><div class="dlg-head"><h2 id="ad-dialog-title">Ad</h2>'
-          '<button type="button" class="btn" data-action="close-dialog">Close</button></div><div class="dlg-body"></div></dialog>')
+DIALOG = ('<dialog class="ad-dialog" id="ad-dialog" aria-labelledby="ad-dialog-title"><div class="dlg-head"><div class="dlg-title"><h2 id="ad-dialog-title">Ad</h2>'
+          '<p class="dlg-sub"></p></div><span class="dlg-chip"></span><button type="button" class="btn" data-action="close-dialog">Close</button></div>'
+          '<div class="dlg-body"></div></dialog>')
 
 
 def pool_html(ctx: Ctx) -> str:
@@ -1045,7 +1135,7 @@ def data_block(ctx: Ctx) -> str:
     if not ctx.records:
         return ""
     return '<script type="application/json" id="ad-data">%s</script>' % interact.payload_json(
-        interact.payload(ctx.records, ctx.currency, ctx.top_n, default_group(ctx)))
+        interact.payload(ctx.records, ctx.currency, ctx.top_n, default_group(ctx), default_view(ctx)))
 
 
 # ---------- tabs 4-6: Format, White space, Briefing ----------
@@ -1115,22 +1205,12 @@ def _na(text: str) -> str:
 
 
 def preview_tile(ctx: Ctx, ad_id: Any) -> str:
-    """A small preview with the readable label and verdict chip; carries data-ad so the filters apply and opens the full ad view."""
-    key = str(ad_id)
-    rec = ctx.record_index.get(key)
-    if rec is None:
-        return ""
-    fmt = str(rec.get("format") or "")
-    verdict = ctx.verdict_index.get(key)
-    cls = entry_class(verdict) if verdict and "verdict_id" in verdict else None
-    chip = verdict_chip(cls) if cls else ""
-    return ('<figure class="pv-tile" data-ad="%s"><div class="pv-btn" data-open="%s">%s</div>'
-            '<figcaption>%s%s</figcaption></figure>'
-            % (esc(key), esc(key), _image(ctx, key, rec["label"], fmt), esc(rec["label"]), chip))
+    """A small ad card (preview, label, spend, ROAS); carries data-ad so the filters apply and opens the full ad view."""
+    return compact_card(ctx, ad_id)
 
 
 def preview_strip(ctx: Ctx, ads: Sequence[Dict[str, Any]], limit: int = STRIP_ADS) -> str:
-    return '<div class="pv-grid strip">%s</div>' % "".join(preview_tile(ctx, _ad_key(a)) for a in _by_spend(ads)[:limit])
+    return '<div class="ad-grid strip">%s</div>' % "".join(preview_tile(ctx, _ad_key(a)) for a in _by_spend(ads)[:limit])
 
 
 # ----- Format -----
@@ -1812,7 +1892,7 @@ def _starters(ctx: Ctx) -> List[Dict[str, Any]]:
 def _refs_html(ctx: Ctx, ids: Sequence[str]) -> str:
     tiles = [preview_tile(ctx, i) for i in ids if str(i) in ctx.record_index]
     unknown = ['<li>%s (ad not in this data)</li>' % esc(i) for i in ids if str(i) not in ctx.record_index]
-    return ('<div class="pv-grid strip">%s</div>' % "".join(tiles) if tiles else "") + ('<ul class="plain">%s</ul>' % "".join(unknown) if unknown else "")
+    return ('<div class="ad-grid strip">%s</div>' % "".join(tiles) if tiles else "") + ('<ul class="plain">%s</ul>' % "".join(unknown) if unknown else "")
 
 
 def _dl(pairs: Sequence[Tuple[str, str]]) -> str:

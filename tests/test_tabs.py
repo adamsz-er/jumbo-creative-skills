@@ -174,7 +174,7 @@ class FormatTest(Fixture):
 
     def test_each_format_row_has_a_strip_of_at_most_three_top_spend_ads_that_carry_data_ad(self):
         html, _ = panels.format_scorecard(self.ctx)
-        strips = re.findall(r'<div class="pv-grid strip">(.*?)</div></td>', html, re.S)
+        strips = re.findall(r'<div class="ad-grid strip">(.*?)</div></td>', html, re.S)
         self.assertEqual(len(strips), len(self.mix["by_format"]))
         ids = set(self.ctx.record_index)
         for strip in strips:
@@ -607,8 +607,8 @@ class CommandLineTest(Fixture):
 class TemplateTest(unittest.TestCase):
     def test_the_open_ad_preview_column_is_sized_to_the_image(self):
         css = (ROOT / "skills" / "creative-report" / "assets" / "report-template.html").read_text()
-        self.assertIn("grid-template-columns: fit-content(460px) minmax(0, 1fr)", css)
-        self.assertNotIn("grid-template-columns: minmax(0, 460px) minmax(0, 1fr)", css)
+        self.assertIn("grid-template-columns: minmax(0, 480px) minmax(0, 1fr)", css)
+        self.assertNotIn("fit-content(460px)", css)
 
 
 if __name__ == "__main__":

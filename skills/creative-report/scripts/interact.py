@@ -368,10 +368,10 @@ def display_names(records: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, str]
     return names
 
 
-def payload(records: Sequence[Dict[str, Any]], currency: Optional[str], top_n: int, default_group: str) -> Dict[str, Any]:
+def payload(records: Sequence[Dict[str, Any]], currency: Optional[str], top_n: int, default_group: str, default_view: str = "grid") -> Dict[str, Any]:
     return {"ads": list(records), "presets": list(PRESETS), "names": display_names(records), "weak_steps": WEAK_VALUES, "currency": currency,
             "unit_note": "" if currency else " (account currency)", "top_n": top_n,
-            "defaults": {"group": default_group, "sort": "stake"}, "verdict_labels": PUBLIC_LABEL,
+            "defaults": {"group": default_group, "sort": "stake", "view": default_view}, "verdict_labels": PUBLIC_LABEL,
             "verdict_tips": {PUBLIC_ID.get(cls, cls): VERDICT_TIPS[cls] for cls, _ in BOARD}}
 
 
