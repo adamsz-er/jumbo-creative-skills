@@ -296,6 +296,28 @@ class TargetTest(unittest.TestCase):
         self.assertIn("it misses your target: cpa: it costs USD", reasons)
         self.assertIn("target USD 0.01", reasons)
 
+    def tired_rows(self):
+        rows = crowd(11)
+        tired = make_rows("acme-tired", conv=2, value=60)
+        for i, row in enumerate(tired):
+            row["Link clicks"] = 40 - 4 * i
+            row["Reach"] = row["Impressions"] / (1 + 0.15 * i)
+        for row in rows:
+            row.setdefault("Reach", row["Impressions"])
+        return rows + tired
+
+    def test_a_fatigued_ad_that_meets_its_target_never_reads_as_missing_it(self):
+        entry = judge(self.tired_rows(), targets={"cpa": 1000.0})["acme-tired"]
+        self.assertEqual(entry["verdict_id"], "pause_fatigued")
+        reasons = " ".join(entry["reasons"])
+        self.assertNotIn("misses your target", reasons)
+        self.assertIn("still meets your target", reasons)
+
+    def test_a_fatigued_ad_that_misses_its_target_says_so(self):
+        entry = judge(self.tired_rows(), targets={"cpa": 0.01})["acme-tired"]
+        self.assertEqual(entry["verdict_id"], "pause_fatigued")
+        self.assertIn("misses your target", " ".join(entry["reasons"]))
+
     def test_parse_targets_reads_aliases_and_refuses_bad_values(self):
         self.assertEqual(cm.parse_targets("CPA=40,roas=3"), {"cpa": 40.0, "roas": 3.0})
         for bad in ("cpa=abc", "cpa=0", "nonsense=3"):

@@ -187,6 +187,8 @@ def rounding_error(value: Any) -> Optional[float]:
     """Largest relative error, in percent, that rounding to the decimals shown can hide in a positive number.
 
     "0.02" may be anything from 0.015 to 0.025, so up to 25%; "0.0412" up to about 0.12%.
+    A JSON number has lost any trailing zeros (0.50 arrives as 0.5), so its error is
+    read from its shortest form, which can only overstate it: the safe side.
     None when the value is not a positive number.
     """
     raw = value.get("value") if isinstance(value, dict) else value
@@ -524,6 +526,10 @@ def aggregate_by_ad(rows: Sequence[Dict[str, Any]],
         else:
             ad["video_views_3s_source"] = "reported" if sources else None
         parsed = parse_name(ad["ad_name"], key_map=key_map, learned=learned) if ad["ad_name"] else {}
+        if ad["ad_name"] and not parsed.get("market"):
+            # A market read by shape counts even when the rest of the name does not parse, as --where reads it.
+            market = parse_name(ad["ad_name"], key_map=key_map, learned=learned, require_read=False).get("market")
+            parsed = dict(parsed, market=market) if market else parsed
         ad["conversions_source"] = next((r["conversions_source"] for r in group
                                          if r.get("conversions_source")), None)
         columns: Dict[str, List[Any]] = {}

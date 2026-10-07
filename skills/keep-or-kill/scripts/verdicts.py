@@ -408,9 +408,13 @@ def judge_ads(rows: Sequence[Dict[str, Any]], young_days: int = 5, window: int =
                     reasons.append("payback is bottom quartile on every measure, in its group and account-wide within "
                                    "its objective" + (", and was bottom in the first %d delivery days too" % window
                                                       if pause == "pause_never_worked" else ", and it is fatiguing"))
-                    if relevant:
+                    missed = [m for m in relevant if m not in met]
+                    if missed:
                         reasons.append("it misses your target: %s" % "; ".join(
-                            _against_target(m, ad.get(m), relevant[m], currency) for m in relevant))
+                            _against_target(m, ad.get(m), relevant[m], currency) for m in missed))
+                    if met:
+                        reasons.append("it still meets your target (%s), but it is wearing out" % "; ".join(
+                            _against_target(m, ad.get(m), relevant[m], currency) for m in met))
         elif pb["all_top"] and fatigue["status"] == "ok" and not fatiguing:
             vid = "scale"
             reasons.append("payback is top quartile and the ad is not fatiguing; "

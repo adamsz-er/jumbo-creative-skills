@@ -35,7 +35,7 @@ def rows_for(ads, days=10):
 
 
 ADS = [("u%d" % i, KEYED.format(t="BAU", c="Trail", who="Ana", f="Video", m="US"), 50 + i, 5000, 2) for i in range(6)] + \
-      [("c%d" % i, KEYED.format(t="Atelier", c="Camp", who="Bo", f="Image", m="CA"), 40 + i, 4000, 1) for i in range(6)]
+      [("c%d" % i, KEYED.format(t="Core", c="Camp", who="Bo", f="Image", m="CA"), 40 + i, 4000, 1) for i in range(6)]
 
 
 def write_csv(path, rows):
@@ -75,20 +75,20 @@ class NamingOptionsTest(TmpCase):
         self.assertEqual(cm.parse_name(ADS[0][1])["segment_4"], "Ana")
 
     def test_type_map_turns_an_account_word_into_a_known_type(self):
-        self.assertEqual(cm.normalise_ad_type("Atelier"), "atelier")
-        cm.set_type_map(cm.parse_type_map("atelier=bau"))
-        self.assertEqual(cm.normalise_ad_type("Atelier"), "bau")
+        self.assertEqual(cm.normalise_ad_type("Core"), "core")
+        cm.set_type_map(cm.parse_type_map("core=bau"))
+        self.assertEqual(cm.normalise_ad_type("Core"), "bau")
         ad = next(a for a in cm.aggregate_by_ad(cm.load_rows(str(self.csv))) if a["ad_id"] == "c0")
         self.assertEqual(ad["ad_type"], "bau")
 
     def test_type_map_refuses_an_unknown_type(self):
         with self.assertRaises(ValueError):
-            cm.parse_type_map("atelier=couture")
+            cm.parse_type_map("core=couture")
 
     def test_detection_takes_the_confirmed_answers_from_the_profile(self):
         profile = self.dir / "profile.md"
         profile.write_text("# Creative profile: Acme\n\n## Script settings\n- key-map: PX=concept,4=creator\n"
-                           "- type-map: atelier=bau\n- target: unknown\n\n## Constraints\n- key-map: ignored\n")
+                           "- type-map: core=bau\n- target: unknown\n\n## Constraints\n- key-map: ignored\n")
         code, out, _ = quiet(detect_naming.main, [str(self.csv), "--json", "--profile", str(profile)])
         self.assertEqual(code, 0)
         found = json.loads(out)
@@ -98,7 +98,7 @@ class NamingOptionsTest(TmpCase):
     def test_without_the_profile_detection_still_asks(self):
         code, out, _ = quiet(detect_naming.main, [str(self.csv), "--json"])
         found = json.loads(out)
-        self.assertEqual(found["unknown_ad_types"], {"atelier": 1})
+        self.assertEqual(found["unknown_ad_types"], {"core": 1})
         self.assertEqual([u["position"] for u in found["unlabelled"]], [3, 4])
 
 
@@ -131,7 +131,7 @@ class WhereTest(TmpCase):
         self.assertEqual({r["ad_id"][0] for r in rows}, {"u"})
 
     def test_where_on_ad_type_goes_through_the_type_map(self):
-        cm.set_type_map({"atelier": "bau"})
+        cm.set_type_map({"core": "bau"})
         rows = cm.filter_rows(cm.load_rows(str(self.csv)), cm.parse_where(["ad_type=bau"]))
         self.assertEqual(len({r["ad_id"] for r in rows}), 12)
 

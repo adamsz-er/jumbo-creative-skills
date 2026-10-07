@@ -112,6 +112,13 @@ class AdapterOutputTest(unittest.TestCase):
         _, _, rows = self._run(wrapped(ROWS))
         self.assertEqual({r["Ad ID"]: r["market"] for r in rows}, {"1": "US", "2": "CA", "3": "US", "4": "CA"})
 
+    def test_aggregates_carry_the_market_that_where_reads(self):
+        rows = cm.load_rows(ROWS, level="ad")
+        ads = {a["ad_id"]: a["market"] for a in cm.aggregate_by_ad(rows)}
+        kept = {r["ad_id"] for r in cm.filter_rows(rows, cm.parse_where(["market=US"]))}
+        self.assertEqual(ads, {"1": "US", "2": "CA", "3": "US", "4": "CA"})
+        self.assertEqual(kept, {a for a, m in ads.items() if m == "US"})
+
     def test_leads_are_carried_from_the_grouped_lead_field(self):
         _, _, rows = self._run(wrapped([day("9", "a", "2026-03-01", 4, 400, onsite_conversion_lead_grouped="3")]))
         self.assertEqual(rows[0]["Leads"], "3")
