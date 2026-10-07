@@ -50,6 +50,10 @@ Every panel function takes the `Ctx` and returns `(html, state)`: `"data"` when 
 
 The ad card (`ad_card`) is the one component used wherever an ad appears: preview image, readable label (concept · creator · format · ad type, never the raw first name segment), ad id, spend with currency, what placed it, verdict chip, confidence and the plain-English sentence. Lists show the top `--top-n` as cards and collapse the rest into a closed `<details>` capped at `LIST_CAP` rows, so a 500-ad account stays readable.
 
+Key numbers that no ad in the pull can show (every ad n/a) are named once at the top of the Overview's first panel, in a "Not in this pull" notice with the reason and how to get them (`missing_everywhere`). The cells keep their own `n/a (missing ...)` text: the notice adds the explanation, it never replaces the label.
+
+`report.py --check page.html` validates a built page's structure (tabs and panels in order, panel states, badge, Scope line, outside requests, inline scripts, n/a never shown as 0, size). Run it after a change and in any environment where you cannot open a browser; it does not replace looking at the page.
+
 ## Adding a panel
 
 Write `def my_panel(ctx) -> (html, state)` in `panels.py`, add it to `TABS` in the position the spec gives it, and send any new missing-data phrase through `collect_notes` in `report.py` so it reaches the footer. Use the chart helpers in `charts.py`: every bar and dot needs a label, a unit and a title. Add a test with the data state and the empty state in `tests/test_dashboard_panels.py`.

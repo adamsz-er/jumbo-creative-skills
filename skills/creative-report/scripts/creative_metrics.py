@@ -674,13 +674,13 @@ TYPE_MAP: Dict[str, str] = {}
 
 
 def set_type_map(mapping: Optional[Dict[str, str]]) -> None:
-    """Use the account's own ad-type words for this run, e.g. {"atelier": "bau"}; None or {} clears them."""
+    """Use the account's own ad-type words for this run, e.g. {"core": "bau"}; None or {} clears them."""
     TYPE_MAP.clear()
     TYPE_MAP.update({str(k).strip().lower(): str(v).strip().lower() for k, v in (mapping or {}).items()})
 
 
 def parse_type_map(text: str) -> Dict[str, str]:
-    """Read "atelier=bau,drop=launch" into a word -> ad type map; each type must be one of AD_TYPES."""
+    """Read "core=bau,drop=launch" into a word -> ad type map; each type must be one of AD_TYPES."""
     result = {}
     for word, ad_type in parse_key_map(text).items():
         ad_type = SYNONYMS.get(ad_type.lower(), ad_type.lower())
@@ -1397,19 +1397,19 @@ def apply_settings(args: Any, path: Any) -> List[str]:
 
 
 def parse_where(texts: Optional[Sequence[str]]) -> List[Tuple[str, List[str]]]:
-    """Read ["market=AU", "format=video,image"] into [("market", ["AU"]), ("format", ["video", "image"])]."""
+    """Read ["market=US", "format=video,image"] into [("market", ["US"]), ("format", ["video", "image"])]."""
     result = []
     for text in texts or ():
         field, sep, values = str(text).partition("=")
         wanted = [v.strip() for v in values.split(",") if v.strip()]
         if not sep or not field.strip() or not wanted:
-            raise ValueError("bad --where %r: write field=value, for example market=AU or format=video,image" % text)
+            raise ValueError("bad --where %r: write field=value, for example market=US or format=video,image" % text)
         result.append((_snake(field), wanted))
     return result
 
 
 def describe_where(where: Sequence[Tuple[str, Sequence[str]]]) -> Optional[str]:
-    """The scope a --where list keeps, in words: "market AU; format video or image"; None for no filter."""
+    """The scope a --where list keeps, in words: "market US; format video or image"; None for no filter."""
     return "; ".join("%s %s" % (f.replace("_", " "), " or ".join(v)) for f, v in where) or None
 
 
@@ -1451,9 +1451,9 @@ def add_run_arguments(parser: Any, profile: bool = True) -> None:
     """The flags every analysis script shares: --profile, --type-map and --where (--key-map stays per script)."""
     if profile:
         parser.add_argument("--profile", help="creative-profile.md: its Script settings block fills any flag left unset")
-    parser.add_argument("--type-map", help="the account's own ad-type words, e.g. atelier=bau,drop=launch")
+    parser.add_argument("--type-map", help="the account's own ad-type words, e.g. core=bau,drop=launch")
     parser.add_argument("--where", action="append", default=[],
-                        help="keep only rows where a column or name field matches, e.g. market=AU (repeatable; "
+                        help="keep only rows where a column or name field matches, e.g. market=US (repeatable; "
                              "commas list more than one value)")
 
 

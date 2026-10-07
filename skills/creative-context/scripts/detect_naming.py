@@ -109,7 +109,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--json", action="store_true", help="print JSON instead of a report")
     parser.add_argument("--profile", help="creative-profile.md: its Script settings block (key-map, type-map) fills "
                                           "any flag left unset, so a confirmed answer is never asked again")
-    parser.add_argument("--type-map", help="the account's own ad-type words, e.g. atelier=bau")
+    parser.add_argument("--type-map", help="the account's own ad-type words, e.g. core=bau")
     args = parser.parse_args(argv)
     try:
         if args.profile:

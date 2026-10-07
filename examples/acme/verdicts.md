@@ -1,8 +1,9 @@
 # Acme keep-or-kill output
 
-Generated, not hand-written: `python3 skills/keep-or-kill/scripts/verdicts.py examples/acme/ads_daily.csv` on the fictional Acme Outdoor Co. fixture.
+Generated, not hand-written: `python3 -I skills/keep-or-kill/scripts/verdicts.py examples/acme/ads_daily.csv --profile examples/acme/brand-profile.md` on the fictional Acme Outdoor Co. fixture.
 
 ```text
+from the profile: target: cpa=40; currency: USD
 Basis: each ad graded against this account's own ads of the same campaign objective (same format, ad_type group, widening when a group has under 5 comparable ads), never a benchmark.
 Window: 2026-03-01 to 2026-03-30. Fatigue compares each ad's first and last 6 delivery days.
 Settings used (arbitrary defaults, set them from your own account): young-days=5, window=6, min-impressions=1000, top-n=3, protect-top=3, min-change=8% (a materiality size for ctr, frequency and hook movement, not a fatigue benchmark: set it from your own week-to-week noise).
@@ -257,6 +258,7 @@ Verdicts (largest spend at stake first within each):
     - compared with all ads: account-wide (29 comparable ads); format / ad_type has 1 comparable ads, under 5; format has 3 comparable ads, under 5
     - trend over first vs last 6 delivery days: ctr -1%, frequency +4%, hook rate -2% (fatigue needs ctr down 8%+ and frequency up 8%+ or hook down 8%+)
     - payback is bottom quartile on every measure, in its group and account-wide within its objective, and was bottom in the first 6 delivery days too
+    - it misses your target: cpa: it costs USD 59.56 per sale, target USD 40.00
     ! check first: rule out tracking, site or audience problems first; only fatigue and never-worked are creative decisions
 120000000017  [static]  age 29 d, Pause: never worked  (spend USD 3365.80)
     Pause it: after 30 days it has not brought back any sales, and it was weak from the start. Early read: small comparison group (7 similar ads).
@@ -267,6 +269,7 @@ Verdicts (largest spend at stake first within each):
     - compared with format: static (7 comparable ads); format / ad_type has 4 comparable ads, under 5
     - trend over first vs last 6 delivery days: ctr +4%, frequency +8%, hook rate n/a (fatigue needs ctr down 8%+ and frequency up 8%+ or hook down 8%+)
     - payback is bottom quartile on every measure, in its group and account-wide within its objective, and was bottom in the first 6 delivery days too
+    - it misses your target: cpa: n/a for this ad (nothing to divide by), target USD 40.00
     ! check first: rule out tracking, site or audience problems first; only fatigue and never-worked are creative decisions
 120000000012  [static]  age 21 d, Pause: never worked  (spend USD 2681.04)
     Pause it: after 22 days it costs USD 43.95 per sale, more than most of your similar ads, and it was weak from the start. Early read: small comparison group (6 similar ads).
@@ -277,6 +280,7 @@ Verdicts (largest spend at stake first within each):
     - compared with format: static (6 comparable ads); format / ad_type has 2 comparable ads, under 5
     - trend over first vs last 6 delivery days: ctr -6%, frequency +4%, hook rate n/a (fatigue needs ctr down 8%+ and frequency up 8%+ or hook down 8%+)
     - payback is bottom quartile on every measure, in its group and account-wide within its objective, and was bottom in the first 6 delivery days too
+    - it misses your target: cpa: it costs USD 43.95 per sale, target USD 40.00
     ! check first: rule out tracking, site or audience problems first; only fatigue and never-worked are creative decisions
 120000000030  [ugc-video]  age 3 d, Too early (learning)  (spend USD 670.39)
     Too early to judge: it is 3 days old, under the 5-day learning window.

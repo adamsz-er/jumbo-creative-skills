@@ -20,8 +20,8 @@ Reads the words of a video ad as a sequence of jobs, shows which jobs are missin
 ## Run it
 
 ```
-python3 scripts/beats.py transcript.txt --product "rain shell,Acme"
-python3 scripts/beats.py captions.srt --product "rain shell,Acme" --json
+python3 -I scripts/beats.py transcript.txt --product "rain shell,Acme"
+python3 -I scripts/beats.py captions.srt --product "rain shell,Acme" --json
 ```
 
 It prints one row per sentence with a beat label, then time to the first product mention and first call to action, words per second (only when timed), beats not found, and flags: no product in the first 3 seconds (timed only), CTA missing, more than one CTA, and claim words that need substantiation ("best", "guaranteed", "cure", "clinically", "#1" and similar).

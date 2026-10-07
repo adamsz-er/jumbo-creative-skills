@@ -21,9 +21,9 @@ Measures the colour of ad images and turns the numbers into direction: what the 
 ## Run it
 
 ```
-python3 scripts/palette.py ad.png
-python3 scripts/palette.py ads-folder/ --k 6
-python3 scripts/palette.py ads-folder/ --json
+python3 -I scripts/palette.py ad.png
+python3 -I scripts/palette.py ads-folder/ --k 6
+python3 -I scripts/palette.py ads-folder/ --json
 ```
 
 `--k` is how many colours to report (default 6, an arbitrary default). With Pillow installed it uses median cut. Without it, PNG files still work through a standard-library decoder; any other format exits 2 with a message. In that case ask the user to install Pillow (`pip install pillow`), to export PNGs, or describe the colours yourself from the image and say they were not measured.

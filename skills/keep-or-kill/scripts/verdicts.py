@@ -143,6 +143,15 @@ def _clause(metric: str, value: Optional[float], currency: Optional[str]) -> str
     return "has an engagement rate of %.2f%%" % value
 
 
+def _against_target(metric: str, value: Optional[float], target: float, currency: Optional[str]) -> str:
+    """The ad's number beside the user's target: "cpa: it costs USD 59.56 per sale, target USD 40.00"."""
+    shown = _money(target, currency) if metric in ("cpa", "cpc", "cpm", "cost_per_lead", "cost_per_add_to_cart") else \
+        ("%.2f" % target if metric == "roas" else "%.2f%%" % target)
+    if value is None:
+        return "%s: n/a for this ad (nothing to divide by), target %s" % (metric, shown)
+    return "%s: it %s, target %s" % (metric, _clause(metric, value, currency), shown)
+
+
 def _versus(metric: str, band: str, pool_word: str) -> str:
     """A plain comparison with the ad's own comparison group, never a benchmark."""
     worse = band == BOTTOM
@@ -392,16 +401,16 @@ def judge_ads(rows: Sequence[Dict[str, Any]], young_days: int = 5, window: int =
                 elif pause == "pause_never_worked" and met:
                     vid = "check_meets_target"
                     ctx["met"] = met
-                    reasons.append("bottom quartile on every measure, but it meets your target for %s" % ", ".join(
-                        "%s (%s)" % (m, _clause(m, relevant[m], currency)) for m in met))
+                    reasons.append("bottom quartile on every measure, but it meets your target: %s" % "; ".join(
+                        _against_target(m, ad.get(m), relevant[m], currency) for m in met))
                 else:
                     vid = pause
                     reasons.append("payback is bottom quartile on every measure, in its group and account-wide within "
                                    "its objective" + (", and was bottom in the first %d delivery days too" % window
                                                       if pause == "pause_never_worked" else ", and it is fatiguing"))
                     if relevant:
-                        reasons.append("it misses your target for %s" % ", ".join(
-                            "%s (%s)" % (m, _clause(m, relevant[m], currency)) for m in relevant))
+                        reasons.append("it misses your target: %s" % "; ".join(
+                            _against_target(m, ad.get(m), relevant[m], currency) for m in relevant))
         elif pb["all_top"] and fatigue["status"] == "ok" and not fatiguing:
             vid = "scale"
             reasons.append("payback is top quartile and the ad is not fatiguing; "

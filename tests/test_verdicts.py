@@ -292,7 +292,9 @@ class TargetTest(unittest.TestCase):
     def test_missing_the_target_pauses_and_says_so(self):
         weakest = judge(crowd(11), targets={"cpa": 0.01})["acme-ad-01"]
         self.assertEqual(weakest["verdict_id"], "pause_never_worked")
-        self.assertIn("misses your target for cpa", " ".join(weakest["reasons"]))
+        reasons = " ".join(weakest["reasons"])
+        self.assertIn("it misses your target: cpa: it costs USD", reasons)
+        self.assertIn("target USD 0.01", reasons)
 
     def test_parse_targets_reads_aliases_and_refuses_bad_values(self):
         self.assertEqual(cm.parse_targets("CPA=40,roas=3"), {"cpa": 40.0, "roas": 3.0})

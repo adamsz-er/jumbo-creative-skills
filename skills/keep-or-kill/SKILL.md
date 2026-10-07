@@ -17,20 +17,26 @@ If there is no `creative-profile.md` yet, suggest running `creative-context` fir
 
 Follow `creative-context/references/data-inputs.md`.
 
-1. **Meta ads connector.** Call read-only tools only: never one that activates, updates or changes anything. Pull an ad-level report with a **daily** breakdown (one row per ad per day) for several weeks, so fatigue can be read, and include paused ads that delivered in the window. Follow the numbered steps in `creative-context/references/data-inputs.md`: field catalogue first, every response saved to a JSON file, then `python3 scripts/from_mcp.py responses.json -o ads.csv --expect-spend <account total> --expect-impressions <account total>` and use `ads.csv` wherever a CSV is named below. A `WARNING` line or exit 3 means the pull does not reconcile: re-fetch or drop duplicates the missing ads and run it again before you analyse. 3-second plays are derived per ad and shown as "(derived)"; say so when you quote a hook rate.
+1. **Meta ads connector.** Call read-only tools only: never one that activates, updates or changes anything. Pull an ad-level report with a **daily** breakdown (one row per ad per day) for several weeks, so fatigue can be read, and include paused ads that delivered in the window. Follow the numbered steps in `creative-context/references/data-inputs.md`: field catalogue first, every response saved to a JSON file, then `python3 -I scripts/from_mcp.py responses.json -o ads.csv --expect-spend <account total> --expect-impressions <account total> --expect-ads ids.txt` (list archived ads that delivered in the window too, step 3 there) and use `ads.csv` wherever a CSV is named below. A `WARNING` line or exit 3 means the pull does not reconcile: re-fetch or drop duplicates the missing ads and run it again before you analyse. 3-second plays are derived per ad and shown as "(derived)"; say so when you quote a hook rate. When the connector's cost per 3-second view is too coarsely rounded they are not derived, and hook and hold rate are n/a: say why and point to an Ads Manager export for them. Read the adapter's connector notes and "fields no row carries" line before you analyse.
 2. **CSV or screenshots.** Ask for a daily-breakdown Ads Manager export (`creative-context/references/export-recipe.md`). Screenshots cannot show a trend: say fatigue is unreadable and give weaker, clearly labelled calls.
 3. **No data.** Say what is needed and offer the export recipe. Give no verdicts: label anything you say "no performance data".
 
 ## Run it
 
 ```
-python3 scripts/verdicts.py ads.csv                    # ads.csv from the connector: see step 1
-python3 scripts/verdicts.py ads.csv --young-days 5 --window 6 --min-change 8 --top-n 3 --protect-top 3
-python3 scripts/verdicts.py ads.csv --group-by format,ad_type,market   # widest fallback last
-python3 scripts/verdicts.py ads.csv --json
+python3 -I scripts/verdicts.py ads.csv                    # ads.csv from the connector: see step 1
+python3 -I scripts/verdicts.py ads.csv --young-days 5 --window 6 --min-change 8 --top-n 3 --protect-top 3
+python3 -I scripts/verdicts.py ads.csv --group-by format,ad_type,market   # widest fallback last
+python3 -I scripts/verdicts.py ads.csv --json
+python3 -I scripts/verdicts.py ads.csv --profile creative-profile.md --where market=US --json   # settings, targets and scope
+python3 -I scripts/verdicts.py ads.csv --target cpa=40,roas=3   # the user's own targets, never a benchmark
 ```
 
 `--young-days` (5), `--window` (6), `--min-impressions` (1000) and `--min-change` (8) are arbitrary defaults, as is `--top-n` (3, how many top-spend ads the concentration line counts), `--protect-top` (3, the biggest sellers are never paused unchecked), and so is the minimum of 5 comparable ads needed to grade within a group. Set them from the account: how long its ads take to settle, how many days make a fair comparison, and how much ctr, frequency and hook rate move from one week to the next when nothing is wrong. `--min-change` is a materiality size, not a fatigue benchmark. The output states the values used. The rules are in `references/verdict-rules.md`.
+
+**Targets decide "never worked".** Bottom quartile only means weaker than the account's other ads, which may still be profitable. So a never-worked ad is paused only when it also misses the user's own target for its payback measure (`--target cpa=40`, or `target:` in the profile's `Script settings`). With no target set it is "Check before cutting", and the sentence asks for one; when it meets a target it is "Check before cutting" too. Ask the user for their target cost per sale (or per click, per lead) and record it in the profile; never supply one yourself. A fatigued ad can still be paused without a target, because fatigue is a trend in the ad's own numbers.
+
+`--profile creative-profile.md` fills any flag you leave unset from the profile's `Script settings` (key map, type map, currency, targets), so confirmed answers apply without retyping them. `--where market=US` keeps one scope, read from a column or the ad names: use it when markets must be judged apart, pass the same `--where` to every script in the run, and say the scope the output prints. `--type-map core=bau` reads an account's own ad-type word as one of the six types.
 
 ## Present the result
 

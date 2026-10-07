@@ -36,6 +36,14 @@ KPI_ORDER = (
     ("roas", "ROAS", "x2"), ("hook_rate", "Hook rate", "pct"), ("hold_rate", "Hold rate", "pct"),
 )
 NEEDS_ACCOUNT = "n/a (needs account-level reach)"
+# field -> how to get it, for the banner that names metrics no ad in the pull can show
+HOW_TO_GET = {
+    "video_views_3s": "an Ads Manager export with the 3-second video plays column (the connector has no exact per-ad count)",
+    "video_thruplay": "ThruPlays in the pull",
+    "conversions": "purchases in the pull (Purchases in an export, omni_purchase from the connector)",
+    "conversion_value": "purchase value in the pull (Purchases conversion value, or omni_purchase_values)",
+    "link_clicks": "link clicks in the pull",
+}
 FUNNEL_COLUMNS = {
     "landing_page_views": ("landingpageviews", "landingpageview", "omnilandingpageview", "websitelandingpageviews"),
     "checkouts": ("checkoutsinitiated", "initiatedcheckout", "omniinitiatedcheckout", "websitecheckoutsinitiated", "checkouts"),
@@ -80,9 +88,9 @@ class Ctx:
                  grade: Optional[Dict[str, Any]] = None, mix: Optional[Dict[str, Any]] = None,
                  currency: Optional[str] = None, top_n: int = TOP_N_CARDS, pareto_share: float = PARETO_SHARE,
                  account: Optional[Dict[str, float]] = None, prior: Optional[Sequence[Dict[str, Any]]] = None,
-                 previews: Optional[Previews] = None) -> None:
+                 previews: Optional[Previews] = None, key_map: Optional[Dict[str, str]] = None) -> None:
         self.rows = list(rows or [])
-        self.ads = cm.aggregate_by_ad(self.rows) if self.rows else []
+        self.ads = cm.aggregate_by_ad(self.rows, key_map=key_map) if self.rows else []
         self.ad_index = {str(a.get("ad_id") or a.get("ad_name")): a for a in self.ads}
         self.verdicts, self.grade, self.mix = verdicts, grade, mix
         self.currency, self.top_n, self.pareto_share = currency, top_n, pareto_share
@@ -239,6 +247,9 @@ def ad_card(ctx: Ctx, entry: Dict[str, Any], driver: str = "", next_step: bool =
     chip = ('<span class="badge %s">%s</span>' % (cls, esc(VERDICT_LABEL[cls]))) if cls else ""
     conf = ('<span class="conf" title="%s">%s</span>' % (esc(entry.get("confidence_reason") or ""), esc(entry["confidence"]))
             if entry.get("confidence") else "")
+    if entry.get("group_size"):
+        conf += '<span class="conf group%s">vs %d similar ads%s</span>' % (
+            " thin" if entry.get("thin") else "", entry["group_size"], ": small group" if entry.get("thin") else "")
     sentence = ('<p class="sentence">%s</p>' % say(strip_confidence(str(entry["sentence"]), entry.get("confidence")))
                 if entry.get("sentence") else "")
     if judged and not recognised(entry):
@@ -364,6 +375,31 @@ def video_ads(ads: Sequence[Dict[str, Any]], key: str) -> int:
     return sum(1 for a in ads if all(a.get(f) is not None for f in VIDEO_KPIS[key]))
 
 
+def missing_everywhere(ctx: Ctx) -> str:
+    """One notice naming the key numbers no ad can show in this pull, why, and how to get them; "" when none.
+
+    Each cell still reads n/a (missing ...) where it appears; this says it once, up front.
+    """
+    gone: Dict[str, List[str]] = {}
+    for key, name, _ in KPI_ORDER:
+        if key in ("reach", "frequency") or key not in cm.METRICS or any(a.get(key) is not None for a in ctx.ads):
+            continue
+        num, den, _ = cm.METRICS[key]
+        field = next((f for f in num + den if all(a.get(f) is None for a in ctx.ads)), None)
+        if field:
+            gone.setdefault(field, []).append(name)
+    if not gone:
+        return ""
+    refused = next((a["video_views_3s_source"] for a in ctx.ads
+                    if str(a.get("video_views_3s_source") or "").startswith("not derived")), None)
+    items = []
+    for field, names in gone.items():
+        why = refused if field == "video_views_3s" and refused else "missing %s" % interact.FIELD_WORDS.get(field, field)
+        items.append("<li><b>%s</b>: %s. To get it: %s.</li>" % (
+            esc(" and ".join(names)), esc(why), esc(HOW_TO_GET.get(field, "add %s to the pull" % interact.FIELD_WORDS.get(field, field)))))
+    return '<div class="notice"><p><b>Not in this pull</b>, so these read n/a for every ad:</p><ul>%s</ul></div>' % "".join(items)
+
+
 def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
     if not ctx.rows:
         return empty_state("There are no ad rows, so no totals can be added up.",
@@ -416,7 +452,7 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
     if not ctx.account:
         note = ('<p class="muted">Reach and frequency do not add up across ads and days, so they come only from an account-level pull. '
                 'Pull account-level reach and frequency for this window, save them as JSON with a "reach" and a "frequency" number and pass the file with <code>--account</code>.</p>')
-    return '<div class="kpis">%s</div>%s' % ("".join(tiles), note), "data"
+    return '%s<div class="kpis">%s</div>%s' % (missing_everywhere(ctx), "".join(tiles), note), "data"
 
 
 def over_time(ctx: Ctx) -> Tuple[str, str]:

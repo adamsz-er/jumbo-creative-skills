@@ -26,7 +26,7 @@ The skills read your own numbers. Pick whichever you have:
 2. **A CSV export from Ads Manager** as the fallback. Follow [the export recipe](skills/creative-context/references/export-recipe.md) for the exact columns.
 3. **Nothing.** The skills still work for ideation, and label every grade "no performance data".
 
-Try it on made-up data first: `python3 skills/creative-context/scripts/creative_metrics.py examples/acme/ads_daily.csv` prints a per-ad table for the fictional "Acme Outdoor Co.".
+Try it on made-up data first: `python3 -I skills/creative-context/scripts/creative_metrics.py examples/acme/ads_daily.csv` prints a per-ad table for the fictional "Acme Outdoor Co.".
 
 ## What each skill does
 
@@ -48,11 +48,11 @@ Try it on made-up data first: `python3 skills/creative-context/scripts/creative_
 
 Each prints its basis first, then the result. On the made-up Acme data (outputs are saved in `examples/acme/`):
 
-- `creative-grader`: "Grade my ads and tell me what to fix first." Runs `python3 skills/creative-grader/scripts/grade.py examples/acme/ads_daily.csv` ([output](examples/acme/grade.md)).
-- `keep-or-kill`: "Which ads should I pause, refresh or scale this week?" Runs `python3 skills/keep-or-kill/scripts/verdicts.py examples/acme/ads_daily.csv` ([output](examples/acme/verdicts.md)).
-- `creative-mix`: "What creative am I missing, and am I leaning too hard on one thing?" Runs `python3 skills/creative-mix/scripts/mix.py examples/acme/ads_daily.csv` ([output](examples/acme/mix.md)).
-- `ad-transcript`: "Break this script into beats and tighten it." Runs `python3 skills/ad-transcript/scripts/beats.py examples/acme/transcript.txt` on an illustrative script ([output](examples/acme/transcript-analysis.md)).
-- `colour-grade`: "What does the palette of these ads say, and do they all look alike?" Runs `python3 skills/colour-grade/scripts/palette.py examples/acme/swatch.png` ([output](examples/acme/palette.md)).
+- `creative-grader`: "Grade my ads and tell me what to fix first." Runs `python3 -I skills/creative-grader/scripts/grade.py examples/acme/ads_daily.csv` ([output](examples/acme/grade.md)).
+- `keep-or-kill`: "Which ads should I pause, refresh or scale this week?" Runs `python3 -I skills/keep-or-kill/scripts/verdicts.py examples/acme/ads_daily.csv` ([output](examples/acme/verdicts.md)).
+- `creative-mix`: "What creative am I missing, and am I leaning too hard on one thing?" Runs `python3 -I skills/creative-mix/scripts/mix.py examples/acme/ads_daily.csv` ([output](examples/acme/mix.md)).
+- `ad-transcript`: "Break this script into beats and tighten it." Runs `python3 -I skills/ad-transcript/scripts/beats.py examples/acme/transcript.txt` on an illustrative script ([output](examples/acme/transcript-analysis.md)).
+- `colour-grade`: "What does the palette of these ads say, and do they all look alike?" Runs `python3 -I skills/colour-grade/scripts/palette.py examples/acme/swatch.png` ([output](examples/acme/palette.md)).
 - `creative-report`: "Put this review in a report I can share." Builds one HTML file from the three analyses. See an example report: [examples/acme/report.html](examples/acme/report.html) (download it and open it in a browser).
 
 With a Meta ads connector, the agent saves the rows it pulls to a JSON file and passes that file to the same scripts.
@@ -64,7 +64,7 @@ They work with no data and get sharper with a brand profile or the analyse outpu
 - `creative-ideation`: "Give me nine ad concepts that fill the gaps in my mix." ([output](examples/acme/ideas.md))
 - `hook-writer`: "Write hooks for my rain shell, and variants of the ad that is fatiguing." ([output](examples/acme/hooks.md))
 - `persona-builder`: "Who am I really talking to? Build me personas for this brand." ([output](examples/acme/personas.md))
-- `creative-brief`: "Write a production brief for the boot test with a new opening." Runs `python3 skills/creative-brief/scripts/evidence.py examples/acme/ads_daily.csv` for the evidence block ([output](examples/acme/brief.md)).
+- `creative-brief`: "Write a production brief for the boot test with a new opening." Runs `python3 -I skills/creative-brief/scripts/evidence.py examples/acme/ads_daily.csv` for the evidence block ([output](examples/acme/brief.md)).
 
 ## Example output
 

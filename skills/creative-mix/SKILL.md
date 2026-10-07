@@ -17,18 +17,21 @@ If there is no `creative-profile.md` yet, suggest running `creative-context` fir
 
 Follow `creative-context/references/data-inputs.md`.
 
-1. **Meta ads connector.** Call read-only tools only: never one that activates, updates or changes anything. Pull an ad-level report over the window you analyse (several weeks or more); daily rows are fine, the script sums them. Follow the numbered steps in `creative-context/references/data-inputs.md`: field catalogue first, every response saved to a JSON file, then `python3 scripts/from_mcp.py responses.json -o ads.csv --expect-spend <account total> --expect-impressions <account total>` and use `ads.csv` wherever a CSV is named below. A `WARNING` line or exit 3 means the pull does not reconcile: re-fetch or drop duplicates the missing ads and run it again before you analyse. 3-second plays are derived per ad and shown as "(derived)"; say so when you quote a hook rate.
+1. **Meta ads connector.** Call read-only tools only: never one that activates, updates or changes anything. Pull an ad-level report over the window you analyse (several weeks or more); daily rows are fine, the script sums them. Follow the numbered steps in `creative-context/references/data-inputs.md`: field catalogue first, every response saved to a JSON file, then `python3 -I scripts/from_mcp.py responses.json -o ads.csv --expect-spend <account total> --expect-impressions <account total> --expect-ads ids.txt` (list archived ads that delivered in the window too, step 3 there) and use `ads.csv` wherever a CSV is named below. A `WARNING` line or exit 3 means the pull does not reconcile: re-fetch or drop duplicates the missing ads and run it again before you analyse. 3-second plays are derived per ad and shown as "(derived)"; say so when you quote a hook rate. When the connector's cost per 3-second view is too coarsely rounded they are not derived, and hook and hold rate are n/a: say why and point to an Ads Manager export for them. Read the adapter's connector notes and "fields no row carries" line before you analyse.
 2. **CSV or screenshots.** Ask for an Ads Manager export (`creative-context/references/export-recipe.md`). With screenshots, tally ads by format and concept by hand and say so.
 3. **No data.** Ask the user to list their live ads by concept and format; build the grid from that and label everything "no performance data". Offer the export recipe.
 
 ## Run it
 
 ```
-python3 scripts/mix.py ads.csv                # ads.csv from the connector: see step 1
-python3 scripts/mix.py ads.csv --no-family
-python3 scripts/mix.py ads.csv --min-proven-spend 900     # set the floor from your own account
-python3 scripts/mix.py ads.csv --pattern concept,format,creator,ad_type,product,tone,funnel_stage
+python3 -I scripts/mix.py ads.csv                # ads.csv from the connector: see step 1
+python3 -I scripts/mix.py ads.csv --no-family
+python3 -I scripts/mix.py ads.csv --min-proven-spend 900     # set the floor from your own account
+python3 -I scripts/mix.py ads.csv --pattern concept,format,creator,ad_type,product,tone,funnel_stage
+python3 -I scripts/mix.py ads.csv --profile creative-profile.md --where market=US
 ```
+
+`--profile creative-profile.md` fills any flag you leave unset from the profile's `Script settings` (key map, type map, currency), so confirmed answers apply without retyping them. `--where market=US` keeps one scope, read from a column or the ad names: use it when markets must be judged apart, pass the same `--where` to every script in the run, and say the scope the output prints. `--type-map core=bau` reads an account's own ad-type word as one of the six types.
 
 Names that do not match the convention go to an `unclassified` bucket that is counted and listed, never dropped. Report that count first: a large unclassified share means the grid describes only part of the account, and the right next step is agreeing a naming convention (`creative-context/references/naming-convention.md`).
 
