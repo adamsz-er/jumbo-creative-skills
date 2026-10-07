@@ -128,6 +128,12 @@ class Ctx:
             self.format_spend[ad.get("format") or "unknown"] = self.format_spend.get(ad.get("format") or "unknown", 0.0) + (ad.get("spend") or 0.0)
         self.colours = charts.format_colours({f: v for f, v in self.format_spend.items() if f != "unknown"})
 
+    def prior_label(self) -> str:
+        """What the prior period is called: the last review's date when a run compared itself with it, else "prior period"."""
+        info = self.changes or {}
+        made = str(info.get("previous_at") or "")
+        return "last review (%s)" % made[:10] if made and info.get("account") is not None else "prior period"
+
     def colour(self, fmt: str) -> str:
         """The one colour a format has everywhere on the page; an unknown format is always the muted tone."""
         return self.colours.get(fmt, charts.OTHER_COLOUR)
@@ -466,10 +472,10 @@ def _tile_value(text: str) -> Tuple[str, str]:
     return ("n/a", found.group(1)) if found else (text, "")
 
 
-def _delta_pill(key: str, change: float) -> str:
+def _delta_pill(key: str, change: float, against: str = "prior period") -> str:
     good = change < 0 if key in LOWER_IS_BETTER else change > 0
     tone = "flat" if key in NEUTRAL_KPIS or change == 0 else "up" if good else "down"
-    return '<span class="pill %s">%+.1f%%</span> vs prior period' % (tone, change)
+    return '<span class="pill %s">%+.1f%%</span> vs %s' % (tone, change, against)
 
 
 def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
@@ -511,7 +517,7 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
             delta = '<span class="muted">n/a (reach is account-level only)</span>'
         else:
             change = _pct_change(_kpi_value(tot, key), _kpi_value(ptot, key)) if ptot is not None else None
-            delta = '<span class="muted">n/a (prior value missing or zero)</span>' if change is None else _delta_pill(key, change)
+            delta = '<span class="muted">n/a (prior value missing or zero)</span>' if change is None else _delta_pill(key, change, ctx.prior_label())
         spark = ""
         if key not in ACCOUNT_KPIS:
             cal = calendar(vrows if key in VIDEO_KPIS else ctx.rows)
@@ -1872,10 +1878,10 @@ def prompts_panel(ctx: Ctx) -> Tuple[str, str]:
 CHANGES_SHOWN = 9  # moves listed before the rest collapse; arbitrary display cap
 
 
-def _run_label(folder: str) -> str:
-    """"2026-03-30_093018" as "on 2026-03-30 at 09:30:18"; any other name is shown as it is."""
-    found = re.fullmatch(r"(\d{4}-\d{2}-\d{2})_(\d{2})(\d{2})(\d{2})", folder or "")
-    return "on %s at %s:%s:%s" % found.groups() if found else folder
+def _run_label(changes: Dict[str, Any]) -> str:
+    """"on 2026-03-30 at 09:30" from the previous run's ISO time; the folder name when it has none."""
+    made = str(changes.get("previous_at") or "")
+    return "on %s at %s" % (made[:10], made[11:16]) if len(made) >= 16 else str(changes.get("previous_run", ""))
 
 
 def changes_panel(changes: Optional[Dict[str, Any]]) -> str:
@@ -1898,7 +1904,7 @@ def changes_panel(changes: Optional[Dict[str, Any]]) -> str:
         if len(ad_items) > CHANGES_SHOWN:
             more = "<details><summary>%d more</summary><ul>%s</ul></details>" % (len(ad_items) - CHANGES_SHOWN, "".join(ad_items[CHANGES_SHOWN:]))
         ads = ("<ul>%s</ul>%s" % (shown, more)) if moves else "<p>No ad changed its verdict, and no ad came or went.</p>"
-        inner = '<p class="note">Compared with the review run %s.</p><ul>%s</ul>%s' % (esc(_run_label(changes.get("previous_run", ""))), account, ads)
+        inner = '<p class="note">Compared with the review run %s.</p><ul>%s</ul>%s' % (esc(_run_label(changes)), account, ads)
     return ('<section class="card panel" id="panel-changes" data-state="%s"><p class="eyebrow">Overview</p>'
             '<h3>What changed since last time</h3>%s</section>' % (state, inner))
 

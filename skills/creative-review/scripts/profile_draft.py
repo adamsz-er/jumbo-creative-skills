@@ -45,7 +45,7 @@ def account_name(rows: Sequence[Dict[str, Any]]) -> Optional[str]:
 
 
 def draft(rows: Sequence[Dict[str, Any]], names: Sequence[str], name: Optional[str] = None,
-          currency: Optional[str] = None) -> str:
+          currency: Optional[str] = None, mode: str = "csv") -> str:
     """The profile as markdown. `names` are the distinct ad names the naming style is tested against."""
     ads = cm.aggregate_by_ad(rows)
     found = cm.detect_convention(list(names)) if names else None
@@ -90,7 +90,7 @@ def draft(rows: Sequence[Dict[str, Any]], names: Sequence[str], name: Optional[s
         "- Concepts in use: %s" % _tally([a.get("concept") for a in ads]),
         "",
         "## Data",
-        "- Mode: csv",
+        "- Mode: %s" % mode,
         "- Window and currency: %s, %s" % (window, currency or NOT_STATED),
         "- Conversions column used: %s" % (", ".join(sources) or NOT_STATED),
         "- Naming convention: %s" % naming,
@@ -116,10 +116,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--name", help="the brand name, if you know it")
     parser.add_argument("--currency", help="three-letter currency code; default: read from the export's spend header")
     parser.add_argument("-o", "--output", help="write the draft here instead of printing it")
+    parser.add_argument("--force", action="store_true", help="overwrite the --output file if it already exists")
     args = parser.parse_args(argv)
-    rows = cm.load_rows(args.path)
+    if args.output and Path(args.output).exists() and not args.force:
+        print("%s already exists and may hold your corrections: not overwritten. Add --force to replace it." % args.output, file=sys.stderr)
+        return 2
+    rows = cm.load_rows(args.path, level="ad") if args.path.lower().endswith(".json") else cm.load_rows(args.path)
     names = sorted({str(r["ad_name"]) for r in rows if r.get("ad_name")})
-    text = draft(rows, names, name=args.name or account_name(rows), currency=args.currency or cm.detect_currency(args.path))
+    text = draft(rows, names, name=args.name or account_name(rows), currency=args.currency or cm.detect_currency(args.path),
+                 mode="connector" if args.path.lower().endswith(".json") else "csv")
     if args.output:
         Path(args.output).write_text(text, encoding="utf-8")
         print("wrote %s" % args.output)

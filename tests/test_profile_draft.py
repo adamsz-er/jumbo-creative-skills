@@ -12,6 +12,7 @@ import creative_metrics as cm
 import profile_draft
 from review_support import FIXTURE, Scratch
 
+SCRIPT = HERE.parent / "skills" / "creative-review" / "scripts" / "profile_draft.py"
 ROWS = cm.load_rows(str(FIXTURE))
 NAMES = sorted({r["ad_name"] for r in ROWS})
 
@@ -50,6 +51,29 @@ class ProfileDraftTest(unittest.TestCase):
         self.assertIn("# Creative profile: unknown", text)
         self.assertIn("Window and currency: n/a (no dates), not stated", text)
         self.assertIn("Naming convention: 0 of 2 ad names read (0%): no fields found", text)
+
+    def test_the_mode_is_the_real_source(self):
+        self.assertIn("- Mode: csv", self.text)
+        self.assertIn("- Mode: connector", profile_draft.draft(ROWS, NAMES, mode="connector"))
+
+    def test_a_json_pull_is_drafted_as_connector_mode(self):
+        work = Scratch(self).path
+        done = subprocess.run([sys.executable, "-I", str(SCRIPT), str(HERE / "fixtures" / "mcp_rows.json"), "-o", str(work / "p.md")],
+                              capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("- Mode: connector", (work / "p.md").read_text())
+
+    def test_an_existing_profile_is_never_overwritten_without_force(self):
+        work = Scratch(self).path
+        target = work / "creative-profile.md"
+        target.write_text("my corrections\n")
+        refused = subprocess.run([sys.executable, "-I", str(SCRIPT), str(FIXTURE), "-o", str(target)], capture_output=True, text=True)
+        self.assertEqual(refused.returncode, 2)
+        self.assertIn("--force", refused.stderr)
+        self.assertEqual(target.read_text(), "my corrections\n")
+        forced = subprocess.run([sys.executable, "-I", str(SCRIPT), str(FIXTURE), "-o", str(target), "--force"], capture_output=True, text=True)
+        self.assertEqual(forced.returncode, 0, forced.stderr)
+        self.assertIn("# Creative profile", target.read_text())
 
     def test_the_cli_writes_the_draft(self):
         work = Scratch(self).path

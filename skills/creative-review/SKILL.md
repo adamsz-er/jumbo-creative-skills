@@ -21,7 +21,7 @@ If this is the first run (no `creative-profile.md` and no `creative-review-runs/
      It prints `completeness: reconciled` or `not checked`; hand that word to `run --completeness`. A short pull stops with E-RECONCILE and the exact fix.
    - **A CSV was given:** use it.
    - **Neither:** say so and offer the sample account ("Want to see it on a sample account first?") and the export recipe (`creative-context/references/export-recipe.md`). If they say yes, run the demo (step 4 with `--demo`).
-2. **Profile.** If there is no `creative-profile.md`, run `python3 -I scripts/profile_draft.py ads.csv -o creative-profile.md` and show the draft in ONE message: "Here is what I could tell from your ads; correct anything or say OK." Save on OK. The draft holds only facts read from the data and leaves brand voice, offers and personas as "not stated"; never fill those in yourself.
+2. **Profile.** If there is no `creative-profile.md`, run `python3 -I scripts/profile_draft.py ads.csv -o creative-profile.md` (it refuses to overwrite an existing file unless you add `--force`) and show the draft in ONE message: "Here is what I could tell from your ads; correct anything or say OK." Save on OK. The draft holds only facts read from the data and leaves brand voice, offers and personas as "not stated"; never fill those in yourself.
 3. **Window.** The window is whatever the data covers. If the user named one ("last 30 days"), pull that window, or pass `--from` and `--to` to `run`.
 4. **Run it.**
    `python3 -I scripts/review.py run ads.csv --profile creative-profile.md --source "Meta ads connector" --completeness reconciled`
@@ -46,7 +46,7 @@ Every known failure prints a plain message and its exact fix, and exits with its
 | E-RECONCILE | the pull is short | the percent short and "re-run the pull with pagination" |
 | E-CURRENCY | no currency in the header | `--currency XXX` |
 | E-SKILL | a sibling skill is not installed | its name and the install command |
-| E-PROFILE | the profile cannot be read | delete it and rerun for a new draft |
+| E-PROFILE | the profile cannot be read | fix the line it names, or pass a different `--profile` |
 | E-TARGET | a bad `--target` | the script's own message plus the accepted metrics |
 | E-REPORT | the dashboard failed its structure check | its first failing line |
 | E-ANALYSIS | an analysis step stopped | the step, its message, and the folder that keeps the earlier steps |

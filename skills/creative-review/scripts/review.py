@@ -213,15 +213,29 @@ def cmd_pull(args: argparse.Namespace) -> int:
 
 # ---------- run ----------
 
-def run_folder(cache: Path, slug: str, end: Optional[str]) -> Path:
-    day = end or dt.date.today().isoformat()
-    moment = dt.datetime.now()
-    while True:
-        folder = cache / slug / ("%s_%s" % (day, moment.strftime("%H%M%S")))
-        if not folder.exists():
-            folder.mkdir(parents=True)
+def run_folder(cache: Path, slug: str, end: Optional[str], moment: dt.datetime) -> Path:
+    """A fresh folder `<window end>_<YYYYMMDD-HHMMSS>`, with -2, -3 ... added on a collision (the clock is never bumped)."""
+    base = "%s_%s" % (end or moment.date().isoformat(), moment.strftime("%Y%m%d-%H%M%S"))
+    parent = cache / slug
+    parent.mkdir(parents=True, exist_ok=True)
+    for attempt in range(1, 10000):
+        folder = parent / (base if attempt == 1 else "%s-%d" % (base, attempt))
+        try:
+            folder.mkdir()
             return folder
-        moment += dt.timedelta(seconds=1)
+        except FileExistsError:
+            continue
+    raise ReviewError("E-ANALYSIS", step="setup", detail="could not make a run folder under %s" % parent, folder=str(parent))
+
+
+def window_days(start: Optional[str], end: Optional[str]) -> Optional[int]:
+    if not start or not end:
+        return None
+    return (dt.date.fromisoformat(end) - dt.date.fromisoformat(start)).days + 1
+
+
+def write_run_info(folder: Path, info: Dict[str, Any], complete: bool) -> None:
+    (folder / changes_mod.RUN_FILE).write_text(json.dumps(dict(info, complete=complete), indent=1), encoding="utf-8")
 
 
 def shared_flags(args: argparse.Namespace, profile: Optional[str], extra: Sequence[str] = ()) -> List[str]:
@@ -280,8 +294,22 @@ def cmd_run(args: argparse.Namespace) -> int:
     brand = brand_override or brand_of(profile)
     who = account_slug(brand, rows, account_file)
     start, end = cm.data_window(rows)
+    setup = argparse.Namespace(profile=profile_path, type_map=args.type_map, key_map=args.key_map, where=args.where, currency=None, target=None)
+    try:
+        scoped, _, _ = cm.prepare_run(setup, rows)
+    except ValueError as error:
+        raise ReviewError("E-PROFILE", path=profile_path, reason=str(error)) if "--profile" in str(error) else \
+            ReviewError("E-ANALYSIS", step="setup", detail=str(error), folder=args.cache_dir)
+    where = sorted(c.strip().lower() for c in (setup.where or [])) or None
+    if not scoped:
+        raise ReviewError("E-EMPTY", window="%s to %s" % (start, end), covers="%s to %s" % cm.data_window(all_rows),
+                          recipe_step="the --where filter %s keeps no rows; check it against the export" % ", ".join(where or []))
 
-    folder = run_folder(Path(args.cache_dir), who["slug"], end)
+    moment = dt.datetime.now().astimezone()
+    folder = run_folder(Path(args.cache_dir), who["slug"], end, moment)
+    info = {"created_at": moment.isoformat(), "window_from": start, "window_to": end, "window_days": window_days(start, end),
+            "where": where, "account_slug": who["slug"], "account_name": who["name"] or brand, "source": source}
+    write_run_info(folder, info, complete=False)
     windowed = bool(args.date_from or args.date_to)
     if windowed:
         working = folder / "ads.json"
@@ -297,8 +325,10 @@ def cmd_run(args: argparse.Namespace) -> int:
     grade = analyse("grade", path, flags, folder, profile_path)
     mix = analyse("mix", path, flags, folder, profile_path)
 
-    previous = changes_mod.latest_earlier_run(Path(args.cache_dir) / who["slug"], folder.name)
-    diff = changes_mod.compare(previous, {"rows": all_rows, "verdicts": verdicts, "currency": currency, "fallback_slug": who["fallback"]})
+    previous = changes_mod.latest_earlier_run(Path(args.cache_dir) / who["slug"], info["created_at"])
+    keep = lambda before: cm.filter_rows(before, cm.parse_where(setup.where), cm.parse_key_map(args.key_map) if args.key_map else None)  # noqa: E731
+    diff = changes_mod.compare(previous, {"rows": scoped, "verdicts": verdicts, "currency": currency, "window_days": info["window_days"],
+                                          "where": where, "scope": keep})
     (folder / "changes.json").write_text(json.dumps(diff, indent=1), encoding="utf-8")
 
     title = who["name"] or brand
@@ -311,6 +341,8 @@ def cmd_run(args: argparse.Namespace) -> int:
                         ("--attribution", args.attribution)):
         if value:
             report_flags += [flag, str(value)]
+    if not args.prior and previous is not None and diff.get("account") is not None:
+        report_flags += ["--prior", str(changes_mod.ads_file(previous))]
     done = run_script(sibling("report"), [path] + report_flags)
     if done.returncode != 0:
         raise ReviewError("E-ANALYSIS", step="report", detail=last_line(done.stderr or done.stdout), folder=str(folder))
@@ -319,19 +351,19 @@ def cmd_run(args: argparse.Namespace) -> int:
         problem = next((l for l in checked.stdout.splitlines() if l.startswith("problem")), last_line(checked.stdout))
         raise ReviewError("E-REPORT", problem=problem)
 
-    scoped, _, _ = cm.prepare_run(argparse.Namespace(profile=profile_path, type_map=args.type_map, key_map=args.key_map, where=args.where, currency=None, target=None), rows)
     if args.prior:
         prior_rows = cm.load_rows(args.prior)
         moves, basis = changes_mod.account_moves(prior_rows, scoped, currency), "against the prior-period file"
     elif diff.get("account") is not None and not diff.get("first_run") and not diff.get("not_compared"):
         moves, basis = diff["account"], "since the last review"
     elif diff.get("not_compared"):
-        moves, basis = None, "not compared with the last review (it looks like a different account)"
+        moves, basis = None, diff["not_compared"].rstrip(".")
     else:
         moves, basis = None, "first run: nothing to compare yet"
     bullets = [headline(scoped, currency, moves, basis), biggest_action(verdicts, currency), biggest_opportunity(mix)]
     text = summary_text(title or "your ads", bullets, report.resolve())
     (folder / "summary.md").write_text(text, encoding="utf-8")
+    write_run_info(folder, info, complete=True)
     print(text, end="")
     return 0
 

@@ -85,9 +85,11 @@ class ErrorTriggerTest(unittest.TestCase):
         script = make_repo_copy(copy, leave_out=("keep-or-kill",))
         self.expect(run(["run", "--demo"], self.work, script=script), "E-SKILL", "keep-or-kill", "claude plugin install")
 
-    def test_an_unreadable_profile_gives_the_path_and_says_to_delete_it(self):
+    def test_an_unreadable_profile_gives_the_path_and_never_says_to_delete_it(self):
         done = run(["run", FIXTURE, "--profile", "nope-profile.md"], self.work)
-        self.expect(done, "E-PROFILE", "nope-profile.md", "Delete nope-profile.md")
+        self.expect(done, "E-PROFILE", "nope-profile.md", "Fix the line named above in nope-profile.md", "pass a different --profile")
+        self.assertNotIn("elete", done.stderr)
+        self.assertNotIn("elete it", (ROOT / "skills" / "creative-review" / "SKILL.md").read_text().split("E-PROFILE")[1].split("\n")[0])
 
     def test_a_bad_target_keeps_the_scripts_message_and_adds_the_accepted_metrics(self):
         done = run(["run", FIXTURE, "--target", "foo=3"], self.work)

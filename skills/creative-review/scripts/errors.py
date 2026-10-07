@@ -31,7 +31,7 @@ TABLE: Dict[str, Tuple[int, str, str]] = {
     "E-SKILL": (15, "The skill '{skill}' is not installed next to creative-review, and the review needs it.",
                 "Install the whole package: " + INSTALL + "."),
     "E-PROFILE": (16, "The profile {path} could not be read: {reason}.",
-                  "Delete {path} and run the review again to make a new draft, or pass --profile with the right path."),
+                  "Fix the line named above in {path}, or pass a different --profile."),
     "E-TARGET": (17, "{detail}",
                  "Write targets as metric=number, for example --target cpa=40,roas=3. Accepted metrics: {metrics}."),
     "E-REPORT": (18, "The dashboard was written but did not pass its own structure check: {problem}.",

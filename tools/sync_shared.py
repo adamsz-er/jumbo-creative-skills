@@ -26,7 +26,7 @@ def targets(root):
     scripts = {root / "skills" / name / "scripts" for name in ALWAYS}
     scripts.update(p.parent for p in (root / "skills").glob("*/scripts/" + MODULE))
     pairs = [(root / "shared" / module, folder / module) for folder in sorted(scripts) for module in MODULES]
-    if (root / DEMO[0]).exists():
+    if (root / "skills" / "creative-review").is_dir() or (root / DEMO[0]).exists():
         pairs.append((root / DEMO[0], root / DEMO[1]))
     return sorted(pairs, key=lambda pair: pair[1])
 
@@ -36,6 +36,9 @@ def sync(root, check=False):
     root = Path(root)
     drifted = []
     for source, target in targets(root):
+        if not source.exists():
+            drifted.append(target)
+            continue
         if not target.exists() or target.read_bytes() != source.read_bytes():
             drifted.append(target)
             if not check:
