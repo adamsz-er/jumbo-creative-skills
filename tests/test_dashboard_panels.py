@@ -7,12 +7,14 @@ import sys
 import tempfile
 import unittest
 from html.parser import HTMLParser
+from urllib.parse import urlparse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "skills" / "creative-report" / "scripts"
 sys.path.insert(0, str(SCRIPT))
 
+import benchmarks  # noqa: E402
 import creative_metrics as cm  # noqa: E402
 import panels  # noqa: E402
 import report  # noqa: E402
@@ -20,8 +22,8 @@ from previews import Previews  # noqa: E402
 
 FIXTURE = ROOT / "examples" / "acme" / "ads_daily.csv"
 PNG = bytes.fromhex("89504e470d0a1a0a0000000d4948445200000002000000020802000000fdd49a730000001049444154789c63a8b17a0b440c100a002c1e068d70420d590000000049454e44ae426082")
-DATA_PANELS = [(pid, fn) for _, _, tab in panels.TABS for pid, _, _, fn in tab if fn.__name__ != "panel"]
-PLACEHOLDERS = [(pid, fn) for _, _, tab in panels.TABS for pid, _, _, fn in tab if fn.__name__ == "panel"]
+OVERVIEW_TABS = ("overview", "pareto", "keep-kill")
+DATA_PANELS = [(pid, fn) for tab_id, _, tab in panels.TABS if tab_id in OVERVIEW_TABS for pid, _, _, fn in tab]
 TAB_ORDER = ["Overview analysis", "Pareto", "Keep / kill", "Format", "White space", "Briefing"]
 BALANCED = ("section", "table", "svg", "div", "ul", "thead", "tbody", "tr", "td", "th", "article", "details", "nav",
             "header", "footer", "main", "figure")
@@ -75,9 +77,9 @@ class PanelStateTest(unittest.TestCase):
         cls.grade = acme_grade()
         cls.ctx = panels.Ctx(rows=cls.rows, verdicts=cls.verdicts, grade=cls.grade, currency="USD")
 
-    def test_ten_data_panels_and_three_placeholders_exist(self):
-        self.assertEqual(len(DATA_PANELS), 10)
-        self.assertEqual(len(PLACEHOLDERS), 3)
+    def test_thirteen_overview_panels_and_fifteen_later_tab_panels_exist(self):
+        self.assertEqual(len(DATA_PANELS), 13)
+        self.assertEqual(sum(len(tab) for tab_id, _, tab in panels.TABS if tab_id not in OVERVIEW_TABS), 15)
 
     def test_every_panel_is_data_on_the_acme_inputs(self):
         for pid, fn in DATA_PANELS:
@@ -103,12 +105,6 @@ class PanelStateTest(unittest.TestCase):
         ctx = panels.Ctx(verdicts=self.verdicts)
         for pid in ("kpis", "time", "funnel", "pareto", "head-tail"):
             self.assertEqual(dict(DATA_PANELS)[pid](ctx)[1], "empty", pid)
-
-    def test_tabs_four_to_six_say_not_built_in_this_version(self):
-        for pid, fn in PLACEHOLDERS:
-            html, state = fn(self.ctx)
-            self.assertEqual(state, "empty", pid)
-            self.assertIn("Not built in this version", html)
 
     def test_do_these_first_never_lists_an_ad_that_cannot_be_judged(self):
         cant = {"ad": "999", "ad_name": "ghost | static | house | bau | x | y | 2026-03-01", "verdict": "Can't judge",
@@ -172,6 +168,56 @@ class ChartTicksTest(unittest.TestCase):
         self.assertGreater(ticks(wide), ticks(narrow))
 
 
+def axis_labels(svg):
+    """The text of the y-axis tick labels: left ones end at the axis, right ones start after the plot."""
+    left = re.findall(r'<text x="[\d.]+" y="[\d.]+" text-anchor="end">([^<]*)</text>', svg)
+    right = re.findall(r'<text x="[\d.]+" y="[\d.]+">([^<]*)</text>', svg)
+    return left, right
+
+
+class AxisUnitTest(unittest.TestCase):
+    def roas_view(self):
+        html, _ = panels.over_time(panels.Ctx(rows=cm.load_rows(str(FIXTURE)), currency="USD"))
+        return re.search(r'data-view="roas">.*?</svg>', html, re.S).group(0)
+
+    def test_the_roas_view_prints_its_ticks_in_x_and_the_spend_bars_theirs_in_money(self):
+        left, right = axis_labels(self.roas_view())
+        self.assertNotIn("0.00", left + right)
+        self.assertEqual(left[0], "0x")
+        self.assertTrue(all(label.endswith("x") for label in left), left)
+        self.assertTrue(right and all(re.fullmatch(r"[\d,]+(\.\d+)?", label) for label in right), right)
+
+    def test_the_spend_axis_does_not_print_a_second_zero_beside_the_roas_zero(self):
+        left, right = axis_labels(self.roas_view())
+        self.assertEqual(left.count("0x"), 1)
+        self.assertNotIn("0", right)
+        self.assertGreaterEqual(len(right), 2)
+
+    def test_a_line_only_chart_keeps_its_own_zero_in_its_unit(self):
+        import charts
+        svg = charts.combo_chart(["2026-03-01", "2026-03-02"], None, [1.0, 3.0], "", "ROAS (x)", "x", line_fmt=charts.axis_format("x"))
+        self.assertEqual(axis_labels(svg)[1], ["0x", "1.5x", "3x"])
+
+    def test_money_ticks_use_the_currencys_own_digits(self):
+        import charts
+        self.assertEqual(charts.axis_format("money", "USD")(0), "0")
+        self.assertEqual(charts.axis_format("money", "USD")(12.5), "12.50")
+        self.assertEqual(charts.axis_format("money", "USD")(1234.5), "1,234")
+        self.assertEqual(charts.axis_format("money", "JPY")(12.5), "12")
+        self.assertEqual(charts.axis_format("pct")(0.8), "0.8%")
+        self.assertEqual(charts.axis_format("x")(2.45), "2.45x")
+
+    def test_fatigue_charts_use_percent_and_x_ticks(self):
+        ctx = panels.Ctx(rows=cm.load_rows(str(FIXTURE)), verdicts=acme_verdicts(), currency="USD")
+        html, _ = panels.fatigue(ctx)
+        found = list(re.finditer(r"<svg[^>]*aria-label=\"((?:CTR|Frequency)) by day[^\"]*\"[^>]*>(.*?)</svg>", html, re.S))
+        self.assertTrue(found)
+        for match in found:
+            _, right = axis_labels(match.group(2))
+            suffix = "%" if match.group(1) == "CTR" else "x"
+            self.assertTrue(all(label.endswith(suffix) for label in right), (match.group(1), right))
+
+
 class LegendTest(unittest.TestCase):
     def test_pareto_names_both_lines_when_there_is_value(self):
         rows = [ad_row("a", "A", 100, 500), ad_row("b", "B", 80, 300), ad_row("c", "C", 60, 100)]
@@ -186,11 +232,10 @@ class LegendTest(unittest.TestCase):
         self.assertIn("Cumulative share of spend", html)
         self.assertNotIn("Cumulative share of purchase value", html)
 
-    def test_the_spend_and_roas_chart_has_a_legend_and_single_series_charts_do_not(self):
+    def test_the_time_chart_has_a_chip_per_series_and_single_series_charts_do_not(self):
         html, _ = panels.over_time(panels.Ctx(rows=cm.load_rows(str(FIXTURE)), currency="USD"))
-        key = html.split('<ul class="legend">')[1].split("</ul>")[0]
-        self.assertIn('<span class="sw bar"></span>Spend (USD)', key)
-        self.assertIn('<span class="sw line"></span>ROAS (x)', key)
+        roas = re.search(r'data-view="roas">.*?</figure>', html, re.S).group(0)
+        self.assertEqual(re.findall(r'<button type="button" class="legend-chip" data-series="([^"]*)"', roas), ["Spend", "Daily", "7-day average"])
         import charts
         single = charts.combo_chart(["2026-03-01", "2026-03-02"], None, [1.0, 2.0], "", "CTR (%)", "x", width=300, height=190)
         self.assertNotIn("legend", single)
@@ -245,22 +290,22 @@ class PartialCoverageTest(unittest.TestCase):
 
     def test_a_tile_with_partial_coverage_shows_its_value_and_how_many_rows_lack_it(self):
         html, _ = panels.kpi_strip(panels.Ctx(rows=self.half_blank(), currency="USD"))
-        self.assertIn("purchase value missing on 3 of 6 rows", html)
-        self.assertEqual(html.count("purchase value missing on 3 of 6 rows"), 2)
+        self.assertIn("purchase value recorded on 3 of 6 ads; the rest had none in this window", html)
+        self.assertEqual(html.count("purchase value recorded on 3 of 6 ads; the rest had none in this window"), 2)
         self.assertIn("USD 630", html)
 
     def test_fully_present_and_fully_missing_are_not_partial(self):
         full, _ = panels.kpi_strip(panels.Ctx(rows=self.ROWS, currency="USD"))
-        self.assertNotIn("missing on", full)
+        self.assertNotIn("recorded on", full)
         none, _ = panels.kpi_strip(panels.Ctx(rows=[dict(r, conversion_value=None) for r in self.ROWS], currency="USD"))
-        self.assertIn("n/a (missing purchase value)", none)
-        self.assertNotIn("conversion_value missing on", none)
+        self.assertRegex(none, r'<p class="kpi-name">ROAS[^<]*</p><p class="kpi-value">n/a</p><p class="kpi-note">missing purchase value</p>')
+        self.assertNotIn("recorded on", none)
 
     def test_the_pareto_sentence_states_value_coverage_when_partial(self):
         html, _ = panels.pareto(panels.Ctx(rows=self.half_blank(), currency="USD"))
-        self.assertIn("Purchase value is present for 3 of 6 ads and on 3 of 6 rows", html)
+        self.assertIn("Purchase value was recorded on 3 of 6 ads; the rest had none in this window and count as no value.", html)
         clean, _ = panels.pareto(panels.Ctx(rows=self.ROWS, currency="USD"))
-        self.assertNotIn("is present for", clean)
+        self.assertNotIn("was recorded on", clean)
 
 
 class KpiTest(unittest.TestCase):
@@ -276,10 +321,10 @@ class KpiTest(unittest.TestCase):
 
     def test_reach_and_frequency_need_the_account_file(self):
         html, _ = panels.kpi_strip(panels.Ctx(rows=self.rows, currency="USD"))
-        self.assertEqual(html.count(panels.NEEDS_ACCOUNT), 2)
-        self.assertIn("--account", html)
+        tiles = dict(re.findall(r'<p class="kpi-name">([^<]*)</p><p class="kpi-value">([^<]*)</p>', html))
+        self.assertEqual((tiles["Reach"], tiles["Frequency"]), ("n/a", "n/a"))
         with_account, _ = panels.kpi_strip(panels.Ctx(rows=self.rows, currency="USD", account={"reach": 123456.0, "frequency": 1.75}))
-        self.assertNotIn(panels.NEEDS_ACCOUNT, with_account)
+        self.assertNotIn('kpi-value">n/a', with_account)
         self.assertIn("123,456", with_account)
         self.assertIn("1.75", with_account)
 
@@ -288,12 +333,14 @@ class KpiTest(unittest.TestCase):
 
     def test_every_tile_says_no_prior_period_without_a_prior_file(self):
         html, _ = panels.kpi_strip(panels.Ctx(rows=self.rows, currency="USD"))
-        self.assertEqual(html.count("no prior period"), 12)
+        self.assertEqual(len(re.findall("no prior period", html, re.I)), 1)
+        self.assertIn("No prior period supplied: deltas appear when you pass one.", html)
+        self.assertNotIn('<span class="muted">no prior period', html)
 
     def test_prior_period_gives_a_signed_change(self):
         prior = [dict(r, spend=(r.get("spend") or 0) / 2) for r in self.rows]
         html, _ = panels.kpi_strip(panels.Ctx(rows=self.rows, currency="USD", prior=prior))
-        self.assertIn("+100.0% vs prior period", html)
+        self.assertIn("+100.0%</span> vs prior period", html)
         self.assertNotIn("no prior period", html.split("Impressions")[0])
 
     def test_hook_rate_is_marked_derived_when_three_second_plays_were_derived(self):
@@ -316,7 +363,7 @@ class KpiTest(unittest.TestCase):
 
     def test_a_missing_operand_reads_n_a_never_zero(self):
         html, _ = panels.kpi_strip(panels.Ctx(rows=[ad_row("1", "a", 100, 300)], currency="USD"))
-        self.assertIn("n/a (missing", html)
+        self.assertRegex(html, r'kpi-value">n/a</p><p class="kpi-note">missing ')
         self.assertNotRegex(html, r'kpi-value">0(\.0+)?%?<')
 
     def test_unknown_currency_is_stated_not_guessed(self):
@@ -364,7 +411,7 @@ class ParetoTest(unittest.TestCase):
         html, state = panels.pareto(panels.Ctx(rows=self.ROWS, currency="USD"))
         self.assertEqual(state, "data")
         self.assertIn("2 ads (33% of ads) drive 80% of purchase value.", html)
-        self.assertIn("--pareto-share", html)
+        self.assertIn("you can change it when you rebuild the report", html)
 
     def test_the_share_is_settable(self):
         html, _ = panels.pareto(panels.Ctx(rows=self.ROWS, currency="USD", pareto_share=90.0))
@@ -513,7 +560,7 @@ class PageStructureTest(unittest.TestCase):
         self.assertIn('fill="#1a1a1a"', light)
         self.assertIn('fill="white"', dark)
         self.assertIn("Acme creative <span class=\"grad\">review</span>", header)
-        self.assertIn("2026-03-01 to 2026-03-30", header)
+        self.assertIn("1 Mar \u2013 30 Mar 2026", header)
         self.assertIn("USD", header)
         self.assertIn("Meta ads connector", header)
         self.assertIn("7-day click", header)
@@ -531,9 +578,23 @@ class PageStructureTest(unittest.TestCase):
         self.assertEqual(footer.count('role="img" aria-label="Elephant Room"'), 2)
 
     def test_three_completeness_states(self):
-        for value, css, text in ((None, "warn", "Not reconciled"), ("reconciled", "ok", "Reconciled"), ("incomplete:7.5", "bad", "Incomplete 7.5%")):
-            html = report.build_html(rows=self.rows, completeness=value)
-            self.assertIn('<span class="status %s">%s</span>' % (css, text), html)
+        tip = "Pull the account totals for the same window to check nothing is missing"
+        cases = ((None, '<span class="status neutral" title="%s">Totals not checked</span>' % tip),
+                 ("reconciled", '<span class="status ok">Reconciled</span>'),
+                 ("incomplete:7.5", "<span class=\"status warn\">Totals don't match (7.5% short)</span>"))
+        for value, badge in cases:
+            self.assertIn(badge, report.build_html(rows=self.rows, completeness=value))
+        self.assertRegex(self.css_of(report.build_html(rows=self.rows)), r"\.status\.neutral \{[^}]*background: var\(--flat-bg\)[^}]*color: var\(--flat-fg\)")
+
+    @staticmethod
+    def css_of(html):
+        return re.search(r"<style>(.*?)</style>", html, re.S).group(1)
+
+    def test_an_unchecked_pull_is_never_dressed_as_a_warning_or_a_pass(self):
+        page = report.build_html(rows=self.rows)
+        self.assertNotIn("Not reconciled", page)
+        self.assertNotIn('class="status ok"', page)
+        self.assertNotIn('class="status warn"', page)
 
     def test_a_bad_completeness_value_is_refused(self):
         with self.assertRaises(ValueError):
@@ -541,8 +602,11 @@ class PageStructureTest(unittest.TestCase):
 
     def test_no_url_is_written_into_any_src_and_no_external_host_but_fonts(self):
         self.assertIsNone(re.search(r'src="(?!data:)', self.html))
-        hosts = set(re.findall(r"https?://([^/\"'\s)]+)", self.html))
-        self.assertLessEqual(hosts, {"fonts.googleapis.com", "fonts.gstatic.com"})
+        fonts = {"fonts.googleapis.com", "fonts.gstatic.com"}
+        method = "".join(re.findall(r"<pre>.*?</pre>", self.html, re.S))
+        self.assertLessEqual(set(re.findall(r"https?://([^/\"'\s)]+)", self.html.replace(method, ""))), fonts)
+        cited = {urlparse(e["url"]).netloc for e in benchmarks.load()}
+        self.assertLessEqual(set(re.findall(r"https?://([^/\"'\s)]+)", method)), fonts | cited)
 
     def test_user_text_cannot_inject_a_template_placeholder(self):
         html = report.build_html(rows=[ad_row("1", "{{footer}} | static | c | bau | p | t | 2026-03-01", 5, 5)], title="{{body}}")
@@ -572,3 +636,449 @@ class PageStructureTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReaderText(HTMLParser):
+    """Text and text-bearing attributes a reader can see, leaving out scripts, styles and the Data and method details."""
+
+    def __init__(self):
+        super().__init__()
+        self.hidden, self.method, self.text = 0, 0, []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag in ("script", "style"):
+            self.hidden += 1
+        elif tag == "details" and (self.method or "method" in (attrs.get("class") or "").split()):
+            self.method += 1
+        elif not self.method:
+            self.text.extend(v for k, v in attrs.items() if k in ("title", "aria-label", "alt", "placeholder") and v)
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style") and self.hidden:
+            self.hidden -= 1
+        elif tag == "details" and self.method:
+            self.method -= 1
+
+    def handle_data(self, data):
+        if not self.hidden and not self.method:
+            self.text.append(data)
+
+
+def reader_text(page):
+    parser = ReaderText()
+    parser.feed(page)
+    return " ".join(parser.text)
+
+
+class ReaderWordsTest(unittest.TestCase):
+    """Reader-visible text speaks of ads, never of rows or command flags (those live in SKILL.md and the Data and method details)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.rows = cm.load_rows(str(FIXTURE))
+        cls.verdicts = acme_verdicts()
+        cls.grade = acme_grade()
+        blank = [dict(r, conversion_value=None, conversions=None) if str(r["ad_id"])[-1] in "02468" else r for r in cls.rows]
+        cls.pages = {
+            "full": report.build_html(rows=cls.rows, verdicts=cls.verdicts, grade=cls.grade, currency="USD", title="Acme"),
+            "partial": report.build_html(rows=blank, verdicts=cls.verdicts, grade=cls.grade, currency="USD", title="Acme"),
+            "rows only": report.build_html(rows=cls.rows, currency="USD", title="Acme"),
+            "no data": report.build_html(verdicts=cls.verdicts, title="Acme"),
+            "undated": report.build_html(rows=[{k: v for k, v in r.items() if k != "date"} for r in cls.rows[:6]], currency="USD", title="Acme"),
+            "one day": report.build_html(rows=[r for r in cls.rows if r["date"] == cls.rows[0]["date"]], currency="USD", title="Acme"),
+        }
+
+    def test_no_reader_visible_text_says_rows(self):
+        for name, page in self.pages.items():
+            self.assertNotRegex(reader_text(page), r"(?i)\brows?\b", name)
+
+    def test_no_reader_visible_text_names_a_command_flag(self):
+        for name, page in self.pages.items():
+            self.assertNotRegex(reader_text(page), r"(?<![\w-])--[a-z]", name)
+
+    def test_partial_coverage_is_said_in_ads(self):
+        text = reader_text(self.pages["partial"])
+        self.assertRegex(text, r"purchases recorded on \d+ of \d+ ads; the rest had none in this window")
+        self.assertRegex(text, r"purchase value recorded on \d+ of \d+ ads")
+
+    def test_the_method_details_are_where_flags_and_row_counts_may_live(self):
+        method = self.pages["full"].split('<details class="method"')[1].split("</details>")[0]
+        self.assertIn("cards per list (--top-n)", method)
+        self.assertNotIn("--top-n", reader_text(self.pages["full"]))
+
+
+NO_VIDEO = [{k: v for k, v in r.items() if not k.startswith("video")} for r in cm.load_rows(str(FIXTURE))]
+BANNER = 'class="banner"'
+
+
+class OverviewBannerTest(unittest.TestCase):
+    """One banner when a metric is missing for every ad; plain n/a in the tiles; nothing when it is only partly missing."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.rows = cm.load_rows(str(FIXTURE))
+        cls.account = {"reach": 123456.0, "frequency": 1.75}
+
+    def overview(self, **kw):
+        page = report.build_html(currency="USD", title="Acme", **kw)
+        return page.split('id="tab-overview"')[1].split('id="tab-pareto"')[0]
+
+    def test_hook_hold_reach_and_frequency_missing_everywhere_give_one_banner_at_the_top(self):
+        tab = self.overview(rows=NO_VIDEO)
+        self.assertEqual(tab.count(BANNER), 1)
+        self.assertLess(tab.index(BANNER), tab.index('id="panel-kpis"'))
+        text = reader_text(tab)
+        self.assertIn("Not in this pull", text)
+        self.assertIn("Hook rate : missing 3-second plays. To get it:", text)
+        self.assertIn("Hold rate : missing ThruPlays. To get it:", text)
+        self.assertIn("Reach and frequency don't add up across ads, so they need an account-level figure for this window; none was supplied.", text)
+        tiles = dict(re.findall(r'<p class="kpi-name">([^<]*)</p><p class="kpi-value">([^<]*)</p>', tab))
+        for name in ("Hook rate", "Hold rate", "Reach", "Frequency"):
+            self.assertEqual(tiles[name], "n/a", name)
+        for name in ("Hook rate", "Hold rate", "Reach", "Frequency"):
+            tile = re.search(r'<p class="kpi-name">%s.*?</div></div>' % name, tab, re.S).group(0)
+            self.assertNotIn("kpi-note", tile, name)
+            self.assertNotIn("n/a (", tile, name)
+
+    def test_only_hold_missing_names_only_hold(self):
+        rows = [{k: v for k, v in r.items() if k != "video_thruplay"} for r in self.rows]
+        tab = self.overview(rows=rows, account=self.account)
+        self.assertEqual(tab.count(BANNER), 1)
+        text = reader_text(tab)
+        self.assertIn("Hold rate : missing ThruPlays. To get it:", text)
+        self.assertNotIn("Hook rate : missing", text)
+        self.assertNotIn("Reach and frequency don't add up", text)
+
+    def test_partly_missing_data_shows_no_banner_and_keeps_the_per_tile_note(self):
+        tab = self.overview(rows=self.rows, account=self.account)
+        self.assertEqual(tab.count(BANNER), 0)
+        hook = re.search(r'<p class="kpi-name">Hook rate.*?</div></div>', tab, re.S).group(0)
+        self.assertRegex(hook, r"video ads \u00b7 \d+ of \d+")
+
+    def test_the_account_file_removes_the_reach_sentence_only(self):
+        tab = self.overview(rows=NO_VIDEO, account=self.account)
+        self.assertEqual(tab.count(BANNER), 1)
+        self.assertNotIn("Reach and frequency", reader_text(tab.split(BANNER)[1].split("</div>")[0]))
+
+    def test_no_banner_without_data_the_whole_tab_is_an_empty_state(self):
+        self.assertEqual(self.overview(verdicts=acme_verdicts()).count(BANNER), 0)
+
+    def test_the_banner_is_the_only_place_that_says_why_everywhere(self):
+        tab = self.overview(rows=NO_VIDEO)
+        outside = tab.replace(re.search(r'<div class="banner".*?</div>', tab, re.S).group(0), "")
+        self.assertNotIn("Not in this pull", reader_text(outside))
+        self.assertNotIn("none was supplied", reader_text(outside))
+
+
+
+HARNESS_JS = r'''
+var attrs = {}, listeners = {};
+var node = { id: "t", hidden: false, closest: function () { return null; }, addEventListener: function () {}, getAttribute: function () { return "#t"; },
+  setAttribute: function () {}, removeAttribute: function () {}, querySelector: function () { return null; } };
+function stub(store) {
+  attrs = {};
+  var root = { className: "", setAttribute: function (k, v) { attrs[k] = v; }, getAttribute: function (k) { return attrs[k] || null; } };
+  global.window = { localStorage: store, matchMedia: function () { return { matches: false }; }, addEventListener: function () {}, scrollTo: function () {}, innerWidth: 1200 };
+  global.history = { replaceState: function () {} };
+  global.location = { hash: "" };
+  global.document = { documentElement: root,
+    querySelectorAll: function (sel) { return sel === "section.tab" ? [node] : []; },
+    querySelector: function () { return { namespaceURI: "" }; }, getElementById: function () { return null; },
+    addEventListener: function (type, fn) { (listeners[type] = listeners[type] || []).push(fn); }, createElementNS: function () { return {}; } };
+}
+function click() {
+  var target = { closest: function (sel) { return sel.indexOf("theme") >= 0 ? {} : null; } };
+  listeners.click.forEach(function (fn) { fn({ target: target, preventDefault: function () {} }); });
+}
+function boot() { listeners = {}; new Function(SCRIPT)(); }
+var out = {};
+stub({ getItem: function () { throw new Error("blocked"); }, setItem: function () { throw new Error("blocked"); } });
+boot(); click(); out.afterBlockedClick = attrs["data-theme"];
+click(); out.afterSecondClick = attrs["data-theme"];
+stub({ getItem: function () { return "dark"; }, setItem: function () {} });
+boot(); out.storedApplied = attrs["data-theme"];
+console.log(JSON.stringify(out));
+'''
+
+
+def squash(css):
+    return re.sub(r"\s+", " ", css)
+
+
+class ShellTest(unittest.TestCase):
+    """The redesigned frame: tokens, top bar, scope bar, sub-nav, filter row, KPI strip, cards, responsive and print."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.rows = cm.load_rows(str(FIXTURE))
+        cls.verdicts = acme_verdicts()
+        cls.html = report.build_html(rows=cls.rows, verdicts=cls.verdicts, grade=acme_grade(), currency="USD", title="Acme",
+                                     source="Meta ads connector", attribution="7-day click", completeness="reconciled")
+        cls.css = squash(re.search(r"<style>(.*?)</style>", cls.html, re.S).group(1))
+        cls.header = re.search(r'<header class="top">.*?</header>', cls.html, re.S).group(0)
+
+    def block(self, opener):
+        """The body of the first CSS rule or at-rule that starts with `opener`."""
+        start = self.css.index(opener) + len(opener)
+        depth, i = 1, start
+        while depth:
+            depth += {"{": 1, "}": -1}.get(self.css[i], 0)
+            i += 1
+        return self.css[start:i - 1]
+
+    def test_light_tokens_are_the_default(self):
+        root = self.block(":root {")
+        for token in ("--bg: #ffffff", "--surface: #ffffff", "--surface-muted: hsl(210 40% 96.1%)", "--text: hsl(222 47% 11%)",
+                      "--text-muted: hsl(215 16% 47%)", "--border: hsl(220 13% 91%)", "--accent: hsl(251 97% 60%)",
+                      "--accent-soft: hsl(251 97% 60% / .10)", "--danger: hsl(0 84% 60%)", "--bar: hsl(222 47% 8%)",
+                      "--bar-border: hsl(217 33% 18%)", "--bar-text: hsl(210 20% 96%)"):
+            self.assertIn(token, root)
+
+    def test_dark_follows_the_system_unless_a_theme_is_chosen_and_never_uses_pure_black(self):
+        system = self.block('@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {')
+        chosen = self.block(':root[data-theme="dark"] {')
+        for dark in (system, chosen):
+            for token in ("--bg: hsl(222 35% 5%)", "--surface: hsl(222 28% 11%)", "--surface-raised: hsl(222 28% 14%)",
+                          "--surface-muted: hsl(222 25% 17%)", "--text: hsl(210 20% 96%)", "--text-muted: hsl(217 18% 68%)",
+                          "--border: hsl(222 18% 29%)", "--accent: hsl(251 91% 64%)"):
+                self.assertIn(token, dark)
+            self.assertNotRegex(dark, r"#000\b|#000000|hsl\(\d+ \d+% 0%\)")
+
+    def test_delta_pill_tokens_in_both_themes(self):
+        root = self.block(":root {")
+        for token in ("--up-bg: #dcfce7", "--up-fg: #15803d", "--down-bg: #fee2e2", "--down-fg: #b91c1c", "--flat-bg: hsl(220 13% 91%)", "--flat-fg: hsl(220 9% 46%)"):
+            self.assertIn(token, root)
+        dark = self.block(':root[data-theme="dark"] {')
+        for token in ("--up-bg: hsl(160 84% 51% / .10)", "--up-fg: hsl(160 84% 51%)", "--down-bg: hsl(0 91% 71% / .10)", "--down-fg: hsl(0 91% 71%)"):
+            self.assertIn(token, dark)
+
+    def test_type_radius_and_series_tokens(self):
+        self.assertIn("family=DM+Sans:wght@400;500;600;700", self.html)
+        self.assertIn("family=Roboto+Mono", self.html)
+        self.assertNotIn("Plus+Jakarta", self.html)
+        root = self.block(":root {")
+        self.assertIn('--font-body: "DM Sans", "Inter", system-ui', root)
+        self.assertIn('--font-mono: "Roboto Mono"', root)
+        for n, color in enumerate(("#6366f1", "#16a34a", "#f59e0b", "#f43f5e", "#06b6d4", "#d946ef"), 1):
+            self.assertIn("--series-%d: %s" % (n, color), root)
+        self.assertIn("--series-neutral: #64748b", root)
+        self.assertIn("--radius: 10px", root)
+        self.assertIn("--radius-sm: 6px", root)
+        self.assertRegex(self.css, r"html \{[^}]*font-size: 15px")
+        self.assertRegex(self.css, r"body \{[^}]*font-variant-numeric: tabular-nums")
+
+    def test_charts_read_the_series_tokens(self):
+        self.assertRegex(self.css, r"svg \.bar \{[^}]*fill: var\(--series-1\)")
+        self.assertRegex(self.css, r"svg\.spark path \{[^}]*stroke: var\(--series-1\)")
+        self.assertRegex(self.css, r"svg \.line \{[^}]*stroke: var\(--series-2\)")
+
+    def test_cards_have_a_border_a_soft_shadow_and_a_tinted_hover_without_movement(self):
+        self.assertRegex(self.css, r"section\.card \{[^}]*border: 1px solid var\(--border\)[^}]*border-radius: var\(--radius\)")
+        self.assertIn("--shadow: 0 1px 2px rgb(0 0 0 / .05)", self.block(":root {"))
+        self.assertIn("--hover-border: hsl(251 97% 60% / .4)", self.block(":root {"))
+        self.assertIn("--hover-shadow: 0 4px 12px hsl(251 97% 60% / .08)", self.block(":root {"))
+        hover = self.block(".kpi:hover {")
+        self.assertIn("border-color: var(--hover-border)", hover)
+        self.assertIn("box-shadow: var(--hover-shadow)", hover)
+        self.assertNotIn("transform", hover)
+
+    def test_the_top_bar_is_one_row_lockup_title_badge_and_theme_toggle(self):
+        bar = re.search(r'<div class="topbar">.*?</div>\s*<div class="scope-bar"', self.header, re.S).group(0)
+        order = [bar.index(m) for m in ('class="lockup"', "<h1>", 'class="status ok"', 'data-action="theme"')]
+        self.assertEqual(order, sorted(order))
+        self.assertIn("Acme creative <span class=\"grad\">review</span>", bar)
+        self.assertRegex(self.css, r"\.topbar \{[^}]*height: 56px")
+        self.assertRegex(self.css, r"\.page \{[^}]*max-width: 1536px[^}]*padding:[^;}]*24px")
+
+    def test_the_theme_toggle_is_a_labelled_button_that_sets_data_theme_and_survives_blocked_storage(self):
+        button = re.search(r'<button[^>]*data-action="theme"[^>]*>', self.header).group(0)
+        self.assertIn('type="button"', button)
+        self.assertIn("aria-label=", button)
+        script = re.search(r"<script>(.*?)</script>", self.html, re.S).group(1)
+        self.assertIn('setAttribute("data-theme"', script)
+        self.assertRegex(script, r"try \{ return storage\.getItem\(THEME_KEY\); \} catch")
+        self.assertRegex(script, r"try \{ storage\.setItem\(THEME_KEY, value\); \} catch")
+        self.assertRegex(self.css, r"\.theme-toggle \{[^}]*display: none")
+        self.assertRegex(self.css, r"\.js \.theme-toggle \{[^}]*display: inline-flex")
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed")
+    def test_the_toggle_flips_the_theme_when_storage_throws_and_a_stored_choice_is_applied_on_load(self):
+        script = re.search(r"<script>(.*?)</script>", self.html, re.S).group(1)
+        harness = HARNESS_JS
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "toggle.js"
+            path.write_text("var SCRIPT = %s;\n%s" % (json.dumps(script), harness))
+            done = subprocess.run(["node", str(path)], capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(json.loads(done.stdout), {"afterBlockedClick": "dark", "afterSecondClick": "light", "storedApplied": "dark"})
+
+    def test_group_sort_and_previews_move_into_the_filters_popover_on_a_phone_instead_of_vanishing(self):
+        pop = re.search(r'<details class="facets".*?</details>', self.html, re.S).group(0)
+        self.assertEqual(pop.count('class="fb-view fb-view-pop"'), 1)
+        for control in ('data-action="group"', 'data-action="sort"', 'data-action="previews-only"'):
+            self.assertIn(control, pop)
+        self.assertRegex(self.css, r"\.fb-view-pop \{[^}]*display: none")
+        small = self.css[self.css.index("@media (max-width: 640px) { .topbar"):]
+        small = small[:small.index("} }") + 1]
+        self.assertRegex(small, r"\.js \.fb-view-pop \{[^}]*display: flex")
+        self.assertRegex(small, r"\.js \.fb-view-row \{[^}]*display: none")
+
+    def test_the_dark_logos_follow_the_chosen_theme_as_well_as_the_system(self):
+        self.assertIn(':root[data-theme="dark"] .logo-light { display: none; }', self.css)
+        self.assertIn(':root[data-theme="dark"] .logo-dark { display: inline-block; }', self.css)
+        self.assertIn(':root:not([data-theme="light"]) .logo-dark { display: inline-block; }', self.css)
+
+    def test_the_scope_bar_reads_window_currency_source_and_attribution(self):
+        bar = re.search(r'<div class="scope-bar".*?</div>\s*</header>', self.header, re.S).group(0)
+        segments = re.findall(r'<div class="scope-seg"><span class="scope-label">([^<]*)</span> <b>([^<]*)</b></div>', bar)
+        self.assertEqual(segments, [("Window", "1 Mar – 30 Mar 2026"), ("Scope", "all ads in the data"), ("Currency", "USD"), ("Source", "Meta ads connector"), ("Attribution", "7-day click")])
+        self.assertRegex(self.css, r"\.scope-bar \{[^}]*background: var\(--bar\)[^}]*border-radius: 12px")
+        self.assertRegex(self.css, r"\.scope-seg \{[^}]*border-right: 1px solid var\(--bar-border\)")
+        self.assertRegex(self.css, r"\.scope-bar \{[^}]*flex-wrap: wrap")
+
+    def test_a_window_across_two_years_names_both(self):
+        self.assertEqual(report.format_window("2025-12-30", "2026-01-02"), "30 Dec 2025 – 2 Jan 2026")
+        self.assertEqual(report.format_window("2026-09-07", "2026-10-06"), "7 Sep – 6 Oct 2026")
+        self.assertEqual(report.format_window(None, None), "n/a (no dates)")
+
+    def test_the_sub_nav_lists_six_tabs_each_with_a_stroke_icon_and_sits_beside_the_content(self):
+        nav = re.search(r'<nav class="tabs".*?</nav>', self.html, re.S).group(0)
+        links = re.findall(r"<a [^>]*>.*?</a>", nav, re.S)
+        self.assertEqual(len(links), 6)
+        for link in links:
+            self.assertRegex(link, r'<svg class="ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"[^>]*stroke="currentColor"')
+        self.assertNotIn("<nav", self.header)
+        self.assertLess(self.html.index('<nav class="tabs"'), self.html.index('<main'))
+        self.assertRegex(self.css, r"nav\.tabs \{[^}]*position: sticky[^}]*top: 16px")
+        self.assertRegex(self.css, r"\.shell \{[^}]*grid-template-columns: 208px minmax\(0, 1fr\)")
+        self.assertRegex(self.css, r'nav\.tabs a\[aria-current="true"\] \{[^}]*background: var\(--accent-soft\)[^}]*color: var\(--accent\)')
+
+    def test_under_1024px_the_sub_nav_becomes_a_segmented_control(self):
+        narrow = self.block("@media (max-width: 1023px) {")
+        self.assertIn("grid-template-columns: minmax(0, 1fr)", narrow)
+        self.assertRegex(narrow, r"nav\.tabs \{[^}]*position: static[^}]*background: var\(--surface-muted\)")
+        self.assertRegex(narrow, r'nav\.tabs a\[aria-current="true"\] \{[^}]*background: var\(--surface-raised\)[^}]*box-shadow: 0 1px 3px rgb\(0 0 0 / \.06\)')
+
+    def test_there_is_no_tab_name_heading_above_the_first_card(self):
+        self.assertNotIn('class="tab-title"', self.html)
+        self.assertRegex(self.html, r'<section class="tab" id="tab-overview" aria-label="Overview analysis">')
+        first = re.search(r'<section class="tab" id="tab-pareto"[^>]*>(.*?)<h3>', self.html, re.S).group(1)
+        self.assertTrue(first.strip().startswith('<section class="card panel"'))
+
+    def test_section_cards_use_eyebrow_title_and_the_agreed_padding_and_gap(self):
+        self.assertRegex(self.css, r"section\.card \{[^}]*padding: 20px[^}]*margin: 16px 0")
+        self.assertRegex(self.css, r"section\.panel > h3:first-of-type \{[^}]*font-size: 20px[^}]*font-weight: 600")
+        self.assertRegex(self.css, r"\.eyebrow \{[^}]*font: 600 12px[^}]*text-transform: uppercase[^}]*color: var\(--accent\)")
+
+    def test_the_filter_row_is_one_sticky_row_with_search_filters_clear_count_and_view_controls(self):
+        main_at = self.html.index("<main")
+        row = re.search(r'<div class="filterbar".*?</div>\s*(?=<div class="fb-status")', self.html[:main_at], re.S).group(0)
+        parts = [row.index(m) for m in ('type="search"', "<details", "Filters", 'data-action="clear"', 'class="fb-count"', 'class="fb-view fb-view-row"')]
+        view = row[row.index('class="fb-view fb-view-row"'):]
+        self.assertLess(view.index('data-action="group"'), view.index('data-action="sort"'))
+        self.assertEqual(parts, sorted(parts))
+        self.assertIn("fb-clear", re.search(r'<button[^>]*data-action="clear"[^>]*>', row).group(0))
+        self.assertRegex(self.css, r"\.fb-clear \{[^}]*display: none")
+        self.assertRegex(self.css, r"\.fb-clear\.show \{[^}]*display: inline-block")
+        self.assertLess(self.html.index('<nav class="tabs"'), self.html.index('class="filterbar"'))
+        self.assertRegex(self.css, r"\.js \.filterbar \{[^}]*position: sticky[^}]*top: 0[^}]*background: var\(--bg\)[^}]*border-bottom")
+        self.assertRegex(self.css, r"\.filterbar \{[^}]*display: none")
+
+    def test_the_popover_holds_the_smart_views_and_the_facets_and_the_summary_sits_below_unpinned(self):
+        pop = re.search(r'<details class="facets".*?</details>', self.html, re.S).group(0)
+        for text in ("Money at risk", "Ready to scale", "Verdict", "account-wide"):
+            self.assertIn(text, pop)
+        status = re.search(r'<div class="fb-status".*?</div>\s*</div>|<div class="fb-status".*?</p>\s*</div>', self.html, re.S).group(0)
+        self.assertIn('class="fb-summary"', status)
+        self.assertNotRegex(self.css, r"\.fb-status \{[^}]*position: sticky")
+        self.assertRegex(self.css, r"\.fb-summary \{[^}]*white-space: nowrap")
+
+    def test_the_filter_row_height_is_bounded_on_desktop_and_phone(self):
+        self.assertRegex(self.css, r"\.filterbar \{[^}]*max-height: 56px")
+        phone = self.block("@media (max-width: 480px) {")
+        self.assertRegex(phone, r"\.filterbar \{[^}]*max-height: 96px")
+        self.assertRegex(phone, r"\.fb-search \{[^}]*flex: 1 1 100%")
+
+    def test_headings_clear_the_sticky_row(self):
+        self.assertRegex(self.css, r"section\.panel \{[^}]*scroll-margin-top: 72px")
+        self.assertNotIn("top.style.top", self.html)
+        self.assertNotIn("function pin", self.html)
+
+    def test_the_kpi_strip_is_an_auto_fill_grid_of_compact_tiles(self):
+        self.assertRegex(self.css, r"\.kpis \{[^}]*grid-template-columns: repeat\(auto-fill, minmax\(180px, 1fr\)\)[^}]*gap: 12px")
+        self.assertRegex(self.css, r"\.kpi-name \{[^}]*font: 600 12px[^}]*letter-spacing: \.04em[^}]*text-transform: uppercase[^}]*color: var\(--text-muted\)")
+        self.assertRegex(self.css, r"\.kpi-value \{[^}]*font: 700 24px")
+        self.assertRegex(self.css, r"svg\.spark \{[^}]*width: 100%[^}]*height: 28px")
+        self.assertRegex(self.css, r"\.kpi\.unknown \.kpi-value \{[^}]*color: var\(--text-muted\)")
+        self.assertNotRegex(self.css, r"\.kpi\.unknown \{[^}]*dashed")
+        for tone in ("up", "down", "flat"):
+            self.assertRegex(self.css, r"\.pill\.%s \{[^}]*background: var\(--%s-bg\)[^}]*color: var\(--%s-fg\)" % (tone, tone, tone))
+
+    def test_at_390px_nothing_forces_a_sideways_scroll(self):
+        phone = self.block("@media (max-width: 480px) {")
+        self.assertRegex(phone, r"\.page \{[^}]*padding:[^;}]*16px")
+        self.assertRegex(self.css, r"\.content \{[^}]*min-width: 0")
+        self.assertRegex(self.css, r"\.scroll \{[^}]*overflow-x: auto")
+        self.assertRegex(self.css, r"@media \(max-width: 640px\) \{ table\.stack thead \{ display: none; \}[^@]*table\.stack td \{")
+
+    def test_print_keeps_light_tokens_hides_the_chrome_and_prints_every_tab(self):
+        printed = self.block("@media print {")
+        self.assertIn(':root, :root[data-theme="dark"], :root:not([data-theme="light"]) {', printed)
+        for token in ("--bg: #ffffff", "--surface: #ffffff", "--text: hsl(222 47% 11%)", "--bar: #ffffff"):
+            self.assertIn(token, printed)
+        hidden = " ".join(re.findall(r"([^{}]*)\{ display: none !important; \}", printed))
+        for selector in ("nav.tabs", ".filterbar", ".fb-status", ".theme-toggle"):
+            self.assertIn(selector, hidden)
+        self.assertRegex(self.html, r"@media print[^@]*section\.tab\[hidden\]\s*\{\s*display: block !important")
+        self.assertEqual(self.css.count("@media print"), 1)
+
+
+class ReviewFixesTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.rows = cm.load_rows(str(FIXTURE))
+        cls.html = report.build_html(rows=cls.rows, verdicts=acme_verdicts(), grade=acme_grade(), currency="USD", title="Acme")
+        cls.css = squash(re.search(r"<style>(.*?)</style>", cls.html, re.S).group(1))
+
+    def test_every_chart_svg_scales_with_its_card_and_has_no_fixed_size(self):
+        svgs = re.findall(r"<figure class=\"chart[^\"]*\"><svg[^>]*>", self.html)
+        self.assertGreater(len(svgs), 5)
+        for tag in svgs:
+            self.assertIn("viewBox=", tag)
+            self.assertNotRegex(tag, r'\swidth="(?!100%)|\sheight="')
+        self.assertRegex(self.css, r"\.chart svg \{[^}]*width: 100%[^}]*height: auto[^}]*max-height: 360px")
+        self.assertNotRegex(self.css, r"\.chart(\.wide)? svg \{[^}]*max-width: 6[04]0px")
+
+    def test_wide_charts_are_drawn_wide_enough_to_fill_a_desktop_card_under_the_height_cap(self):
+        import charts
+        svg = charts.combo_chart(["2026-03-01", "2026-03-02"], [1.0, 2.0], [1.0, 2.0], "a", "b", "x")
+        w, h = map(int, re.search(r'viewBox="0 0 (\d+) (\d+)"', svg).groups())
+        self.assertGreaterEqual(w / h, 2.8)
+        svg = charts.pareto_chart([3.0, 2.0], [60.0, 100.0], None, 1, "x", "USD")
+        w, h = map(int, re.search(r'viewBox="0 0 (\d+) (\d+)"', svg).groups())
+        self.assertGreaterEqual(w / h, 2.8)
+
+    def test_the_all_missing_note_is_a_compact_info_note_not_a_warning(self):
+        tab = report.build_html(rows=NO_VIDEO, currency="USD", title="Acme").split('id="tab-overview"')[1].split('id="tab-pareto"')[0]
+        note = re.search(r'<div class="banner".*?</div>', tab, re.S).group(0)
+        self.assertRegex(note, r'<svg class="ico"[^>]*aria-hidden="true"')
+        rule = re.search(r"\.banner \{[^}]*\}", self.css).group(0)
+        for want in ("background: var(--surface-muted)", "color: var(--text-muted)", "font-size: 13px"):
+            self.assertIn(want, rule)
+        self.assertNotIn("warning", rule)
+        self.assertNotIn("border-left-width", rule)
+
+    def test_prior_period_is_said_once_in_the_caption_when_no_tile_has_one(self):
+        html, _ = panels.kpi_strip(panels.Ctx(rows=cm.load_rows(str(FIXTURE)), currency="USD"))
+        self.assertEqual(html.count("No prior period supplied"), 1)
+        self.assertNotIn("kpi-delta", html)
+        prior = [dict(r, spend=(r.get("spend") or 0) / 2) for r in cm.load_rows(str(FIXTURE))]
+        with_prior, _ = panels.kpi_strip(panels.Ctx(rows=cm.load_rows(str(FIXTURE)), currency="USD", prior=prior))
+        self.assertNotIn("No prior period supplied", with_prior)
+        self.assertEqual(with_prior.count("kpi-delta"), 12)
+
+    def test_the_video_sub_label_is_short_and_muted(self):
+        html, _ = panels.kpi_strip(panels.Ctx(rows=cm.load_rows(str(FIXTURE)), currency="USD"))
+        self.assertRegex(html, r'<p class="kpi-note">video ads \u00b7 \d+ of \d+</p>')
+        self.assertRegex(self.css, r"\.kpi-note \{[^}]*color: var\(--text-muted\)")

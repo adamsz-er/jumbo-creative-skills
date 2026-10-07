@@ -39,6 +39,11 @@ def record(ad_id, spend, **extra):
     return base
 
 
+PARTIAL_ROWS = [{"ad_id": i, "ad_name": "ad %s | static | c | bau | p | t | 2026-03-01" % i, "date": "2026-03-01", "spend": float(sp),
+                 "impressions": 10000.0, "conversion_value": float(v), "conversions": float(c)}
+                for i, sp, v, c in (("a", 100, 500, 5), ("b", 80, 300, 4), ("c", 60, 100, 2), ("d", 40, 60, 1))]
+
+
 def page_data(html):
     block = re.search(r'<script type="application/json" id="ad-data">(.*?)</script>', html, re.S)
     assert block, "no ad-data block"
@@ -256,6 +261,68 @@ class SubtotalTest(unittest.TestCase):
         self.assertEqual([g["key"] for g in interact.group_subtotals(recs, "format")], ["video", "static", None])
 
 
+class OneBasisTest(unittest.TestCase):
+    RECS = [record("a", 100, verdict="keep", conversions=10.0, conversion_value=300.0),
+            record("b", 100, verdict="keep", conversions=5.0, conversion_value=None),
+            record("c", 100, verdict="keep", conversions=None, conversion_value=300.0)]
+
+    def test_roas_and_cpa_divide_over_every_ad_and_a_missing_value_counts_as_none(self):
+        total = interact.totals_of(self.RECS, 300.0)
+        self.assertAlmostEqual(total["roas"], 600 / 300)
+        self.assertAlmostEqual(total["cpa"], round(300 / 15, 2))
+        self.assertEqual(total["roas_text"], "2.00x")
+        self.assertEqual(total["cpa_text"], "%.2f" % (300 / 15))
+
+    def test_no_ad_count_suffix_is_ever_added(self):
+        total = interact.totals_of(self.RECS, 300.0)
+        self.assertNotIn(" ads)", total["roas_text"] + total["cpa_text"])
+        self.assertNotIn("roas_suffix", total)
+        self.assertNotIn("cpa_n", total)
+
+    def test_roas_and_cpa_are_na_only_when_no_ad_has_any_value_or_purchase(self):
+        bare = [record("a", 100, verdict="keep"), record("b", 50, verdict="keep")]
+        total = interact.totals_of(bare, 150.0)
+        self.assertIsNone(total["roas"])
+        self.assertIsNone(total["cpa"])
+        self.assertEqual(total["roas_text"], "n/a (missing purchase value)")
+        self.assertEqual(total["cpa_text"], "n/a (missing purchases)")
+        zero = interact.totals_of([record("a", 100, conversions=0.0, conversion_value=0.0)], 100.0)
+        self.assertEqual(zero["cpa_text"], "n/a (zero purchases)")
+
+    def test_the_unfiltered_summary_equals_the_kpi_tiles_when_some_ads_have_no_value(self):
+        rows = [dict(r, conversion_value=None, conversions=None) if r["ad_id"] in ("c", "d") else r for r in PARTIAL_ROWS]
+        ctx = panels.Ctx(rows=rows, currency="USD")
+        total = interact.totals_of(ctx.records, None, ctx.money)
+        html, _ = panels.kpi_strip(ctx)
+        tile = {name: value for name, value in re.findall(r'<p class="kpi-name">([^<]*)</p>.*?<p class="kpi-value">([^<]*)</p>', html, re.S)}
+        self.assertEqual(total["roas_text"], tile["ROAS"])
+        self.assertEqual(total["cpa_text"], tile["CPA (USD)"])
+
+
+class CoverageNoteTest(unittest.TestCase):
+    RECS = OneBasisTest.RECS
+
+    def test_a_partly_recorded_operand_adds_a_plain_coverage_note_to_the_summary(self):
+        total = interact.totals_of(self.RECS, 300.0)
+        self.assertEqual(total["roas_note"], "value recorded on 2 of 3 ads")
+        self.assertEqual(total["cpa_note"], "purchases recorded on 2 of 3 ads")
+        self.assertEqual(total["roas_text"], "2.00x")
+
+    def test_a_fully_recorded_or_fully_missing_operand_adds_no_note(self):
+        full = [record("a", 100, conversions=1.0, conversion_value=5.0), record("b", 50, conversions=1.0, conversion_value=5.0)]
+        done = interact.totals_of(full, 150.0)
+        self.assertEqual((done["roas_note"], done["cpa_note"]), ("", ""))
+        bare = interact.totals_of([record("a", 100)], 100.0)
+        self.assertEqual((bare["roas_note"], bare["cpa_note"]), ("", ""))
+
+    def test_the_group_header_line_carries_the_note_in_the_page(self):
+        rows = [dict(r, conversion_value=None, conversions=None) if r["ad_id"] in ("c", "d") else r for r in PARTIAL_ROWS]
+        page = report.build_html(rows=rows, currency="USD", title="Acme")
+        line = re.search(r'<p class="group-sub">.*?</p>', page).group(0)
+        self.assertIn("value recorded on 2 of 4 ads", line)
+        self.assertIn("purchases recorded on 2 of 4 ads", line)
+
+
 class ImprovementTest(unittest.TestCase):
     def grade(self, step, action, also=()):
         return {"diagnosis": {"step": step, "metrics": [], "also_weak": list(also), "action": action, "summary": step}}
@@ -352,8 +419,9 @@ class WaysToImproveTest(Fixture):
 class StructureTest(Fixture):
     def test_the_gallery_is_the_last_panel_of_keep_kill_and_ways_follows_do_first(self):
         ids = re.findall(r'<section class="card panel" id="panel-([a-z-]+)"', self.html)
-        self.assertEqual(ids, ["kpis", "time", "do-first", "improve", "funnel", "pareto", "head-tail", "board", "fatigue", "all-ads",
-                               "format", "white-space", "briefing"])
+        self.assertEqual(ids, ["kpis", "time", "money-by-format", "do-first", "improve", "funnel", "pareto", "head-tail", "board", "fatigue",
+                               "ad-age", "launches", "all-ads", "format-scorecard", "format-benchmarks", "formats-over-time", "spend-return", "hook-hold", "retention", "ad-types", "heatmap", "stage-heatmap", "no-creative", "segments",
+                               "gaps", "briefs", "copy", "prompts"])
 
     def test_with_scripts_off_the_default_grouping_is_in_the_page_and_nothing_is_hidden(self):
         gallery = re.search(r'id="panel-all-ads".*?</section>\s*</section>', self.html, re.S).group(0)
@@ -362,11 +430,11 @@ class StructureTest(Fixture):
         for text in ("ads", "of spend", "ROAS", "CPA"):
             self.assertIn(text, gallery)
         self.assertIn("more", gallery)
-        for tag in re.findall(r"<[a-z][^>]*>", self.html.split("<main>")[1].split("</main>")[0]):
-            self.assertNotRegex(tag, r"\bhidden\b")
+        for tag in re.findall(r"<[a-z][^>]*>", re.search(r"<main[^>]*>(.*?)</main>", self.html, re.S).group(1)):
+            self.assertNotRegex(tag, r"(?<![-\w])hidden\b")
             self.assertNotRegex(tag, r'style="[^"]*(display\s*:\s*none|visibility\s*:\s*hidden)')
         self.assertRegex(self.html, r"\.filterbar \{[^}]*display: none")
-        self.assertRegex(self.html, r"\.js \.filterbar \{[^}]*display: block")
+        self.assertRegex(self.html, r"\.js \.filterbar \{[^}]*display: flex")
 
     def test_the_inline_script_is_valid_javascript(self):
         if not HAS_NODE:
@@ -379,7 +447,7 @@ class StructureTest(Fixture):
         self.assertEqual(done.returncode, 0, done.stderr)
 
     def test_filter_chips_are_toggle_buttons_and_the_bar_is_labelled(self):
-        bar = re.search(r'<div class="filterbar".*?(?=</header>)', self.html, re.S).group(0)
+        bar = re.search(r'<div class="filterbar".*?(?=<main)', self.html, re.S).group(0)
         self.assertIn("aria-label=", bar.split(">")[0])
         buttons = re.findall(r"<button[^>]*>", bar)
         self.assertTrue(buttons)
@@ -393,9 +461,10 @@ class StructureTest(Fixture):
             self.assertIn(label, bar)
         self.assertIn("account-wide", bar)
 
-    def test_filter_bar_sits_in_the_sticky_header_after_the_tabs(self):
-        header = re.search(r'<header class="top">.*?</header>', self.html, re.S).group(0)
-        self.assertLess(header.index('<nav class="tabs"'), header.index('class="filterbar"'))
+    def test_the_filter_row_opens_the_content_column_beside_the_tabs_and_is_not_in_the_header(self):
+        self.assertNotIn("filterbar", re.search(r'<header class="top">.*?</header>', self.html, re.S).group(0))
+        self.assertLess(self.html.index('<nav class="tabs"'), self.html.index('class="filterbar"'))
+        self.assertLess(self.html.index('class="filterbar"'), self.html.index("<main"))
 
     def test_the_dialog_is_labelled_and_the_script_fills_it_from_the_details_it_mirrors(self):
         dialog = re.search(r"<dialog[^>]*>.*?</dialog>", self.html, re.S).group(0)
@@ -451,8 +520,9 @@ class StructureTest(Fixture):
         self.assertIn("hook-writer", card)
         self.assertIn('data-action="copy-prompt"', card)
 
-    def test_the_gallery_has_group_sort_and_previews_only_controls(self):
-        gallery = re.search(r'id="panel-all-ads".*?</section>\s*</section>', self.html, re.S).group(0)
+    def test_the_filter_row_has_group_sort_and_previews_only_controls(self):
+        gallery = re.search(r'<div class="filterbar".*?(?=<main)', self.html, re.S).group(0)
+        self.assertEqual(gallery.count('data-action="group"'), 2)
         for text in ('data-action="group"', 'data-action="sort"', 'data-action="previews-only"', "Previews only"):
             self.assertIn(text, gallery)
         for option in ("Verdict", "Format", "Concept", "Ad type", "Creator"):
@@ -520,6 +590,30 @@ class ScriptLogicTest(Fixture):
         self.assertAlmostEqual(out["one"]["share"], 50.0)
         self.assertEqual(out["none"]["roas_text"], "n/a (missing purchase value)")
         self.assertEqual(out["none"]["cpa_text"], "n/a (missing purchases)")
+
+    def test_the_browser_adds_the_same_coverage_note_as_python(self):
+        recs = OneBasisTest.RECS
+        py = interact.totals_of(recs, 300.0)
+        js = json.loads(node_run(self.html, "console.log(JSON.stringify(CR.summary(%s, 3, 300)));" % json.dumps(recs)))
+        self.assertEqual((js["roas_note"], js["cpa_note"]), (py["roas_note"], py["cpa_note"]))
+        done = json.loads(node_run(self.html, "console.log(JSON.stringify(CR.summary([{spend: 5, conversions: 1, conversion_value: 2}], 1, 5)));"))
+        self.assertEqual((done["roas_note"], done["cpa_note"]), ("", ""))
+
+    def test_summary_divides_over_every_ad_with_no_count_suffix(self):
+        body = ("var ads = [{spend: 100, conversions: 10, conversion_value: 300}, {spend: 100, conversions: null, conversion_value: null}];"
+                "var s = CR.summary(ads, 2, 200); console.log(JSON.stringify(s));")
+        out = json.loads(node_run(self.html, body))
+        self.assertAlmostEqual(out["roas"], 1.5)
+        self.assertAlmostEqual(out["cpa"], 20.0)
+        self.assertEqual(out["roas_text"], "1.50x")
+        self.assertEqual(out["cpa_text"], "20.00")
+        self.assertNotIn("roas_suffix", out)
+
+    def test_the_filter_count_adds_the_search_and_every_chip_and_view(self):
+        body = ("var s = CR.emptyState(); var none = CR.activeCount(s); s.q = 'x'; s.facets.format = ['static', 'video']; s.facets.verdict = ['pause'];"
+                "s.fat = true; s.top = 5; var many = CR.activeCount(s);"
+                "console.log(JSON.stringify({none: none, many: many, active: CR.active(s)}));")
+        self.assertEqual(json.loads(node_run(self.html, body)), {"none": 0, "many": 6, "active": True})
 
     def test_search_matches_label_name_and_id_case_insensitively(self):
         body = ("var ads = [{id: '99', label: 'Sunrise Story', name: 'x | y'}, {id: '5', label: 'other', name: 'Boot-Launch'}];"
@@ -604,12 +698,12 @@ class ReviewScriptTest(Fixture):
                 record("c", 100, verdict="keep", conversions=None, conversion_value=300.0)]
         py = interact.group_subtotals(recs, "verdict")[0]
         js = self.js("console.log(JSON.stringify(CR.subtotals(%s, 'verdict', 300)[0]));" % json.dumps(recs))
-        for field in ("roas_text", "cpa_text", "roas_n", "cpa_n"):
+        for field in ("roas_text", "cpa_text"):
             self.assertEqual(js[field], py[field], field)
         self.assertAlmostEqual(js["roas"], py["roas"], places=4)
         self.assertAlmostEqual(js["cpa"], py["cpa"], places=2)
-        self.assertEqual(py["roas_text"], "3.00x (2 of 3 ads)")
-        self.assertEqual(py["cpa_text"], "%.2f (2 of 3 ads)" % (200 / 15))
+        self.assertEqual(py["roas_text"], "2.00x")
+        self.assertEqual(py["cpa_text"], "%.2f" % (300 / 15))
 
 
 class ReviewPythonTest(Fixture):
@@ -629,10 +723,10 @@ class ReviewPythonTest(Fixture):
         tile = re.search(r'<div class="kpi[^"]*"><p class="kpi-name">Hook rate.*?</div></div>', html, re.S).group(0)
         self.assertIn("25.00%", tile)
         self.assertNotIn("12.50%", tile)
-        self.assertIn("video ads only (1 of 2 ads)", tile)
+        self.assertIn("video ads \u00b7 1 of 2", tile)
         hold = re.search(r'<div class="kpi[^"]*"><p class="kpi-name">Hold rate.*?</div></div>', html, re.S).group(0)
         self.assertIn("40.00%", hold)
-        self.assertIn("video ads only (1 of 2 ads)", hold)
+        self.assertIn("video ads \u00b7 1 of 2", hold)
 
     def test_the_funnel_rates_the_video_steps_on_video_impressions(self):
         html, _ = panels.funnel(panels.Ctx(rows=two_ads(), currency="USD"))

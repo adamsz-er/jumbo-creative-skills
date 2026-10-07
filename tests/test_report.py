@@ -1,3 +1,4 @@
+import html as html_lib
 import json
 import re
 import subprocess
@@ -6,11 +7,13 @@ import tempfile
 import unittest
 from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "skills" / "creative-report" / "scripts"
 sys.path.insert(0, str(SCRIPT))
 
+import benchmarks  # noqa: E402
 import report  # noqa: E402
 
 FIXTURE = ROOT / "examples" / "acme" / "ads_daily.csv"
@@ -74,8 +77,8 @@ class ReportTest(unittest.TestCase):
             self.assertIn(heading, self.html)
 
     def test_tokens_and_svg(self):
-        self.assertIn("#7c3aed", self.html)
-        self.assertIn("#0a0227", self.html)
+        self.assertIn("--accent: hsl(251 97% 60%)", self.html)
+        self.assertIn("--bar: hsl(222 47% 8%)", self.html)
         self.assertIn("<svg", self.html)
         self.assertIn("prefers-color-scheme: dark", self.html)
         self.assertIn("@media print", self.html)
@@ -83,8 +86,11 @@ class ReportTest(unittest.TestCase):
     def test_no_external_scripts_and_only_font_hosts(self):
         self.assertNotIn("<script src=", self.html)
         self.assertNotRegex(self.html, r"<script[^>]+src=")
-        hosts = set(re.findall(r"https?://([^/\"'\s)]+)", self.html))
-        self.assertLessEqual(hosts, {"fonts.googleapis.com", "fonts.gstatic.com"})
+        fonts = {"fonts.googleapis.com", "fonts.gstatic.com"}
+        method = "".join(re.findall(r"<pre>.*?</pre>", self.html, re.S))
+        self.assertLessEqual(set(re.findall(r"https?://([^/\"'\s)]+)", self.html.replace(method, ""))), fonts)
+        cited = {urlparse(e["url"]).netloc for e in benchmarks.load()}
+        self.assertLessEqual(set(re.findall(r"https?://([^/\"'\s)]+)", method)), fonts | cited)
 
     def test_every_missing_note_from_inputs_is_surfaced(self):
         notes = set()
@@ -124,6 +130,41 @@ class ReportTest(unittest.TestCase):
         self.assertIn('class="grad"', self.html)
         self.assertIn("Acme", self.html)
 
+    def heading_text(self, **kw):
+        html = report.build_html(rows=report.cm.load_rows(str(FIXTURE)), **kw)
+        h1 = re.search(r"<h1>(.*?)</h1>", html, re.S).group(1)
+        return html_lib.unescape(re.sub(r"<[^>]+>", "", h1)), html_lib.unescape(re.search(r"<title>(.*?)</title>", html).group(1))
+
+    def test_scope_goes_in_the_title_after_the_account(self):
+        self.assertEqual(self.heading_text(title="Acme", scope="Prospecting"), ("Acme · Prospecting creative review",) * 2)
+        self.assertEqual(self.heading_text(title="Acme"), ("Acme creative review",) * 2)
+
+    def test_scope_is_escaped_and_blank_scope_is_ignored(self):
+        self.assertEqual(self.heading_text(title="Acme", scope="  "), ("Acme creative review",) * 2)
+        html = report.build_html(rows=report.cm.load_rows(str(FIXTURE)), title="Acme", scope="<b>x</b>")
+        self.assertNotIn("<b>x</b>", html)
+        self.assertIn("Acme · &lt;b&gt;x&lt;/b&gt; creative review", html)
+
+    def test_a_label_ending_in_the_letters_review_is_not_cut_mid_word(self):
+        self.assertEqual(self.heading_text(title="Acme Preview", scope="Retention"), ("Acme Preview \u00b7 Retention creative review",) * 2)
+        self.assertEqual(self.heading_text(title="Acme Overview", scope="Retention"), ("Acme Overview \u00b7 Retention creative review",) * 2)
+        self.assertEqual(self.heading_text(title="Acme review", scope="Retention"), ("Acme \u00b7 Retention creative review",) * 2)
+        self.assertEqual(self.heading_text(title="Acme Preview"), ("Acme Preview creative review",) * 2)
+
+    def test_an_explicit_title_wins_over_the_profile_name(self):
+        profile = "# Creative profile: Profile Name\n- Name: Profile Name\n"
+        self.assertEqual(self.heading_text(title="Explicit", profile=profile), ("Explicit creative review",) * 2)
+        self.assertEqual(self.heading_text(profile=profile), ("Profile Name creative review",) * 2)
+        self.assertEqual(self.heading_text(title="Explicit", profile=profile, scope="Retention"), ("Explicit · Retention creative review",) * 2)
+
+    def test_a_title_already_ending_in_review_keeps_one_review(self):
+        self.assertEqual(self.heading_text(title="Acme creative review", scope="Retention"), ("Acme · Retention creative review",) * 2)
+
+    def test_the_scope_flag_reaches_the_page(self):
+        out = Path(self._tmp.name) / "scope.html"
+        self.assertEqual(report.main([str(FIXTURE), "--title", "Acme", "--scope", "Prospecting", "-o", str(out)]), 0)
+        self.assertIn("Acme · Prospecting creative review", out.read_text(encoding="utf-8"))
+
     def test_verdict_and_mix_content_rendered(self):
         self.assertIn("Pause it:", self.html)
         self.assertIn("ugc-video", self.html)
@@ -138,8 +179,9 @@ class ReportTest(unittest.TestCase):
 
     def test_the_committed_example_does_not_claim_a_reconcile_it_never_ran(self):
         example = (ROOT / "examples" / "acme" / "report.html").read_text(encoding="utf-8")
-        self.assertIn('<span class="status warn">Not reconciled</span>', example)
-        self.assertNotIn('<span class="status ok">', example)
+        self.assertIn(">Totals not checked</span>", example)
+        self.assertNotIn('class="status ok"', example)
+        self.assertNotIn('class="status warn"', example)
 
     def test_cli_flags_reach_the_page(self):
         out = Path(self._tmp.name) / "flags.html"
@@ -150,7 +192,7 @@ class ReportTest(unittest.TestCase):
                             "--top-n", "4", "--pareto-share", "75", "--previews", str(Path(self._tmp.name) / "none"), "-o", str(out)])
         self.assertEqual(code, 0)
         html = out.read_text(encoding="utf-8")
-        for text in ("Meta ads connector", "7-day click", "Incomplete 8%", "98,765", "N=4", "75%", "placeholders"):
+        for text in ("Meta ads connector", "7-day click", "Totals don't match (8% short)", "98,765", "N=4", "75%", "placeholders"):
             self.assertIn(text, html)
 
     def test_csv_mode_runs_and_names_missing_sections(self):
@@ -160,7 +202,7 @@ class ReportTest(unittest.TestCase):
         for heading in HEADINGS:
             self.assertIn(heading, html)
         self.assertIn("keep-or-kill", html)
-        self.assertEqual(html.count('data-state="empty"'), 6)
+        self.assertEqual(html.count('data-state="empty"'), 13)
         parser = Balance()
         parser.feed(html)
         self.assertEqual((parser.errors, parser.stack), ([], []))

@@ -187,8 +187,8 @@ class ReportOptionsTest(TmpCase):
         profile = self.dir / "p.md"
         profile.write_text("# Creative profile: Brand From Profile\n")
         _, html, _ = self.build("--profile", str(profile), "--title", "Acme", "--where", "market=US")
-        self.assertIn("<title>Acme, market US creative review</title>", html)
-        self.assertIn("<span>Scope</span> market US", html)
+        self.assertIn("<title>Acme \u00b7 market US creative review</title>", html)
+        self.assertIn('<span class="scope-label">Scope</span> <b>market US</b>', html)
         self.assertIn("Scope: market US only", html)
 
     def test_profile_brand_is_used_when_there_is_no_title(self):
@@ -196,7 +196,7 @@ class ReportOptionsTest(TmpCase):
         profile.write_text("# Creative profile: Brand From Profile\n")
         _, html, _ = self.build("--profile", str(profile))
         self.assertIn("<title>Brand From Profile creative review</title>", html)
-        self.assertIn("<span>Scope</span> all ads in the data", html)
+        self.assertIn('<span class="scope-label">Scope</span> <b>all ads in the data</b>', html)
 
     def test_key_map_reaches_the_report_facets(self):
         _, html, _ = self.build("--key-map", "PX=concept,4=creator")
@@ -233,7 +233,7 @@ class PriorTotalsTest(unittest.TestCase):
         prior = [{"ad_id": a["ad_id"], "ad_name": a["ad_name"], "date_stop": "2026-02-28", "spend": a["spend"] / 2,
                   "impressions": a["impressions"], "conversions": a.get("conversions")} for a in cm.aggregate_by_ad(rows)]
         html, _ = panels.kpi_strip(panels.Ctx(rows=rows, prior=cm.load_rows(prior), currency="USD"))
-        self.assertIn("+100.0% vs prior period", html)
+        self.assertIn("+100.0%</span> vs prior period", html)
         self.assertNotIn("no prior period", html)
 
 

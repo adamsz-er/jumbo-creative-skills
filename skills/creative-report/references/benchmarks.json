@@ -1,0 +1,132 @@
+[
+  {
+    "source": "Lebesgue, Facebook Ads Creatives Benchmarks",
+    "url": "https://lebesgue.io/facebook-ads/facebook-ads-creatives-benchmarks-and-best-practices",
+    "published": "2024-07-08",
+    "sample": "ecommerce advertisers, medians, about 18.6 million USD of ad spend",
+    "metric": "ctr",
+    "metric_definition": "Click-through rate; the source does not say link clicks or all clicks",
+    "unit": "pct",
+    "formats": {
+      "image": {
+        "value": 0.91
+      },
+      "video": {
+        "value": 1.0
+      },
+      "carousel": {
+        "value": 0.9
+      },
+      "dynamic": {
+        "value": 0.97
+      },
+      "catalog": {
+        "value": 1.49
+      }
+    },
+    "caveat": "The source does not say whether clicks are link clicks or all clicks.",
+    "definition": "not_stated"
+  },
+  {
+    "source": "Lebesgue, Facebook Ads Creatives Benchmarks",
+    "url": "https://lebesgue.io/facebook-ads/facebook-ads-creatives-benchmarks-and-best-practices",
+    "published": "2024-07-08",
+    "sample": "ecommerce advertisers, medians, about 18.6 million USD of ad spend",
+    "metric": "cpm",
+    "metric_definition": "Cost per 1,000 impressions",
+    "unit": "money",
+    "currency": "USD",
+    "formats": {
+      "image": {
+        "value": 6.0
+      },
+      "video": {
+        "value": 6.9
+      },
+      "carousel": {
+        "value": 5.13
+      },
+      "dynamic": {
+        "value": 6.9
+      },
+      "catalog": {
+        "value": 6.0
+      }
+    },
+    "caveat": "Figures are approximate and in US dollars.",
+    "definition": "matches"
+  },
+  {
+    "source": "Lebesgue, Facebook Ads Creatives Benchmarks",
+    "url": "https://lebesgue.io/facebook-ads/facebook-ads-creatives-benchmarks-and-best-practices",
+    "published": "2024-07-08",
+    "sample": "ecommerce advertisers, medians, about 18.6 million USD of ad spend",
+    "metric": "cvr",
+    "metric_definition": "Conversion rate; the source does not give the denominator",
+    "unit": "pct",
+    "formats": {
+      "image": {
+        "value": 1.5
+      },
+      "video": {
+        "value": 1.5
+      },
+      "carousel": {
+        "value": 1.5
+      },
+      "dynamic": {
+        "value": 1.7
+      },
+      "catalog": {
+        "value": 1.6
+      }
+    },
+    "caveat": "The source does not say what the rate is measured against.",
+    "definition": "not_stated"
+  },
+  {
+    "source": "Lebesgue, Facebook Ads Creatives Benchmarks",
+    "url": "https://lebesgue.io/facebook-ads/facebook-ads-creatives-benchmarks-and-best-practices",
+    "published": "2024-07-08",
+    "sample": "ecommerce advertisers, medians, about 18.6 million USD of ad spend",
+    "metric": "roas",
+    "metric_definition": "Purchase value divided by spend",
+    "unit": "x",
+    "formats": {
+      "image": {
+        "value": 1.55
+      },
+      "video": {
+        "value": 1.39
+      },
+      "carousel": {
+        "value": 2.1
+      },
+      "dynamic": {
+        "value": 1.64
+      },
+      "catalog": {
+        "value": 3.05
+      }
+    },
+    "caveat": "Attribution window and sales mix are not stated.",
+    "definition": "matches"
+  },
+  {
+    "source": "Billo, Hook to Hold",
+    "url": "https://billo.app/blog/hook-rate-to-hold-rate/",
+    "published": "2026-09-24",
+    "sample": "88,329 sales video ads on Meta, first half of 2026, average with the top categories as the high end",
+    "metric": "hook_rate",
+    "metric_definition": "3-second video plays divided by impressions",
+    "unit": "pct",
+    "formats": {
+      "video": {
+        "value": 25.44,
+        "high": 29
+      }
+    },
+    "caveat": "The source gives one figure for all video, with no split by format.",
+    "definition": "matches"
+  }
+]

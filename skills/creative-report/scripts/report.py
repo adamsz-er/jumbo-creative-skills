@@ -4,7 +4,7 @@
 Usage:
   python3 report.py ads.csv --verdicts verdicts.json [--profile creative-profile.md] \\
       [--source "Meta ads connector"] [--completeness reconciled] [--where market=US] \\
-      [--previews DIR] [--thumbs DIR] -o report.html
+      [--previews DIR] [--thumbs DIR] [--breakdowns FILE] [--briefs FILE] -o report.html
   python3 report.py --check report.html
 
 Standard library only. The page has the same header, six tabs and panels in the
@@ -55,16 +55,19 @@ def lockup(tag: str) -> str:
             % (pair("Jumbo", "jumbo-logo.svg", "jumbo-logo-dark.svg", 1), pair("Elephant Room", "er-logo-dark.svg", "er-logo.svg", 2)))
 
 
+UNCHECKED_TIP = "Pull the account totals for the same window to check nothing is missing"
+
+
 def completeness_badge(value: Optional[str]) -> str:
-    """The reconcile result as a badge: green Reconciled, red Incomplete <pct>%, amber Not reconciled."""
+    """The reconcile result as a badge: green Reconciled, amber "Totals don't match" when a check ran and fell short, a neutral grey "Totals not checked" when none ran."""
     if value is None:
-        return '<span class="status warn">Not reconciled</span>'
+        return '<span class="status neutral" title="%s">Totals not checked</span>' % esc(UNCHECKED_TIP)
     if value.strip().lower() == "reconciled":
         return '<span class="status ok">Reconciled</span>'
     found = re.fullmatch(r"incomplete:\s*(\d+(?:\.\d+)?)\s*%?", value.strip(), re.I)
     if not found:
         raise ValueError('--completeness must be "reconciled" or "incomplete:<percent>", got %r' % value)
-    return '<span class="status bad">Incomplete %s%%</span>' % esc(found.group(1))
+    return '<span class="status warn">Totals don\'t match (%s%% short)</span>' % esc(found.group(1))
 
 
 def collect_notes(grade, verdicts, mix) -> List[str]:
@@ -107,19 +110,48 @@ def brand_from_profile(text: Optional[str]) -> Optional[str]:
     return match.group(1).strip() if match else None
 
 
-def heading_for(label: Optional[str]) -> str:
-    """"<account label> creative review", the last word in the gradient; a label already ending in review is kept."""
+def heading_for(label: Optional[str], scope: Optional[str] = None) -> str:
+    """"<account> · <scope> creative review" (no scope: "<account> creative review"), the last word in the gradient; a label already ending in review is kept once."""
     text = (label or "").strip()
-    if not text:
+    scope = (scope or "").strip()
+    if scope:
+        text = re.sub(r"(?:^|\s+)(?:creative\s+)?review$", "", text, flags=re.I).strip()
+        text = ("%s · %s" % (text, scope)) if text else scope
+        text += " creative review"
+    elif not text:
         text = "Creative review"
-    elif not text.lower().endswith("review"):
+    elif not re.search(r"(?:^|\s)review$", text, re.I):
         text += " creative review"
     words = text.split()
     return (esc(" ".join(words[:-1])) + " " if len(words) > 1 else "") + '<span class="grad">%s</span>' % esc(words[-1]), text
 
 
+MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+ICON_ATTRS = 'class="ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+TAB_ICONS = {
+    "overview": '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
+    "pareto": '<line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/>',
+    "keep-kill": '<path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>',
+    "format": ('<rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/>'
+               '<line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/>'
+               '<line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/>'),
+    "white-space": '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>',
+    "briefing": ('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>'
+                 '<line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>'),
+}
+
+
+def format_window(start: Optional[str], end: Optional[str]) -> str:
+    """"7 Sep \u2013 6 Oct 2026"; both years are named only when the window crosses a year."""
+    if not start or not end:
+        return "n/a (no dates)"
+    first, last = dt.date.fromisoformat(start), dt.date.fromisoformat(end)
+    head = "%d %s" % (first.day, MONTHS[first.month - 1]) + ("" if first.year == last.year else " %d" % first.year)
+    return "%s \u2013 %d %s %d" % (head, last.day, MONTHS[last.month - 1], last.year)
+
+
 def nav_html() -> str:
-    links = "".join('<a href="#tab-%s">%s</a>' % (tab_id, esc(title)) for tab_id, title, _ in panels.TABS)
+    links = "".join('<a href="#tab-%s"><svg %s>%s</svg>%s</a>' % (tab_id, ICON_ATTRS, TAB_ICONS[tab_id], esc(title)) for tab_id, title, _ in panels.TABS)
     return '<nav class="tabs" aria-label="Dashboard sections">%s</nav>' % links
 
 
@@ -131,8 +163,8 @@ def tabs_html(ctx: Ctx) -> str:
             content, state = fn(ctx)
             inner.append('<section class="card panel" id="panel-%s" data-state="%s"><p class="eyebrow">%s</p><h3>%s</h3>%s</section>'
                          % (panel_id, state, esc(eyebrow), esc(heading), content))
-        out.append('<section class="tab" id="tab-%s" aria-labelledby="h-%s"><h2 class="tab-title" id="h-%s">%s</h2>%s</section>'
-                   % (tab_id, tab_id, tab_id, esc(title), "".join(inner)))
+        banner = panels.missing_everywhere(ctx) if tab_id == "overview" else ""
+        out.append('<section class="tab" id="tab-%s" aria-label="%s">%s%s</section>' % (tab_id, esc(title), banner, "".join(inner)))
     return "".join(out)
 
 
@@ -162,8 +194,30 @@ def footer_html(ctx: Ctx, grade, verdicts, mix, brand: Optional[str], completene
         read = ["%s read from column %r" % (k.replace("_", " "), v) if v else "%s: no matching column" % k.replace("_", " ")
                 for k, v in sorted(ctx.funnel_headers.items())]
         lines.append("Funnel columns beyond the standard fields: %s (matched by normalised header)." % interact.plain_ids("; ".join(read)))
+    lines.append("Format, White space and Briefing settings (arbitrary defaults): formats graded against each other only with %d or more; "
+                 "heatmaps show the top %d concepts; %d example ads per format and %d video ads in the retention chart; brief starters use the top %d gaps "
+                 "and top %d Iterate ads; the copy table lists the top %d ads."
+                 % (panels.MIN_FORMATS, panels.HEATMAP_CONCEPTS, panels.STRIP_ADS, panels.RETENTION_ADS, panels.briefing.STARTER_GAPS,
+                    panels.briefing.STARTER_ITERATE, panels.COPY_ADS))
+    if ctx.retention_headers:
+        read = ["%s: %s" % (name, "read from column %r" % found if found else "not found") for name, found in
+                ((shown, ctx.retention_headers.get(step)) for step, _, shown, _ in panels.RETENTION_STEPS)]
+        read.append("average watch time: %s" % ("read from column %r" % ctx.retention_headers["average"] if ctx.retention_headers.get("average")
+                                                else "not found"))
+        lines.append("Video retention columns (matched by normalised header): %s." % "; ".join(read))
+    if ctx.copy_headers:
+        lines.append("Ad copy columns: %s." % "; ".join("%s: %s" % (k, "read from column %r" % v if v else "not found") for k, v in ctx.copy_headers.items()))
+    lines.append("Breakdown file: %s." % ("%d rows; segments read from %s" % (len(ctx.breakdowns), ", ".join("%s (column %r)" % kv for kv in ctx.breakdown_dims.items()) or "no known column")
+                                         if ctx.breakdowns else "not supplied"))
+    lines.append("Briefs: %s." % ("%d from the briefs file" % len(ctx.briefs) if ctx.briefs else "starters built from the gaps and Iterate verdicts, no briefs file"))
     lines.append("Reach and frequency: %s." % ("from the account-level file" if ctx.account else "not shown, they need an account-level pull"))
     lines.append("Prior period: %s." % ("supplied" if ctx.prior else "not supplied"))
+    lines.append("Chart settings (arbitrary defaults, set them from your own account): rolling averages cover %d days and need %d days with data; "
+                 "a format-week with fewer than %s impressions is left off its line; new ad-age buckets start at %s."
+                 % (panels.charts.SPARK_AVERAGE_DAYS, panels.charts.ROLLING_MIN_VALUES, format(panels.charts.MIN_WEEK_IMPRESSIONS, ","),
+                    panels.age_starts_text()))
+    lines.append("Industry figures: %s." % ("; ".join(panels.benchmarks.source_lines(ctx.benchmarks_used)) + ". Shown as context beside your own numbers; they never change a grade, verdict or the order of what to do first"
+                                           if ctx.benchmarks_used else "none shown"))
     lines.append(ctx.previews.summary())
     notes = collect_notes(grade, verdicts, mix)
     notes_html = '<ul class="note-list">%s</ul>' % "".join("<li>%s</li>" % n for n in notes) if notes else "<p>Nothing was missing from the inputs.</p>"
@@ -181,6 +235,7 @@ def build_html(rows: Optional[Sequence[Dict[str, Any]]] = None, grade: Optional[
                completeness: Optional[str] = None, account: Optional[Dict[str, float]] = None,
                prior: Optional[Sequence[Dict[str, Any]]] = None, previews: Optional[Previews] = None,
                top_n: int = panels.TOP_N_CARDS, pareto_share: float = panels.PARETO_SHARE,
+               breakdowns: Optional[Sequence[Dict[str, Any]]] = None, briefs: Optional[Any] = None,
                scope: Optional[str] = None, key_map: Optional[Dict[str, str]] = None) -> str:
     """Render the dashboard. `rows` are normalised ad rows (creative_metrics.load_rows).
 
@@ -188,12 +243,10 @@ def build_html(rows: Optional[Sequence[Dict[str, Any]]] = None, grade: Optional[
     (for example "market US") is added to it and to the header and footer.
     """
     ctx = Ctx(rows=rows, verdicts=verdicts, grade=grade, mix=mix, currency=currency, top_n=top_n,
-              pareto_share=pareto_share, account=account, prior=prior, previews=previews, key_map=key_map)
+              pareto_share=pareto_share, account=account, prior=prior, previews=previews, breakdowns=breakdowns, briefs=briefs,
+              key_map=key_map)
     brand = brand_from_profile(profile)
-    label = title or brand
-    if scope:
-        label = "%s, %s" % (label, scope) if label else scope
-    heading, page_title = heading_for(label)
+    heading, page_title = heading_for(title or brand, scope)
     start, end = cm.data_window(ctx.rows)
     window = "%s to %s" % (start, end) if start else "n/a (no dates)"
     generated = generated or dt.date.today().isoformat()
@@ -202,9 +255,9 @@ def build_html(rows: Optional[Sequence[Dict[str, Any]]] = None, grade: Optional[
     body = tabs_html(ctx)
     pool, data, bar = panels.pool_html(ctx), panels.data_block(ctx), panels.filter_bar(ctx)
     caps = {"max_kb": ctx.previews.max_kb, "budget_kb": ctx.previews.budget_kb}
-    meta = "".join('<li><span>%s</span> %s</li>' % (esc(k), esc(v)) for k, v in (
-        ("Window", window), ("Scope", scope or "all ads in the data"), ("Data source", source),
-        ("Currency", currency or "account currency (not stated)"), ("Attribution", attribution)))
+    meta = "".join('<div class="scope-seg"><span class="scope-label">%s</span> <b>%s</b></div>' % (esc(k), esc(v)) for k, v in (
+        ("Window", format_window(start, end)), ("Scope", scope or "all ads in the data"), ("Currency", currency or "account currency (not stated)"), ("Source", source),
+        ("Attribution", attribution)))
     fills = {"title": esc(page_title), "heading": heading, "sprite": ctx.previews.sprite(), "brand": lockup("h"),
              "filterbar": bar, "dialog": panels.DIALOG, "data": data, "pool": pool, "meta": meta, "badge": badge, "nav": nav_html(), "body": body,
              "footer": footer_html(ctx, grade, verdicts, mix, brand, completeness, attribution, source, window, generated, caps, scope)}
@@ -270,9 +323,9 @@ def check_html(text: str) -> List[str]:
                 problems.append("panel %s (%s) is missing" % (panel_id, heading))
             elif found.group(1) not in ("data", "empty", "partial"):
                 problems.append("panel %s has an unknown state %s" % (panel_id, found.group(1)))
-    if not re.search(r'class="status (ok|bad|warn)"', text):
+    if not re.search(r'class="status (ok|neutral|warn)"', text):
         problems.append("the completeness badge is missing")
-    if "<span>Scope</span>" not in text:
+    if '<span class="scope-label">Scope</span>' not in text:
         problems.append("the Scope line is missing from the header")
     hosts = sorted({h for h in re.findall(r'(?:src|href)\s*=\s*"https?://([^/"]+)', text) if h not in ALLOWED_HOSTS})
     if hosts:
@@ -304,11 +357,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     cm.add_run_arguments(parser, profile=False)
     parser.add_argument("--source", default="Ads Manager export", help='data source shown in the header (pass "Meta ads connector" for a connector pull)')
     parser.add_argument("--attribution", help="attribution setting shown in the header (default: not stated)")
-    parser.add_argument("--completeness", help='what from_mcp printed: "reconciled" or "incomplete:<percent>"; absent reads Not reconciled')
+    parser.add_argument("--completeness", help='what from_mcp printed: "reconciled" or "incomplete:<percent>"; absent reads Totals not checked')
     parser.add_argument("--account", help='JSON file with account-level "reach" and "frequency" for the window')
     parser.add_argument("--prior", help="CSV or JSON of the previous equal window, for change against prior period")
     parser.add_argument("--previews", help="folder of rendered ad previews named <ad_id>.<ext>")
     parser.add_argument("--thumbs", help="folder of small thumbnails or video stills named <ad_id>.<ext>")
+    parser.add_argument("--breakdowns", help="a second Ads Manager export with age, gender, placement or region columns, for the segment tables")
+    parser.add_argument("--briefs", help="a JSON list of briefs written with the creative-brief and hook-writer skills")
     parser.add_argument("--preview-max-kb", type=int, default=DEFAULT_MAX_KB, help="skip an image larger than this (default %(default)s)")
     parser.add_argument("--preview-budget-kb", type=int, default=DEFAULT_BUDGET_KB, help="stop embedding images past this total (default %(default)s)")
     parser.add_argument("--top-n", type=int, default=panels.TOP_N_CARDS, help="ad cards shown per list before the rest collapse (default %(default)s)")
@@ -332,8 +387,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                           source=args.source, attribution=args.attribution, completeness=args.completeness,
                           account=load_account(args.account), prior=prior,
                           previews=Previews(args.previews, args.thumbs, args.preview_max_kb, args.preview_budget_kb),
-                          top_n=args.top_n, pareto_share=args.pareto_share,
-                          scope=args.scope or cm.describe_where(where), key_map=key_map)
+                          top_n=args.top_n, pareto_share=args.pareto_share, scope=args.scope or cm.describe_where(where),
+                          breakdowns=cm.load_rows(args.breakdowns) if args.breakdowns else None, briefs=_load_json(args.briefs),
+                          key_map=key_map)
     except (OSError, ValueError) as error:
         parser.error(str(error))
     Path(args.output).write_text(page, encoding="utf-8")
