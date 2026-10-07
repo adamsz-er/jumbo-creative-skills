@@ -308,6 +308,41 @@ p.check { border-left: 3px solid var(--error); padding-left: 8px; }
 .col .ad-card { margin-bottom: 12px; }
 .col .ad-img svg.pv, .col .ad-img svg.ph { max-height: 220px; }
 .badge.cant, .badge.early { background: var(--ink-500); }
+/* charts: shared legend chips, metric switcher, tooltip, series states */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font: 600 12px/1 var(--font-head); padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--heading); cursor: pointer; }
+.chip[aria-pressed="false"] { opacity: 0.5; }
+.chip .sw { width: 10px; height: 10px; border-radius: 3px; }
+.seg { flex-wrap: wrap; gap: 2px; padding: 3px; border-radius: 999px; background: var(--surface-muted); margin: 0 0 8px; }
+.seg { display: none; }
+.switch.on .seg { display: inline-flex; }
+.seg button { font: 600 12.5px/1 var(--font-head); padding: 6px 12px; border-radius: 999px; border: 0; background: transparent; color: var(--text-muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--heading); box-shadow: var(--shadow); }
+.pick-title { margin: 12px 0 0; font: 700 13px/1.3 var(--font-head); color: var(--heading); }
+.js .switch.on .pick-title { display: none; }
+.pick[hidden] { display: none; }
+.multiples-wrap { margin-top: 8px; }
+.sources { font-size: 12.5px; margin: 4px 0; }
+#tip { position: fixed; z-index: 60; pointer-events: none; max-width: 260px; padding: 6px 9px; border-radius: 6px; background: var(--ink-900); color: #ffffff; font: 600 12px/1.4 var(--font-body); box-shadow: 0 4px 12px rgb(0 0 0 / .25); }
+#tip[hidden] { display: none; }
+svg .grid { stroke: var(--divider); stroke-width: 1; opacity: 0.6; }
+svg .hit { fill: transparent; stroke: none; }
+svg .line.line { stroke-width: 1.6; }
+svg .line.avg { stroke-width: 3.2; }
+svg .line.dashed { stroke-width: 2; stroke-dasharray: 6 4; }
+svg .pt { stroke: transparent; stroke-width: 12; paint-order: stroke; }
+svg .pt:focus { outline: none; stroke: var(--focus); stroke-width: 3; }
+svg .bar-bg { fill: var(--series-neutral); opacity: 0.22; }
+svg .bar-bg.solid { opacity: 0.7; }
+svg .area { opacity: 0.88; stroke: var(--surface); stroke-width: 1; }
+svg .seg-bar { stroke: var(--surface); stroke-width: 1; }
+svg .seg-bar:focus { outline: none; stroke: var(--focus); stroke-width: 2; }
+svg .band { fill: var(--series-neutral); opacity: 0.28; }
+svg .band-tick { stroke: var(--series-neutral); stroke-width: 3; stroke-linecap: round; }
+svg .count { font-size: 11px; }
+svg g.is-off { display: none; }
+svg g.is-off[data-dim] { display: inline; opacity: 0.12; }
+svg.spark path.avg { stroke-width: 1.2; opacity: 0.4; }
 .multiples { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
 .multiple h4 { margin: 0 0 4px; font: 700 14px/1.3 var(--font-head); color: var(--heading); }
 .multiple .chart { margin: 6px 0; }
@@ -483,6 +518,7 @@ section.panel > h4 { margin-top: 18px; }
   .multiple figure.chart.wide svg { min-width: 0; }
 }
 @media (max-width: 480px) {
+  svg .tk-wide { display: none; }
   .page { padding: 0 16px 40px; }
   .scope-seg { flex: 1 1 50%; padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--bar-border); }
   .js .filterbar { flex-wrap: wrap; gap: 6px 8px; max-height: 96px; padding: 8px 0; }
@@ -492,6 +528,8 @@ section.panel > h4 { margin-top: 18px; }
   th, td { padding: 9px 10px; }
 }
 @media print {
+  .js .switch.on .pick-title { display: block; }
+  .seg, .chips { display: none; }
   :root, :root[data-theme="dark"], :root:not([data-theme="light"]) {
     color-scheme: light;
     --bg: #ffffff;
@@ -1103,6 +1141,61 @@ section.panel > h4 { margin-top: 18px; }
     closed.forEach(function (d) { d.open = false; });
     show(current);
   });
+  var tipBox = null;
+  function box() {
+    if (!tipBox) {
+      tipBox = document.createElement("div");
+      tipBox.id = "tip";
+      tipBox.setAttribute("role", "tooltip");
+      tipBox.hidden = true;
+      document.body.appendChild(tipBox);
+    }
+    return tipBox;
+  }
+  function tipFor(node) { return node && node.closest ? node.closest("[data-tip]") : null; }
+  function showTip(target) {
+    var tipEl = box(), at = target.getBoundingClientRect();
+    tipEl.textContent = target.getAttribute("data-tip");
+    tipEl.hidden = false;
+    var w = tipEl.offsetWidth, h = tipEl.offsetHeight, y = at.top - h - 8;
+    tipEl.style.left = Math.min(Math.max(8, at.left + at.width / 2 - w / 2), window.innerWidth - w - 8) + "px";
+    tipEl.style.top = (y < 8 ? at.bottom + 8 : y) + "px";
+  }
+  function hideTip() { if (tipBox) { tipBox.hidden = true; } }
+  ["mouseover", "focusin"].forEach(function (name) {
+    document.addEventListener(name, function (event) { var t = tipFor(event.target); if (t) { showTip(t); } });
+  });
+  ["mouseout", "focusout"].forEach(function (name) {
+    document.addEventListener(name, function (event) { if (tipFor(event.target)) { hideTip(); } });
+  });
+  document.addEventListener("keydown", function (event) { if (event.key === "Escape") { hideTip(); } });
+  function pressed(btn) { return btn.getAttribute("aria-pressed") === "true"; }
+  $all(".chip").forEach(function (chip) {
+    chip.addEventListener("click", function () {
+      var scope = chip.closest("[data-scope]");
+      if (!scope) { return; }
+      var turningOff = pressed(chip);
+      if (turningOff && $all(".chip", scope).filter(pressed).length <= 1) { return; }
+      chip.setAttribute("aria-pressed", turningOff ? "false" : "true");
+      $all("g[data-series]", scope).forEach(function (g) {
+        if (g.getAttribute("data-series") === chip.getAttribute("data-series")) { g.classList.toggle("is-off", turningOff); }
+      });
+    });
+  });
+  var switches = $all(".switch").map(function (sw) {
+    var bar = sw.querySelector(".seg"), btns = $all("[data-pick]", bar), views = $all(".pick", sw), chosen = null;
+    function pick(key) {
+      chosen = key;
+      btns.forEach(function (b) { b.setAttribute("aria-pressed", b.getAttribute("data-pick") === key ? "true" : "false"); });
+      views.forEach(function (v) { v.hidden = v.getAttribute("data-view") !== key; });
+    }
+    sw.classList.add("on");
+    btns.forEach(function (b) { b.addEventListener("click", function () { pick(b.getAttribute("data-pick")); }); });
+    pick((btns.filter(pressed)[0] || btns[0]).getAttribute("data-pick"));
+    return { views: views, restore: function () { pick(chosen); } };
+  });
+  window.addEventListener("beforeprint", function () { switches.forEach(function (sw) { sw.views.forEach(function (v) { v.hidden = false; }); }); });
+  window.addEventListener("afterprint", function () { switches.forEach(function (sw) { sw.restore(); }); });
   $all("article.ad-card").forEach(enhanceCard);
   $all(".pv-tile > .pv-btn[data-open]").forEach(function (tile) {
     var cap = tile.parentNode.querySelector("figcaption");

@@ -7,11 +7,13 @@ import tempfile
 import unittest
 from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "skills" / "creative-report" / "scripts"
 sys.path.insert(0, str(SCRIPT))
 
+import benchmarks  # noqa: E402
 import report  # noqa: E402
 
 FIXTURE = ROOT / "examples" / "acme" / "ads_daily.csv"
@@ -83,8 +85,11 @@ class ReportTest(unittest.TestCase):
     def test_no_external_scripts_and_only_font_hosts(self):
         self.assertNotIn("<script src=", self.html)
         self.assertNotRegex(self.html, r"<script[^>]+src=")
-        hosts = set(re.findall(r"https?://([^/\"'\s)]+)", self.html))
-        self.assertLessEqual(hosts, {"fonts.googleapis.com", "fonts.gstatic.com"})
+        fonts = {"fonts.googleapis.com", "fonts.gstatic.com"}
+        method = "".join(re.findall(r"<pre>.*?</pre>", self.html, re.S))
+        self.assertLessEqual(set(re.findall(r"https?://([^/\"'\s)]+)", self.html.replace(method, ""))), fonts)
+        cited = {urlparse(e["url"]).netloc for e in benchmarks.load()}
+        self.assertLessEqual(set(re.findall(r"https?://([^/\"'\s)]+)", method)), fonts | cited)
 
     def test_every_missing_note_from_inputs_is_surfaced(self):
         notes = set()

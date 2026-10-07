@@ -7,12 +7,14 @@ import sys
 import tempfile
 import unittest
 from html.parser import HTMLParser
+from urllib.parse import urlparse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "skills" / "creative-report" / "scripts"
 sys.path.insert(0, str(SCRIPT))
 
+import benchmarks  # noqa: E402
 import creative_metrics as cm  # noqa: E402
 import panels  # noqa: E402
 import report  # noqa: E402
@@ -74,9 +76,9 @@ class PanelStateTest(unittest.TestCase):
         cls.grade = acme_grade()
         cls.ctx = panels.Ctx(rows=cls.rows, verdicts=cls.verdicts, grade=cls.grade, currency="USD")
 
-    def test_ten_overview_panels_and_twelve_later_tab_panels_exist(self):
-        self.assertEqual(len(DATA_PANELS), 10)
-        self.assertEqual(sum(len(tab) for tab_id, _, tab in panels.TABS if tab_id not in OVERVIEW_TABS), 12)
+    def test_thirteen_overview_panels_and_fifteen_later_tab_panels_exist(self):
+        self.assertEqual(len(DATA_PANELS), 13)
+        self.assertEqual(sum(len(tab) for tab_id, _, tab in panels.TABS if tab_id not in OVERVIEW_TABS), 15)
 
     def test_every_panel_is_data_on_the_acme_inputs(self):
         for pid, fn in DATA_PANELS:
@@ -173,18 +175,21 @@ def axis_labels(svg):
 
 
 class AxisUnitTest(unittest.TestCase):
-    def test_the_spend_and_roas_chart_prints_ticks_in_their_unit_with_no_decimal_zero(self):
+    def roas_view(self):
         html, _ = panels.over_time(panels.Ctx(rows=cm.load_rows(str(FIXTURE)), currency="USD"))
-        left, right = axis_labels(html)
-        self.assertNotIn("0.00", left + right)
-        self.assertEqual(left[0], "0")
-        self.assertTrue(right and all(label.endswith("x") for label in right), right)
+        return re.search(r'data-view="roas">.*?</svg>', html, re.S).group(0)
 
-    def test_zero_is_not_repeated_on_the_right_axis_when_the_left_axis_has_it(self):
-        html, _ = panels.over_time(panels.Ctx(rows=cm.load_rows(str(FIXTURE)), currency="USD"))
-        left, right = axis_labels(html)
-        self.assertEqual(left.count("0"), 1)
-        self.assertNotIn("0x", right)
+    def test_the_roas_view_prints_its_ticks_in_x_and_the_spend_bars_theirs_in_money(self):
+        left, right = axis_labels(self.roas_view())
+        self.assertNotIn("0.00", left + right)
+        self.assertEqual(left[0], "0x")
+        self.assertTrue(all(label.endswith("x") for label in left), left)
+        self.assertTrue(right and all(re.fullmatch(r"[\d,]+(\.\d+)?", label) for label in right), right)
+
+    def test_the_spend_axis_does_not_print_a_second_zero_beside_the_roas_zero(self):
+        left, right = axis_labels(self.roas_view())
+        self.assertEqual(left.count("0x"), 1)
+        self.assertNotIn("0", right)
         self.assertEqual(len(right), 2)
 
     def test_a_line_only_chart_keeps_its_own_zero_in_its_unit(self):
@@ -226,11 +231,10 @@ class LegendTest(unittest.TestCase):
         self.assertIn("Cumulative share of spend", html)
         self.assertNotIn("Cumulative share of purchase value", html)
 
-    def test_the_spend_and_roas_chart_has_a_legend_and_single_series_charts_do_not(self):
+    def test_the_time_chart_has_a_chip_per_series_and_single_series_charts_do_not(self):
         html, _ = panels.over_time(panels.Ctx(rows=cm.load_rows(str(FIXTURE)), currency="USD"))
-        key = html.split('<ul class="legend">')[1].split("</ul>")[0]
-        self.assertIn('<span class="sw bar"></span>Spend (USD)', key)
-        self.assertIn('<span class="sw line"></span>ROAS (x)', key)
+        roas = re.search(r'data-view="roas">.*?</figure>', html, re.S).group(0)
+        self.assertEqual(re.findall(r'<button type="button" class="chip" data-series="([^"]*)"', roas), ["Spend", "Daily", "7-day average"])
         import charts
         single = charts.combo_chart(["2026-03-01", "2026-03-02"], None, [1.0, 2.0], "", "CTR (%)", "x", width=300, height=190)
         self.assertNotIn("legend", single)
@@ -597,8 +601,11 @@ class PageStructureTest(unittest.TestCase):
 
     def test_no_url_is_written_into_any_src_and_no_external_host_but_fonts(self):
         self.assertIsNone(re.search(r'src="(?!data:)', self.html))
-        hosts = set(re.findall(r"https?://([^/\"'\s)]+)", self.html))
-        self.assertLessEqual(hosts, {"fonts.googleapis.com", "fonts.gstatic.com"})
+        fonts = {"fonts.googleapis.com", "fonts.gstatic.com"}
+        method = "".join(re.findall(r"<pre>.*?</pre>", self.html, re.S))
+        self.assertLessEqual(set(re.findall(r"https?://([^/\"'\s)]+)", self.html.replace(method, ""))), fonts)
+        cited = {urlparse(e["url"]).netloc for e in benchmarks.load()}
+        self.assertLessEqual(set(re.findall(r"https?://([^/\"'\s)]+)", method)), fonts | cited)
 
     def test_user_text_cannot_inject_a_template_placeholder(self):
         html = report.build_html(rows=[ad_row("1", "{{footer}} | static | c | bau | p | t | 2026-03-01", 5, 5)], title="{{body}}")

@@ -209,6 +209,12 @@ def footer_html(ctx: Ctx, grade, verdicts, mix, brand: Optional[str], completene
     lines.append("Briefs: %s." % ("%d from the briefs file" % len(ctx.briefs) if ctx.briefs else "starters built from the gaps and Iterate verdicts, no briefs file"))
     lines.append("Reach and frequency: %s." % ("from the account-level file" if ctx.account else "not shown, they need an account-level pull"))
     lines.append("Prior period: %s." % ("supplied" if ctx.prior else "not supplied"))
+    lines.append("Chart settings (arbitrary defaults, set them from your own account): rolling averages cover %d days and need %d days with data; "
+                 "a format-week with fewer than %d impressions is left off its line; ad-age buckets end at %s days."
+                 % (panels.charts.SPARK_AVERAGE_DAYS, panels.charts.ROLLING_MIN_VALUES, panels.charts.MIN_WEEK_IMPRESSIONS,
+                    ", ".join(str(e) for e in panels.AGE_EDGES)))
+    lines.append("Industry figures: %s." % ("; ".join(panels.benchmarks.source_lines(ctx.benchmarks_used)) + ". Shown as context beside your own numbers; they never change a grade, verdict or the order of what to do first"
+                                           if ctx.benchmarks_used else "none shown"))
     lines.append(ctx.previews.summary())
     notes = collect_notes(grade, verdicts, mix)
     notes_html = '<ul class="note-list">%s</ul>' % "".join("<li>%s</li>" % n for n in notes) if notes else "<p>Nothing was missing from the inputs.</p>"

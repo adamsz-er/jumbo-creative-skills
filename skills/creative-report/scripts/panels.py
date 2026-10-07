@@ -7,13 +7,16 @@ only; every string that came from the data is escaped.
 """
 from __future__ import annotations
 
+import datetime as dt
 import re
+import statistics
 import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import benchmarks  # noqa: E402
 import briefing  # noqa: E402
 import charts  # noqa: E402
 import creative_metrics as cm  # noqa: E402
@@ -109,6 +112,25 @@ class Ctx:
         self.retention_headers: Dict[str, Optional[str]] = {}
         self.copy_headers: Dict[str, Optional[str]] = {}
         self.breakdown_dims: Dict[str, str] = {}
+        self.benchmarks_used: List[Dict[str, Any]] = []
+        self.ad_format = {str(a.get("ad_id") or a.get("ad_name")): a.get("format") or "unknown" for a in self.ads}
+        self.format_spend: Dict[str, float] = {}
+        for ad in self.ads:
+            self.format_spend[ad.get("format") or "unknown"] = self.format_spend.get(ad.get("format") or "unknown", 0.0) + (ad.get("spend") or 0.0)
+        self.colours = charts.format_colours({f: v for f, v in self.format_spend.items() if f != "unknown"})
+
+    def colour(self, fmt: str) -> str:
+        """The one colour a format has everywhere on the page; an unknown format is always the muted tone."""
+        return self.colours.get(fmt, charts.OTHER_COLOUR)
+
+    def format_name(self, fmt: str) -> str:
+        return _group_name(fmt, "Format not known")
+
+    def formats_by_spend(self) -> List[str]:
+        return sorted(self.format_spend, key=lambda f: -self.format_spend[f])
+
+    def rows_of_format(self, fmt: str) -> List[Dict[str, Any]]:
+        return [r for r in self.rows if self.ad_format.get(str(r.get("ad_id") or r.get("ad_name"))) == fmt]
 
     def money(self, value: Optional[float], digits: int = 0) -> str:
         if value is None:
@@ -464,7 +486,11 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
             delta = '<span class="muted">n/a (prior value missing or zero)</span>' if change is None else _delta_pill(key, change)
         spark = ""
         if key not in ACCOUNT_KPIS:
-            spark = charts.sparkline([_kpi_value(day_total, key) for _, day_total in sser], "%s by day" % name)
+            cal = calendar(vrows if key in VIDEO_KPIS else ctx.rows)
+            values = day_values(cal, key)
+            tips = ["%s: %s" % (charts.day_label(d), _kpi_text(ctx, totals(_measure_rows(rs, key)), key, kind)) if v is not None else ""
+                    for (d, rs), v in zip(cal, values)]
+            spark = charts.sparkline(values, "%s by day" % name, tips=tips, average=rolling_values(cal, key))
         spark_note = spark or ("" if key in ACCOUNT_KPIS or key in gone else
                                '<span class="muted">%s</span>' % ("one day of data" if len(sser) == 1 else "no dates in the data"))
         unit = " (%s)" % (ctx.currency or "account currency") if kind.startswith("money") else ""
@@ -477,28 +503,126 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
     return '<div class="kpis">%s</div>%s' % ("".join(tiles), caption), "data"
 
 
+TIME_METRICS = (("spend", "Spend", "money"), ("roas", "ROAS", "x"), ("cpa", "CPA", "money"), ("ctr", "CTR", "pct"),
+                ("cpm", "CPM", "money"), ("hook_rate", "Hook rate", "pct"))
+NO_DATES = ("The data carries no dates, so there is no daily series.",
+            "Export or pull the data by day (a day column), not as one summary line per ad.")
+
+
+def _kind_formats(ctx: Ctx, kind: str) -> Tuple[Callable[[float], str], Callable[[float], str]]:
+    """(axis formatter, hover formatter) for a money, percent or ratio measure."""
+    axis = charts.axis_format(kind, ctx.currency)
+    if kind == "money":
+        return axis, lambda v: ctx.money(v, 2)
+    return axis, (lambda v: "%.2f%%" % v) if kind == "pct" else (lambda v: "%.2fx" % v)
+
+
+def _unit_of(ctx: Ctx, name: str, kind: str) -> str:
+    return "%s (%s)" % (name, {"money": ctx.currency or "account currency", "pct": "%", "x": "x"}[kind])
+
+
+def calendar(rows: Sequence[Dict[str, Any]]) -> List[Tuple[str, List[Dict[str, Any]]]]:
+    """Every calendar day from the first to the last in the data with that day's rows; a day with none stays in as an empty list (a gap)."""
+    by_day: Dict[str, List[Dict[str, Any]]] = {}
+    for row in rows:
+        day = _day(row)
+        if day:
+            by_day.setdefault(day, []).append(row)
+    if not by_day:
+        return []
+    first, last = dt.date.fromisoformat(min(by_day)), dt.date.fromisoformat(max(by_day))
+    return [((first + dt.timedelta(days=n)).isoformat(), by_day.get((first + dt.timedelta(days=n)).isoformat(), []))
+            for n in range((last - first).days + 1)]
+
+
+def _measure_rows(rows: Sequence[Dict[str, Any]], key: str) -> List[Dict[str, Any]]:
+    return video_rows(rows, key) if key in VIDEO_KPIS else list(rows)
+
+
+def day_values(cal: Sequence[Tuple[str, List[Dict[str, Any]]]], key: str) -> List[Optional[float]]:
+    """A measure per calendar day as a ratio of that day's sums; a day with no usable rows is None, never 0."""
+    out: List[Optional[float]] = []
+    for _, rows in cal:
+        used = _measure_rows(rows, key)
+        out.append(_kpi_value(totals(used), key) if used else None)
+    return out
+
+
+def rolling_values(cal: Sequence[Tuple[str, List[Dict[str, Any]]]], key: str, window: int = charts.SPARK_AVERAGE_DAYS,
+                   need: int = charts.ROLLING_MIN_VALUES) -> List[Optional[float]]:
+    """A rolling average over `window` days: spend is the mean per day, a ratio is the ratio of the window's sums. Needs `need` days with data."""
+    out: List[Optional[float]] = []
+    for i in range(len(cal)):
+        days = [_measure_rows(rows, key) for _, rows in cal[max(0, i - window + 1):i + 1]]
+        days = [d for d in days if d]
+        if len(days) < need:
+            out.append(None)
+        elif key == "spend":
+            out.append(sum(totals(d)["spend"] or 0 for d in days) / len(days))
+        else:
+            out.append(_kpi_value(totals([r for d in days for r in d]), key))
+    return out
+
+
+def _time_view(ctx: Ctx, cal, key: str, name: str, kind: str, spend_bars: Sequence[Optional[float]]) -> str:
+    values = day_values(cal, key)
+    if not any(v is not None for v in values):
+        return ""
+    axis, hover = _kind_formats(ctx, kind)
+    labels = [d for d, _ in cal]
+    lines = [{"name": "Daily", "values": values, "colour": charts.SERIES_VARS[0], "kind": "line"},
+             {"name": "7-day average", "values": rolling_values(cal, key), "colour": charts.SERIES_VARS[0], "kind": "avg"}]
+    bars = None if key == "spend" else spend_bars
+    return charts.line_chart(labels, lines, "%s by day with a 7-day average" % name, axis, _unit_of(ctx, name, kind), bars=bars,
+                             bar_fmt=charts.axis_format("money", ctx.currency), bar_name="Spend", bar_unit=_unit_of(ctx, "Spend", "money"),
+                             tip_fmt=hover, bar_tip_fmt=lambda v: ctx.money(v, 2),
+                             caption="%s by day%s. A day with no data is a gap, not a zero." % (name, "; the faint bars are spend" if bars else ""))
+
+
 def over_time(ctx: Ctx) -> Tuple[str, str]:
-    series = daily(ctx.rows)
-    if not series:
-        return empty_state("The data carries no dates, so there is no daily series.",
-                           "Export or pull the data by day (a day column), not as one summary line per ad.")
-    labels = [d for d, _ in series]
-    spend = [t["spend"] for _, t in series]
-    roas = [cm.compute_metrics(t)["roas"] for _, t in series]
-    use_roas = any(v is not None for v in roas)
-    line = roas if use_roas else [cm.compute_metrics(t)["cpa"] for _, t in series]
-    unit = "ROAS (x)" if use_roas else "CPA (%s)" % (ctx.currency or "account currency")
-    chart = charts.combo_chart(labels, spend, line, "Spend (%s)" % (ctx.currency or "account currency"), unit,
-                               "Daily spend with %s" % unit.split(" (")[0], bar_fmt=charts.axis_format("money", ctx.currency),
-                               line_fmt=charts.axis_format("x" if use_roas else "money", ctx.currency))
-    note = ""
-    if len(series) == 1:
-        note = '<p class="muted">One day of data: there is no trend to read yet.</p>'
-    elif not use_roas:
-        note = '<p class="muted">No purchase value in the data, so the line shows CPA instead of ROAS.</p>'
-    if not chart:
-        return empty_state("Neither spend nor %s could be read from the data." % unit, "Include the spend and purchase columns in the export.")
-    return chart + note, "data"
+    cal = calendar(ctx.rows)
+    if not cal:
+        return empty_state(*NO_DATES)
+    spend_bars = day_values(cal, "spend")
+    views, skipped = [], []
+    for key, name, kind in TIME_METRICS:
+        chart = _time_view(ctx, cal, key, name, kind, spend_bars)
+        if chart:
+            views.append((key, name, chart))
+        else:
+            skipped.append(name)
+    if not views:
+        return empty_state("Neither spend nor any rate could be read from the data.", "Include the spend and purchase columns in the export.")
+    notes = []
+    if len(cal) == 1:
+        notes.append("One day of data: there is no trend to read yet.")
+    if skipped:
+        notes.append("Not shown, no data for it: %s." % ", ".join(skipped))
+    note = '<p class="muted">%s</p>' % esc(" ".join(notes)) if notes else ""
+    return charts.switcher("time", views) + note, "data"
+
+
+def spend_by_format(ctx: Ctx) -> Tuple[str, str]:
+    cal = calendar(ctx.rows)
+    if not cal:
+        return empty_state(*NO_DATES)
+    named = [f for f in ctx.formats_by_spend() if f != "unknown"]
+    if len(named) < 2:
+        return empty_state("Fewer than two formats could be read from the ad names, so there is no split to show.",
+                           "Name ads with the convention in creative-context, or tell the creative-mix skill the naming pattern your ads use.")
+    days = [(d, rows) for d, rows in cal if sum(r.get("spend") or 0 for r in rows) > 0]
+    if len(days) < 2:
+        return empty_state("Fewer than two days have spend, so there is no change over time to show.", "Pull the data by day over a longer window.")
+    groups = named + (["unknown"] if "unknown" in ctx.format_spend else [])
+    shares: Dict[str, List[float]] = {f: [] for f in groups}
+    for _, rows in days:
+        total = sum(r.get("spend") or 0 for r in rows)
+        for f in groups:
+            shares[f].append(sum(r.get("spend") or 0 for r in rows if ctx.ad_format.get(str(r.get("ad_id") or r.get("ad_name"))) == f) / total * 100)
+    series = [(ctx.format_name(f), shares[f], ctx.colour(f)) for f in groups]
+    chart = charts.stacked_area([d for d, _ in days], series, "Share of daily spend by format",
+                                "Each band is a format's share of that day's spend. Days with no spend are left out.")
+    return chart, "data"
 
 
 def do_first(ctx: Ctx) -> Tuple[str, str]:
@@ -1038,6 +1162,206 @@ def format_scorecard(ctx: Ctx) -> Tuple[str, str]:
     return table(header, body, stack=True) + note, "data"
 
 
+BENCH_METRICS = (("ctr", "CTR", "pct"), ("cpm", "CPM", "money"), ("roas", "ROAS", "x"), ("cvr", "CR", "pct"), ("hook_rate", "Hook rate", "pct"))
+WEEK_TIME_METRICS = (("ctr", "CTR", "pct"), ("cpm", "CPM", "money"), ("roas", "ROAS", "x"), ("hook_rate", "Hook rate", "pct"))
+ALL_FORMATS = "All formats"
+NO_FORMATS = ("No format could be read from the ad names, so there is nothing to compare.",
+              "Name ads with the convention in creative-context, or tell the creative-mix skill the naming pattern your ads use.")
+
+
+def _named_formats(ctx: Ctx) -> List[str]:
+    return [f for f in ctx.formats_by_spend() if f != UNKNOWN_FORMAT]
+
+
+def format_benchmarks(ctx: Ctx) -> Tuple[str, str]:
+    if not ctx.rows:
+        return empty_state(*NO_ROWS)
+    named = _named_formats(ctx)
+    if not named:
+        return empty_state(*NO_FORMATS)
+    views, skipped = [], []
+    for key, name, kind in BENCH_METRICS:
+        axis, hover = _kind_formats(ctx, kind)
+        rows, reasons, bands = [], {}, []
+        for fmt in named:
+            used = _measure_rows(ctx.rows_of_format(fmt), key)
+            value = _kpi_value(totals(used), key) if used else None
+            band, why = benchmarks.lookup(key, fmt, ctx.currency)
+            if band:
+                bands.append(band)
+            else:
+                reasons.setdefault(why, []).append(ctx.format_name(fmt))
+            rows.append({"name": ctx.format_name(fmt), "value": value, "colour": ctx.colour(fmt), "band": band})
+        values = [r["value"] for r in rows if r["value"] is not None]
+        chart = charts.benchmark_rows(rows, statistics.median(values) if len(values) > 1 else None, axis,
+                                      "%s by format: your value against a public industry figure" % name, _unit_of(ctx, name, kind), tip_fmt=hover)
+        if not chart:
+            skipped.append(name)
+            continue
+        ctx.benchmarks_used.extend(bands)
+        lines = ["<p class=\"sources\">%s</p>" % esc(benchmarks.citation(b)) for b in {b["url"]: b for b in bands}.values()]
+        for why, who in reasons.items():
+            lines.append('<p class="sources muted">No industry band for %s: %s.</p>' % (esc(", ".join(who)), esc(why)))
+        views.append((key, name, chart + "".join(lines)))
+    if not views:
+        return empty_state("None of the benchmark measures could be worked out from the data.", "Include impressions, clicks, spend and purchase columns in the export.")
+    lead = ('<p class="muted">The dot is your value for each format. The shaded band or tick is a public industry figure, drawn only where a cited source '
+            'gives one for that format and measures it the same way. It is context, never a grade: your verdicts compare your ads with your own ads. '
+            '%s</p>' % esc(benchmarks.NO_BAND_METRICS["hold_rate"]))
+    skip = '<p class="muted">Not shown, no data for it: %s.</p>' % esc(", ".join(skipped)) if skipped else ""
+    return lead + charts.switcher("format-benchmarks", views) + skip, "data"
+
+
+def week_axis(first: dt.date, last: dt.date) -> List[Tuple[dt.date, str]]:
+    """Calendar weeks (ISO, so each begins on weekday 0) from the one holding `first` to the one holding `last`: (week start, label); a part week is marked."""
+    start = first - dt.timedelta(days=first.weekday())
+    out = []
+    while start <= last:
+        part = (start < first) or (start + dt.timedelta(days=6) > last)
+        out.append((start, charts.day_label(start.isoformat()) + (" (part)" if part else "")))
+        start += dt.timedelta(days=7)
+    return out
+
+
+def _week_of(day: str, first: dt.date) -> int:
+    d = dt.date.fromisoformat(day)
+    return ((d - dt.timedelta(days=d.weekday())) - (first - dt.timedelta(days=first.weekday()))).days // 7
+
+
+def formats_over_time(ctx: Ctx) -> Tuple[str, str]:
+    cal = calendar(ctx.rows)
+    if not cal:
+        return empty_state(*NO_DATES)
+    named = _named_formats(ctx)
+    if not named:
+        return empty_state(*NO_FORMATS)
+    first, last = dt.date.fromisoformat(cal[0][0]), dt.date.fromisoformat(cal[-1][0])
+    weeks = week_axis(first, last)
+    if len(weeks) < 2:
+        return empty_state("The data covers less than two calendar weeks, so there is no weekly trend.", "Pull the data by day over a longer window.")
+    labels = [text for _, text in weeks]
+
+    def weekly(rows: Sequence[Dict[str, Any]], key: str) -> List[Optional[float]]:
+        buckets: List[List[Dict[str, Any]]] = [[] for _ in weeks]
+        for row in rows:
+            day = _day(row)
+            if day:
+                buckets[_week_of(day, first)].append(row)
+        out: List[Optional[float]] = []
+        for bucket in buckets:
+            used = _measure_rows(bucket, key)
+            total = totals(used)
+            out.append(_kpi_value(total, key) if used and (total.get("impressions") or 0) >= charts.MIN_WEEK_IMPRESSIONS else None)
+        return out
+
+    cells = []
+    for key, name, kind in WEEK_TIME_METRICS:
+        axis, hover = _kind_formats(ctx, kind)
+        lines = []
+        for fmt in named:
+            values = weekly(ctx.rows_of_format(fmt), key)
+            if any(v is not None for v in values):
+                lines.append({"name": ctx.format_name(fmt), "values": values, "colour": ctx.colour(fmt), "kind": "line"})
+        everything = weekly(ctx.rows, key)
+        if not lines and not any(v is not None for v in everything):
+            continue
+        lines.append({"name": ALL_FORMATS, "values": everything, "colour": charts.OTHER_COLOUR, "kind": "dashed"})
+        chart = charts.line_chart(labels, lines, "%s by week and format" % name, axis, _unit_of(ctx, name, kind), x_text=lambda t: t, width=380, height=240,
+                                  legend=False, caption="%s by week" % name, tip_fmt=hover)
+        cells.append('<div class="multiple"><h4>%s</h4>%s</div>' % (esc(name), chart))
+    if not cells:
+        return empty_state("No format has enough impressions in any week to draw a line.", "Pull the data over a longer window or for more spend.")
+    key_chips = charts.chips([(ctx.format_name(f), ctx.colour(f)) for f in named] + [(ALL_FORMATS, charts.OTHER_COLOUR)])
+    note = ('<p class="muted">Weeks are ISO calendar weeks; a part week is marked. A format-week with fewer than %d impressions is left off its line '
+            '(an arbitrary floor, set it from your own account). The dashed line is every format together. Hook rate counts video ads only.</p>' % charts.MIN_WEEK_IMPRESSIONS)
+    return '<div class="multiples-wrap" data-scope="1">%s<div class="multiples">%s</div></div>%s' % (key_chips, "".join(cells), note), "data"
+
+
+def spend_vs_return(ctx: Ctx) -> Tuple[str, str]:
+    if not ctx.rows:
+        return empty_state(*NO_ROWS)
+    named = _named_formats(ctx)
+    total_spend = sum(ctx.format_spend.values())
+    points, colours = [], {}
+    for fmt in named:
+        total = totals(ctx.rows_of_format(fmt))
+        roas, conversions = cm.compute_metrics(total)["roas"], total.get("conversions")
+        if roas is None or conversions is None or not total_spend:
+            continue
+        name = ctx.format_name(fmt)
+        points.append(((total["spend"] or 0) / total_spend * 100, roas, conversions, name, True))
+        colours[name] = ctx.colour(fmt)
+    account = cm.compute_metrics(totals(ctx.rows))["roas"]
+    if len(points) < 2 or account is None:
+        return empty_state("Fewer than two formats have both spend and purchase value, so there is nothing to set against each other.",
+                           "Include the spend, purchases and purchase value columns, and name ads with a format.")
+    chart = charts.bubble_chart(points, "Share of spend (%)", "ROAS (x)", "Spend share against return, by format", None, account, (), colours=colours,
+                                size_words="purchases",
+                                note="Each bubble is a format. Further right takes more of your spend, higher earns more per unit spent. "
+                                     "Bubble area is purchases; the dashed line is your account ROAS (%.2fx)." % account)
+    return chart, "data"
+
+
+# ---------- Keep / kill: ad age and launch pace ----------
+
+AGE_EDGES = (7, 16, 33, 66)  # arbitrary default: where one age bucket ends and the next begins, in days; set it from your own account
+
+
+def age_labels() -> List[str]:
+    edges = (0,) + AGE_EDGES
+    return ["%d-%d days" % (edges[i], edges[i + 1] - 1) for i in range(len(AGE_EDGES))] + ["%d+ days" % AGE_EDGES[-1]]
+
+
+def ad_age(ctx: Ctx) -> Tuple[str, str]:
+    ads = [a for a in ctx.ads if a.get("age_days") is not None]
+    if not ads:
+        return empty_state("No ad has a date, so its age cannot be worked out.", "Pull the data by day (a day column), ideally with each ad's creation time.")
+    labels = age_labels()
+    groups: List[List[Dict[str, Any]]] = [[] for _ in labels]
+    for ad in ads:
+        groups[sum(1 for edge in AGE_EDGES if ad["age_days"] >= edge)].append(ad)
+    total = sum(a.get("spend") or 0 for a in ads)
+    shares = [sum(a.get("spend") or 0 for a in g) / total * 100 if total and g else 0.0 for g in groups]
+    counts = [len(g) for g in groups]
+    metrics = [(key, name, kind, [cm.compute_metrics(totals(_ad_rows(ctx, g)))[key] if g else None for g in groups])
+               for key, name, kind in (("roas", "ROAS", "x"), ("ctr", "CTR", "pct"))]
+    views = []
+    for key, name, kind, values in metrics:
+        if any(v is not None for v in values):
+            views.append((key, name, charts.bars_with_dots(labels, shares, counts, values, _kind_formats(ctx, kind)[0], name,
+                                                          "Spend share and %s by ad age" % name)))
+    if not views:
+        views = [("roas", "ROAS", charts.bars_with_dots(labels, shares, counts, [None] * len(labels), charts.axis_format("x"), "ROAS", "Spend share by ad age"))]
+    bases = {a.get("age_basis") for a in ads}
+    basis = ("from each ad's creation date" if bases == {cm.AGE_FROM_CREATED} else
+             "from each ad's first day of delivery in this window, so an ad that started before the window reads younger than it is" if bases == {cm.AGE_FROM_DELIVERY} else
+             "from the creation date where the export has one, otherwise from the first day of delivery in this window")
+    note = ('<p class="muted">Age is counted to the last day of the data, %s. Buckets (in days, arbitrary defaults) end at %s. '
+            'ROAS and CTR are ratios of summed counts for the ads in a bucket.</p>' % (basis, ", ".join(str(e) for e in AGE_EDGES)))
+    return charts.switcher("ad-age", views) + note, "data"
+
+
+def launches(ctx: Ctx) -> Tuple[str, str]:
+    dated = [a for a in ctx.ads if a.get("first_date")]
+    if not dated:
+        return empty_state("No ad has a date, so there is no launch week to count.", "Pull the data by day (a day column).")
+    first, last = dt.date.fromisoformat(min(a["first_date"] for a in dated)), dt.date.fromisoformat(max(a["last_date"] for a in dated))
+    weeks = week_axis(first, last)
+    series = []
+    for fmt in ctx.formats_by_spend():
+        counts = [0] * len(weeks)
+        for ad in dated:
+            if (ad.get("format") or UNKNOWN_FORMAT) == fmt:
+                counts[_week_of(ad["first_date"], first)] += 1
+        if any(counts):
+            series.append((ctx.format_name(fmt), counts, ctx.colour(fmt)))
+    average = len(dated) / len(weeks)
+    chart = charts.stacked_bars([text for _, text in weeks], series, "New ads launched per week, by format", "New ads",
+                                "On average %.1f new ads a week over %d week%s. An ad counts in the week it first delivered; ads already running at the start of the data fall in its first week."
+                                % (average, len(weeks), "" if len(weeks) == 1 else "s"))
+    return chart, "data"
+
+
 def _video_rates(ctx: Ctx, ad: Dict[str, Any]) -> Tuple[Optional[float], Optional[float], bool]:
     """Hook and hold rate of one ad from its days that carry the plays, and whether those plays were derived."""
     rows = ctx.rows_by_ad.get(_ad_key(ad), [])
@@ -1508,6 +1832,7 @@ TABS = (
     ("overview", "Overview analysis", (
         ("kpis", "Overview", "Key numbers", kpi_strip),
         ("time", "Overview", "Performance over time", over_time),
+        ("money-by-format", "Overview", "Where the money went, by format", spend_by_format),
         ("do-first", "Overview", "Do these first", do_first),
         ("improve", "Overview", "Ways to improve", ways_to_improve),
         ("funnel", "Overview", "Funnel", funnel))),
@@ -1517,9 +1842,14 @@ TABS = (
     ("keep-kill", "Keep / kill", (
         ("board", "Keep / kill", "Verdict board", verdict_board),
         ("fatigue", "Keep / kill", "Fatigue", fatigue),
+        ("ad-age", "Keep / kill", "Performance by ad age", ad_age),
+        ("launches", "Keep / kill", "New ads launched per week", launches),
         ("all-ads", "Keep / kill", "All ads", all_ads))),
     ("format", "Format", (
         ("format-scorecard", "Format", "Format scorecard", format_scorecard),
+        ("format-benchmarks", "Format", "Format benchmarks", format_benchmarks),
+        ("formats-over-time", "Format", "Formats over time", formats_over_time),
+        ("spend-return", "Format", "Spend share against return", spend_vs_return),
         ("hook-hold", "Format", "Video: hook against hold", video_hook_hold),
         ("retention", "Format", "Video: where people drop off", video_retention),
         ("ad-types", "Format", "Ad types, never blended", ad_type_split))),

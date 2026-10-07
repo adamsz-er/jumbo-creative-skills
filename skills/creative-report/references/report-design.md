@@ -35,10 +35,10 @@ Type: DM Sans (400 to 700) with Inter and system fallbacks, Roboto Mono for code
 
 App shell, 1536 px wide: a 56 px top bar (lockup, "<account> · <scope> creative review", completeness badge, theme toggle); the dark scope bar (window, currency, source, attribution); then a 208 px sticky left sub-nav (the completeness badge reads Reconciled only when a reconcile ran and passed, amber Totals don't match when one fell short, neutral grey Totals not checked when none ran) beside the content column, with the sticky filter row above the first card. Under 1024 px the sub-nav is a segmented control. Six tabs, each a `<section id="tab-...">` whose first card opens it (no separate tab heading):
 
-1. Overview analysis: key numbers (`kpi_strip`), performance over time (`over_time`), do these first (`do_first`), ways to improve (`ways_to_improve`), funnel (`funnel`)
+1. Overview analysis: key numbers (`kpi_strip`), performance over time (`over_time`), where the money went by format (`spend_by_format`), do these first (`do_first`), ways to improve (`ways_to_improve`), funnel (`funnel`)
 2. Pareto: where the value comes from (`pareto`), the head and the long tail (`head_tail`)
-3. Keep / kill: verdict board (`verdict_board`), fatigue (`fatigue`), all ads (`all_ads`)
-4. Format: scorecard (`format_scorecard`), hook against hold (`video_hook_hold`), retention (`video_retention`), ad types (`ad_type_split`)
+3. Keep / kill: verdict board (`verdict_board`), fatigue (`fatigue`), performance by ad age (`ad_age`), new ads launched per week (`launches`), all ads (`all_ads`)
+4. Format: scorecard (`format_scorecard`), benchmarks (`format_benchmarks`), formats over time (`formats_over_time`), spend share against return (`spend_vs_return`), hook against hold (`video_hook_hold`), retention (`video_retention`), ad types (`ad_type_split`)
 5. White space: concept heatmap (`concept_heatmap`), stage heatmap (`stage_heatmap`), types with no creative (`no_creative_types`), markets and segments (`segments`), gap list (`gap_list`)
 6. Briefing: ready briefs (`ready_briefs`), copy and call to action (`copy_cta`), prompts (`prompts_panel`)
 
@@ -49,6 +49,14 @@ Footer: data and method (the matched funnel columns, every flag and default used
 Every panel function takes the `Ctx` and returns `(html, state)`: `"data"` when filled and `"empty"` when it shows a labelled empty state with **why** and **how to get it** (`empty_state`). A panel is never dropped. Unknown is never zero: a missing operand reads `n/a (missing <field>)`, reach and frequency read `n/a` without an account-level figure (one banner on Overview says why), and a single day has no sparkline and says so.
 
 The ad card (`ad_card`) is the one component used wherever an ad appears: preview image, readable label (concept · creator · format · ad type, never the raw first name segment), ad id, spend with currency, what placed it, verdict chip, confidence and the plain-English sentence. Lists show the top N (`--top-n`) as cards and collapse the rest into a closed `<details>` capped at `LIST_CAP` ads, so a 500-ad account stays readable.
+
+## Charts
+
+Shared plumbing lives in `charts.py`. One colour per format for the whole page (`format_colours`: formats by total spend take `--series-1` to `--series-6`, the rest the muted tone), used by every format chart. Every mark carries `data-tip` text that one small script shows on hover or focus; a chart with more than `POINT_FOCUS_MAX` points is hover only. Legend chips are `<button data-series>` and toggle `.is-off` on that series' group (the last one stays on; a stacked chart dims a layer instead of leaving a gap). A measure switcher (`switcher`) pre-renders one view per measure: with scripts off every view shows stacked under its heading, with scripts on one shows. Time axes write at most `TICKS_WIDE` day labels and the narrow subset (`TICKS_NARROW`) under 480 px, and a narrow plot writes fewer. A missing day is a gap in the line, never a zero; a rolling average is the ratio of the window's sums and needs `ROLLING_MIN_VALUES` days with data.
+
+Industry bands come only from `references/benchmarks.json`, read by `scripts/benchmarks.py`. Each entry names its source, URL, publication date, sample, metric definition and caveat. `benchmarks.lookup` returns a band or the plain reason there is none: our format word has no source key (a bare "ugc", "story" or a partnership is never guessed), the source does not cover that format, the figure is money in another currency, or the definition differs (hold rate). Every band drawn is cited under its chart and the footer lists each source used with its URL and year. Benchmarks never feed verdicts, grades or "Do these first".
+
+Arbitrary defaults to set from your own account: the rolling window and its minimum days, the weekly impressions floor (`MIN_WEEK_IMPRESSIONS`), and the ad-age bucket edges (`AGE_EDGES`). The footer names them.
 
 ## Adding a panel
 

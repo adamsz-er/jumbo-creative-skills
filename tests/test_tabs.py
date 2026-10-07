@@ -81,9 +81,9 @@ class Fixture(unittest.TestCase):
 
 
 class NewPanelStateTest(Fixture):
-    def test_all_twelve_new_panels_are_in_the_spec_order(self):
+    def test_the_format_white_space_and_briefing_panels_are_in_the_spec_order(self):
         tabs = {tab_id: [pid for pid, _, _, _ in tab] for tab_id, _, tab in panels.TABS}
-        self.assertEqual(tabs["format"], ["format-scorecard", "hook-hold", "retention", "ad-types"])
+        self.assertEqual(tabs["format"], ["format-scorecard", "format-benchmarks", "formats-over-time", "spend-return", "hook-hold", "retention", "ad-types"])
         self.assertEqual(tabs["white-space"], ["heatmap", "stage-heatmap", "no-creative", "segments", "gaps"])
         self.assertEqual(tabs["briefing"], ["briefs", "copy", "prompts"])
 

@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import html
 import math
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+import datetime as dt
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 
 def esc(value: Any) -> str:
@@ -92,23 +93,57 @@ def legend(items: Sequence[Tuple[str, str]]) -> str:
     return '<ul class="legend">%s</ul>' % "".join('<li><span class="sw %s"></span>%s</li>' % (esc(css), esc(text)) for css, text in items)
 
 
-def sparkline(values: Sequence[Optional[float]], label: str, width: int = 120, height: int = 32) -> str:
-    """A tiny line with no axes; "" with fewer than two real points. A gap (None) breaks the line."""
+SPARK_AVERAGE_DAYS = 7  # the faint second line on a tile's sparkline: a rolling average over this many days
+ROLLING_MIN_VALUES = 5  # arbitrary default: a rolling average needs this many real values inside its window, else it is a gap
+
+
+def rolling(values: Sequence[Optional[float]], window: int = SPARK_AVERAGE_DAYS, need: int = ROLLING_MIN_VALUES) -> List[Optional[float]]:
+    """Mean of the last `window` values at each point, skipping gaps; None when fewer than `need` real values fall in the window."""
+    out: List[Optional[float]] = []
+    for i in range(len(values)):
+        real = [v for v in values[max(0, i - window + 1):i + 1] if v is not None]
+        out.append(sum(real) / len(real) if len(real) >= need else None)
+    return out
+
+
+def day_label(day: str) -> str:
+    """"2026-09-07" -> "7 Sep"; anything that is not an ISO date is shown as it came."""
+    try:
+        d = dt.date.fromisoformat(str(day)[:10])
+    except ValueError:
+        return str(day)
+    return "%d %s" % (d.day, d.strftime("%b"))
+
+
+def sparkline(values: Sequence[Optional[float]], label: str, width: int = 120, height: int = 32,
+              tips: Optional[Sequence[str]] = None, average: Optional[Sequence[Optional[float]]] = None) -> str:
+    """A tiny line with no axes; "" with fewer than two real points. A gap (None) breaks the line.
+
+    `tips` (one text per point) adds an invisible hover column per point; `average` draws a faint second line on the same scale.
+    """
     real = [v for v in values if v is not None]
     if len(real) < 2:
         return ""
-    low, high = min(real), max(real)
+    both = real + [v for v in (average or []) if v is not None]
+    low, high = min(both), max(both)
     span = (high - low) or 1.0
     step = (width - 4) / (len(values) - 1)
-    path, pen = [], False
-    for i, value in enumerate(values):
-        if value is None:
-            pen = False
-            continue
-        path.append("%s%.1f %.1f" % ("L" if pen else "M", 2 + i * step, height - 3 - (value - low) / span * (height - 6)))
-        pen = True
-    return ('<svg class="spark" viewBox="0 0 %d %d" preserveAspectRatio="none" role="img" aria-label="%s"><path d="%s"/></svg>'
-            % (width, height, esc(label), " ".join(path)))
+
+    def path_of(series: Sequence[Optional[float]]) -> str:
+        path, pen = [], False
+        for i, value in enumerate(series):
+            if value is None:
+                pen = False
+                continue
+            path.append("%s%.1f %.1f" % ("L" if pen else "M", 2 + i * step, height - 3 - (value - low) / span * (height - 6)))
+            pen = True
+        return " ".join(path)
+
+    faint = '<path class="avg" d="%s"/>' % path_of(average) if average and any(v is not None for v in average) else ""
+    hits = "".join('<rect class="hit" x="%.1f" y="0" width="%.1f" height="%d" data-tip="%s"/>' % (2 + i * step - step / 2, max(step, 1), height, esc(t))
+                   for i, t in enumerate(tips or []) if t)
+    return ('<svg class="spark" viewBox="0 0 %d %d" preserveAspectRatio="none" role="img" aria-label="%s">%s<path d="%s"/>%s</svg>'
+            % (width, height, esc(label), faint, path_of(values), hits))
 
 
 def _axis_text(value: float) -> str:
@@ -257,7 +292,8 @@ def _short(name: str, limit: int) -> str:
 
 
 def bubble_chart(points: Sequence[Tuple[float, float, float, str, bool]], xlabel: str, ylabel: str, label: str,
-                 x_median: float, y_median: float, quadrants: Sequence[str], width: int = 560, height: int = 380) -> str:
+                 x_median: Optional[float], y_median: float, quadrants: Sequence[str], width: int = 560, height: int = 380,
+                 colours: Optional[Mapping[str, str]] = None, size_words: str = "spend", note: str = "") -> str:
     """Bubbles at (x, y) with area following size, dashed lines at the two medians and the four quadrants named in words.
 
     points are (x, y, size, name, show_label); quadrants run top-left, top-right, bottom-left, bottom-right.
@@ -265,7 +301,7 @@ def bubble_chart(points: Sequence[Tuple[float, float, float, str, bool]], xlabel
     if not points:
         return ""
     left, right, top, bottom, rmax = 54, 16, 16, 46, 18.0
-    xs = [p[0] for p in points] + [x_median]
+    xs = [p[0] for p in points] + ([x_median] if x_median is not None else [])
     ys = [p[1] for p in points] + [y_median]
 
     def span(values):
@@ -289,10 +325,12 @@ def bubble_chart(points: Sequence[Tuple[float, float, float, str, bool]], xlabel
         parts.append('<text x="%.1f" y="%d" text-anchor="middle">%.1f</text>' % (px(value), height - bottom + 16, value))
     for value in _ticks(y0, y1):
         parts.append('<text x="%d" y="%.1f" text-anchor="end">%.1f</text>' % (left - 8, py(value) + 4, value))
-    parts.append('<line class="guide" x1="%.1f" y1="%d" x2="%.1f" y2="%d"/>' % (px(x_median), top, px(x_median), height - bottom))
+    if x_median is not None:
+        parts.append('<line class="guide" x1="%.1f" y1="%d" x2="%.1f" y2="%d"/>' % (px(x_median), top, px(x_median), height - bottom))
     parts.append('<line class="guide" x1="%d" y1="%.1f" x2="%d" y2="%.1f"/>' % (left, py(y_median), width - right, py(y_median)))
     corners = ((left + 6, top + 14, "start"), (width - right - 6, top + 14, "end"),
                (left + 6, height - bottom - 8, "start"), (width - right - 6, height - bottom - 8, "end"))
+    quadrants = quadrants if len(quadrants) == 4 else ()
     for (x, y, anchor), words in zip(corners, quadrants):
         parts.append('<text class="quad" x="%d" y="%d" text-anchor="%s">%s</text>' % (x, y, anchor, esc(words)))
     ordered = sorted(points, key=lambda p: -p[2])
@@ -303,8 +341,9 @@ def bubble_chart(points: Sequence[Tuple[float, float, float, str, bool]], xlabel
         taken.append((cx0 if anchor == "start" else cx0 - w0, cy0 - 12, cx0 + w0 if anchor == "start" else cx0, cy0 + 3))
     texts = []
     for (x, y, size, name, show), (cx, cy, r) in zip(ordered, discs):
-        parts.append('<circle class="bub" cx="%.1f" cy="%.1f" r="%.2f"><title>%s: %s %.2f, %s %.2f, spend %s</title></circle>'
-                     % (cx, cy, r, esc(name), esc(xlabel), x, esc(ylabel), y, _axis_text(size)))
+        paint = ' style="fill:%s;stroke:%s"' % (colours[name], colours[name]) if colours and name in colours else ""
+        words = "%s: %s %.2f, %s %.2f, %s %s" % (name, xlabel, x, ylabel, y, size_words, _axis_text(size))
+        parts.append('<circle class="bub" cx="%.1f" cy="%.1f" r="%.2f"%s tabindex="0"%s><title>%s</title></circle>' % (cx, cy, r, paint, tip(words), esc(words)))
         if not show:
             continue
         short = _short(name.split(" \u00b7 ")[0], 16)
@@ -324,7 +363,7 @@ def bubble_chart(points: Sequence[Tuple[float, float, float, str, bool]], xlabel
     parts.append('<text x="%.1f" y="%d" text-anchor="middle">%s</text>' % ((left + width - right) / 2, height - 6, esc(xlabel)))
     parts.append('<text transform="rotate(-90 14 %.1f)" x="14" y="%.1f" text-anchor="middle">%s</text>'
                  % ((top + height - bottom) / 2, (top + height - bottom) / 2, esc(ylabel)))
-    parts.append("</svg><figcaption>%s. Bubble area is spend; dashed lines are the median of the ads shown.</figcaption></figure>" % esc(label))
+    parts.append("</svg><figcaption>%s</figcaption></figure>" % (esc(note) if note else "%s. Bubble area is %s; dashed lines are the median of the ads shown." % (esc(label), esc(size_words))))
     return "".join(parts)
 
 
@@ -403,3 +442,302 @@ def heatmap(row_labels: Sequence[str], col_labels: Sequence[str], cells: Sequenc
     key = legend([("hm-sw", "Darker shade = more spend"), ("hm-sw hatch", "Hatched = no ad"), ("hm-sw outline", "Outlined with a number = a gap worth testing")])
     parts.append("</svg>%s<figcaption>%s. The number in a cell is how many ads sit there.</figcaption></figure>" % (key, esc(label)))
     return "".join(parts)
+
+
+# ---------- shared plumbing for the format and time charts ----------
+
+SERIES_VARS = tuple("var(--series-%d)" % n for n in range(1, 7))
+OTHER_COLOUR = "var(--text-muted)"
+TICKS_WIDE = 8  # arbitrary default: the most x labels a time axis writes
+TICKS_NARROW = 5  # arbitrary default: the most x labels under 480px, picked from the wide set so they never collide
+POINT_FOCUS_MAX = 60  # arbitrary: charts with more points than this get hover tips only, not a tab stop per point
+MIN_WEEK_IMPRESSIONS = 1000  # arbitrary default: a format-week with fewer impressions is left off its line, set it from your own account
+
+
+def format_colours(formats: Mapping[str, float]) -> Dict[str, str]:
+    """One colour per format for the whole page: formats by total spend (largest first) take series 1 to 6, the rest the muted tone."""
+    ranked = sorted(formats, key=lambda name: (-(formats[name] or 0), str(name)))
+    return {name: SERIES_VARS[i] if i < len(SERIES_VARS) else OTHER_COLOUR for i, name in enumerate(ranked)}
+
+
+def tip(text: str) -> str:
+    return ' data-tip="%s"' % esc(text)
+
+
+LABEL_SLOT = 70  # arbitrary: the width in svg units one x label is given, so a narrow chart writes fewer labels
+
+
+def x_ticks(count: int, plot_w: float = 10 ** 6) -> Tuple[List[int], List[int]]:
+    """Indices of the x labels to write: (wide set of at most TICKS_WIDE, the narrow subset of at most TICKS_NARROW).
+
+    A chart with a narrow plot writes fewer labels, so neighbours never touch.
+    """
+    if count <= 0:
+        return [], []
+    limit = max(2, min(TICKS_WIDE, int(plot_w // LABEL_SLOT)))
+    every = max(1, -(-count // limit))
+    wide = list(range(0, count, every))
+    narrow = wide
+    while len(narrow) > min(TICKS_NARROW, limit):
+        narrow = narrow[::2]
+    return wide, narrow
+
+
+def chips(names: Sequence[Tuple[str, str]]) -> str:
+    """Legend chips: (series name, colour). Each is a button that toggles that series; with scripts off the row is a plain key."""
+    return '<div class="chips">%s</div>' % "".join(
+        '<button type="button" class="chip" data-series="%s" aria-pressed="true"><span class="sw" style="background:%s"></span>%s</button>'
+        % (esc(name), colour, esc(name)) for name, colour in names)
+
+
+def switcher(uid: str, options: Sequence[Tuple[str, str, str]], default: Optional[str] = None) -> str:
+    """A metric switcher over pre-rendered views: options are (key, button text, view html). With scripts off every view shows, stacked under its heading."""
+    chosen = default or options[0][0]
+    bar = "".join('<button type="button" aria-pressed="%s" data-pick="%s">%s</button>' % ("true" if key == chosen else "false", esc(key), esc(text))
+                  for key, text, _ in options)
+    views = "".join('<div class="pick" data-view="%s"><h4 class="pick-title">%s</h4>%s</div>' % (esc(key), esc(text), html) for key, text, html in options)
+    return '<div class="switch" data-switch="%s"><div class="seg" role="group" aria-label="Choose a measure">%s</div>%s</div>' % (esc(uid), bar, views)
+
+
+def _figure(svg: str, caption: str, legend_html: str = "", wide: bool = True) -> str:
+    """A figure around one svg; a figure with legend chips is the scope those chips toggle within."""
+    return '<figure class="chart%s"%s>%s%s<figcaption>%s</figcaption></figure>' % (
+        " wide" if wide else "", ' data-scope="1"' if legend_html else "", legend_html, svg, caption)
+
+
+def _points(values: Sequence[Optional[float]], px: Callable[[int], float], py: Callable[[float], float]) -> str:
+    path, pen = [], False
+    for i, value in enumerate(values):
+        if value is None:
+            pen = False
+            continue
+        path.append("%s%.1f %.1f" % ("L" if pen else "M", px(i), py(value)))
+        pen = True
+    return " ".join(path)
+
+
+def line_chart(labels: Sequence[str], lines: Sequence[Dict[str, Any]], label: str, fmt: Callable[[float], str], unit: str,
+               bars: Optional[Sequence[Optional[float]]] = None, bar_fmt: Optional[Callable[[float], str]] = None, bar_name: str = "", bar_unit: str = "",
+               tip_fmt: Optional[Callable[[float], str]] = None, bar_tip_fmt: Optional[Callable[[float], str]] = None,
+               x_text: Callable[[str], str] = day_label, width: int = 640, height: int = 280, legend: bool = True, caption: str = "") -> str:
+    """Time lines over shared x labels, with optional faint background bars on a second (right) axis.
+
+    Each line is {"name", "values", "colour", "kind"}; kind is "line" (dots with tips), "avg" (thick, no dots) or "dashed"
+    (an account-wide reference). A None value is a gap, never a zero. Every series sits in its own <g data-series>.
+    """
+    count = len(labels)
+    real = [v for ln in lines for v in ln["values"] if v is not None]
+    if not count or not real:
+        return ""
+    left, right, top, bottom = 52, 52 if bars else 14, 14, 40
+    plot_w, plot_h = width - left - right, height - top - bottom
+    high = max(real) or 1.0
+    slot = plot_w / count
+
+    def px(i: int) -> float:
+        return left + i * slot + slot / 2
+
+    def py(v: float) -> float:
+        return height - bottom - v / high * plot_h
+
+    parts = ['<svg viewBox="0 0 %d %d" role="img" aria-label="%s">' % (width, height, esc(label))]
+    for frac in (0.0, 0.5, 1.0):
+        y = height - bottom - frac * plot_h
+        parts.append('<line class="grid" x1="%d" y1="%.1f" x2="%d" y2="%.1f"/>' % (left, y, width - right, y))
+        parts.append('<text x="%d" y="%.1f" text-anchor="end">%s</text>' % (left - 6, y + 4, esc(fmt(high * frac))))
+    if bars and any(v is not None for v in bars):
+        peak = max(v for v in bars if v is not None) or 1.0
+        rects = []
+        for i, v in enumerate(bars):
+            if v is None:
+                continue
+            h = max(plot_h * v / peak, 1)
+            rects.append('<rect class="bar-bg" x="%.1f" y="%.1f" width="%.1f" height="%.1f"%s/>'
+                         % (left + i * slot + slot * 0.18, height - bottom - h, slot * 0.64, h, tip("%s: %s %s" % (x_text(labels[i]), (bar_tip_fmt or bar_fmt or fmt)(v), bar_name))))
+        parts.append('<g data-series="%s">%s</g>' % (esc(bar_name), "".join(rects)))
+        for frac in (0.5, 1.0):
+            parts.append('<text x="%d" y="%.1f">%s</text>' % (width - right + 6, height - bottom - frac * plot_h + 4, esc((bar_fmt or fmt)(peak * frac))))
+    parts.append('<line class="axis" x1="%d" y1="%d" x2="%d" y2="%d"/>' % (left, height - bottom, width - right, height - bottom))
+    focus = count <= POINT_FOCUS_MAX
+    for ln in lines:
+        kind, colour = ln.get("kind", "line"), ln.get("colour", SERIES_VARS[0])
+        inner = '<path class="line %s" style="stroke:%s" d="%s"/>' % (kind, colour, _points(ln["values"], px, py))
+        if kind == "line":
+            for i, v in enumerate(ln["values"]):
+                if v is not None:
+                    inner += ('<circle class="pt" style="fill:%s" cx="%.1f" cy="%.1f" r="3"%s%s/>'
+                              % (colour, px(i), py(v), ' tabindex="0"' if focus else "", tip("%s, %s: %s" % (ln["name"], x_text(labels[i]), (tip_fmt or fmt)(v)))))
+        parts.append('<g data-series="%s">%s</g>' % (esc(ln["name"]), inner))
+    wide, narrow = x_ticks(count, plot_w)
+    for i in wide:
+        parts.append('<text class="tk%s" x="%.1f" y="%d" text-anchor="middle">%s</text>' % ("" if i in narrow else " tk-wide", px(i), height - bottom + 16, esc(x_text(labels[i]))))
+    if width >= 500:
+        parts.append('<text transform="rotate(-90 12 %.1f)" x="12" y="%.1f" text-anchor="middle">%s</text>' % (top + plot_h / 2, top + plot_h / 2, esc(unit)))
+    if bars:
+        parts.append('<text transform="rotate(90 %d %.1f)" x="%d" y="%.1f" text-anchor="middle">%s</text>'
+                     % (width - 8, top + plot_h / 2, width - 8, top + plot_h / 2, esc(bar_unit or bar_name)))
+    names = ([(bar_name, "var(--series-neutral)")] if bars and bar_name else []) + [(ln["name"], ln.get("colour", SERIES_VARS[0])) for ln in lines]
+    return _figure("".join(parts) + "</svg>", esc(caption or label), chips(names) if legend and len(names) > 1 else "")
+
+
+def stacked_area(labels: Sequence[str], series: Sequence[Tuple[str, Sequence[float], str]], label: str, caption: str = "",
+                 x_text: Callable[[str], str] = day_label, width: int = 640, height: int = 280) -> str:
+    """Share of the whole by day: series are (name, shares in percent that sum to 100 each day, colour). Hover a day for every share."""
+    count = len(labels)
+    if count < 2 or len(series) < 2:
+        return ""
+    left, right, top, bottom = 52, 14, 14, 40
+    plot_w, plot_h = width - left - right, height - top - bottom
+    step = plot_w / (count - 1)
+
+    def px(i: int) -> float:
+        return left + i * step
+
+    def py(v: float) -> float:
+        return height - bottom - v / 100.0 * plot_h
+
+    parts = ['<svg viewBox="0 0 %d %d" role="img" aria-label="%s">' % (width, height, esc(label))]
+    for frac in (0.0, 0.5, 1.0):
+        y = height - bottom - frac * plot_h
+        parts.append('<line class="grid" x1="%d" y1="%.1f" x2="%d" y2="%.1f"/>' % (left, y, width - right, y))
+        parts.append('<text x="%d" y="%.1f" text-anchor="end">%d%%</text>' % (left - 6, y + 4, round(frac * 100)))
+    floor = [0.0] * count
+    for name, shares, colour in series:
+        ceil = [floor[i] + shares[i] for i in range(count)]
+        top_edge = " ".join("%s%.1f %.1f" % ("L" if i else "M", px(i), py(ceil[i])) for i in range(count))
+        back = " ".join("L%.1f %.1f" % (px(i), py(floor[i])) for i in range(count - 1, -1, -1))
+        parts.append('<g data-series="%s" data-dim="1"><path class="area" style="fill:%s" d="%s %s Z"/></g>' % (esc(name), colour, top_edge, back))
+        floor = ceil
+    parts.append('<line class="axis" x1="%d" y1="%d" x2="%d" y2="%d"/>' % (left, height - bottom, width - right, height - bottom))
+    for i in range(count):
+        text = "%s: %s" % (x_text(labels[i]), ", ".join("%s %.0f%%" % (n, sh[i]) for n, sh, _ in series if sh[i] >= 0.5))
+        parts.append('<rect class="hit" x="%.1f" y="%d" width="%.1f" height="%.1f"%s/>' % (px(i) - step / 2, top, max(step, 1), plot_h, tip(text)))
+    wide, narrow = x_ticks(count, plot_w)
+    for i in wide:
+        parts.append('<text class="tk%s" x="%.1f" y="%d" text-anchor="middle">%s</text>' % ("" if i in narrow else " tk-wide", px(i), height - bottom + 16, esc(x_text(labels[i]))))
+    parts.append('<text transform="rotate(-90 12 %.1f)" x="12" y="%.1f" text-anchor="middle">Share of spend (%%)</text>' % (top + plot_h / 2, top + plot_h / 2))
+    return _figure("".join(parts) + "</svg>", esc(caption or label), chips([(n, c) for n, _, c in series]))
+
+
+def stacked_bars(labels: Sequence[str], series: Sequence[Tuple[str, Sequence[float], str]], label: str, unit: str, caption: str = "",
+                 width: int = 640, height: int = 280) -> str:
+    """Counts per x slot stacked by series: series are (name, counts, colour)."""
+    count = len(labels)
+    totals = [sum(sh[i] for _, sh, _ in series) for i in range(count)]
+    if not count or not any(totals):
+        return ""
+    left, right, top, bottom = 52, 14, 14, 40
+    plot_w, plot_h = width - left - right, height - top - bottom
+    slot = plot_w / count
+    peak = max(totals) or 1.0
+    parts = ['<svg viewBox="0 0 %d %d" role="img" aria-label="%s">' % (width, height, esc(label))]
+    for frac in (0.0, 0.5, 1.0):
+        y = height - bottom - frac * plot_h
+        parts.append('<line class="grid" x1="%d" y1="%.1f" x2="%d" y2="%.1f"/>' % (left, y, width - right, y))
+        parts.append('<text x="%d" y="%.1f" text-anchor="end">%s</text>' % (left - 6, y + 4, "{:,.0f}".format(peak * frac)))
+    bases = [0.0] * count
+    for name, counts, colour in series:
+        rects = []
+        for i, v in enumerate(counts):
+            if not v:
+                continue
+            h = plot_h * v / peak
+            rects.append('<rect class="seg-bar" style="fill:%s" x="%.1f" y="%.1f" width="%.1f" height="%.1f"%s%s/>'
+                         % (colour, left + i * slot + slot * 0.18, height - bottom - (bases[i] + v) / peak * plot_h, slot * 0.64, h,
+                            ' tabindex="0"' if count <= POINT_FOCUS_MAX else "", tip("%s, %s: %d new %s" % (labels[i], name, v, "ad" if v == 1 else "ads"))))
+            bases[i] += v
+        parts.append('<g data-series="%s" data-dim="1">%s</g>' % (esc(name), "".join(rects)))
+    parts.append('<line class="axis" x1="%d" y1="%d" x2="%d" y2="%d"/>' % (left, height - bottom, width - right, height - bottom))
+    wide, narrow = x_ticks(count, plot_w)
+    for i in wide:
+        parts.append('<text class="tk%s" x="%.1f" y="%d" text-anchor="middle">%s</text>' % ("" if i in narrow else " tk-wide", left + i * slot + slot / 2, height - bottom + 16, esc(labels[i])))
+    parts.append('<text transform="rotate(-90 12 %.1f)" x="12" y="%.1f" text-anchor="middle">%s</text>' % (top + plot_h / 2, top + plot_h / 2, esc(unit)))
+    return _figure("".join(parts) + "</svg>", esc(caption or label), chips([(n, c) for n, _, c in series]))
+
+
+def benchmark_rows(rows: Sequence[Dict[str, Any]], median: Optional[float], fmt: Callable[[float], str], label: str, unit: str,
+                   width: int = 640, tip_fmt: Optional[Callable[[float], str]] = None) -> str:
+    """One row per format: a dot for the account's value, a shaded band or tick for a cited public figure, a line for the account median.
+
+    rows are {"name", "value" (None = no value), "colour", "band" (benchmarks.lookup result or None)}.
+    """
+    shown = list(rows)
+    say = tip_fmt or fmt
+    if not any(r["value"] is not None for r in shown):
+        return ""
+    left, right, top, row = 150, 70, 14, 34
+    height = top + row * len(shown) + 38
+    plot_w = width - left - right
+    nums = [r["value"] for r in shown if r["value"] is not None] + [b for r in shown if r.get("band") for b in (r["band"]["low"], r["band"]["high"])]
+    nums += [median] if median is not None else []
+    high = max(nums) * 1.08 or 1.0
+
+    def px(v: float) -> float:
+        return left + v / high * plot_w
+
+    parts = ['<svg viewBox="0 0 %d %d" role="img" aria-label="%s">' % (width, height, esc(label))]
+    for frac in (0.0, 0.5, 1.0):
+        x = left + frac * plot_w
+        parts.append('<line class="grid" x1="%.1f" y1="%d" x2="%.1f" y2="%d"/>' % (x, top, x, height - 38))
+        parts.append('<text x="%.1f" y="%d" text-anchor="middle">%s</text>' % (x, height - 22, esc(fmt(high * frac))))
+    if median is not None:
+        parts.append('<line class="guide" x1="%.1f" y1="%d" x2="%.1f" y2="%d"%s/>' % (px(median), top, px(median), height - 38, tip("Median across your formats: %s" % say(median))))
+        parts.append('<text x="%.1f" y="%d" text-anchor="middle">Median across your formats %s</text>' % (min(max(px(median), left + 80), width - right - 80), height - 6, esc(fmt(median))))
+    for i, r in enumerate(shown):
+        y = top + i * row + row / 2
+        inner = '<text class="lbl" x="%d" y="%.1f" text-anchor="end">%s</text>' % (left - 10, y + 4, esc(_short(r["name"], 22)))
+        band = r.get("band")
+        if band:
+            lo, hi = px(band["low"]), px(band["high"])
+            words = "Industry figure (%s %s, %s): %s%s" % (band["source"].split(",")[0], band["year"], band["sample"], say(band["value"]),
+                                                          "" if band["low"] == band["high"] else " (range %s to %s)" % (say(band["low"]), say(band["high"])))
+            if hi - lo >= 3:
+                inner += '<rect class="band" x="%.1f" y="%.1f" width="%.1f" height="16" rx="4"%s/>' % (lo, y - 8, hi - lo, tip(words))
+            inner += '<line class="band-tick" x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f"%s/>' % (px(band["value"]), y - 11, px(band["value"]), y + 11, tip(words))
+        if r["value"] is None:
+            inner += '<text x="%d" y="%.1f">n/a</text>' % (left + 8, y + 4)
+        else:
+            inner += ('<circle class="pt" style="fill:%s" cx="%.1f" cy="%.1f" r="6" tabindex="0"%s/><text x="%.1f" y="%.1f">%s</text>'
+                      % (r["colour"], px(r["value"]), y, tip("%s: %s" % (r["name"], say(r["value"]))), min(px(r["value"]) + 12, width - right + 4), y + 4, esc(fmt(r["value"]))))
+        parts.append('<g data-series="%s">%s</g>' % (esc(r["name"]), inner))
+    parts.append('<line class="axis" x1="%d" y1="%d" x2="%d" y2="%d"/>' % (left, top, left, height - 38))
+    return _figure("".join(parts) + "</svg>", esc(label), chips([(r["name"], r["colour"]) for r in shown]))
+
+
+def bars_with_dots(labels: Sequence[str], shares: Sequence[Optional[float]], counts: Sequence[int], dots: Sequence[Optional[float]],
+                   dot_fmt: Callable[[float], str], dot_name: str, label: str, caption: str = "", width: int = 640, height: int = 280) -> str:
+    """Bars of spend share per bucket (ad count written on each bar) with a dot per bucket on a second, right-hand axis."""
+    count = len(labels)
+    if not count or not any(v for v in shares):
+        return ""
+    left, right, top, bottom = 52, 56, 22, 40
+    plot_w, plot_h = width - left - right, height - top - bottom
+    slot = plot_w / count
+    peak = max(v for v in shares if v is not None) or 1.0
+    real = [d for d in dots if d is not None]
+    dhigh = (max(real) if real else 1.0) * 1.12 or 1.0  # headroom so a top dot clears the count written above its bar
+    parts = ['<svg viewBox="0 0 %d %d" role="img" aria-label="%s">' % (width, height, esc(label))]
+    for frac in (0.0, 0.5, 1.0):
+        y = height - bottom - frac * plot_h
+        parts.append('<line class="grid" x1="%d" y1="%.1f" x2="%d" y2="%.1f"/>' % (left, y, width - right, y))
+        parts.append('<text x="%d" y="%.1f" text-anchor="end">%.0f%%</text>' % (left - 6, y + 4, peak * frac))
+        parts.append('<text x="%d" y="%.1f">%s</text>' % (width - right + 6, y + 4, esc(dot_fmt(dhigh * frac))))
+    bar_group, dot_group = [], []
+    for i in range(count):
+        cx = left + i * slot + slot / 2
+        if shares[i]:
+            h = max(plot_h * shares[i] / peak, 1)
+            bar_group.append('<rect class="bar-bg solid" x="%.1f" y="%.1f" width="%.1f" height="%.1f"%s/>' % (cx - slot * 0.3, height - bottom - h, slot * 0.6, h,
+                                                                                                          tip("%s: %.1f%% of spend, %d ads" % (labels[i], shares[i], counts[i]))))
+        bar_group.append('<text class="count" x="%.1f" y="%.1f" text-anchor="middle">%d ad%s</text>'
+                         % (cx, (height - bottom - max(plot_h * (shares[i] or 0) / peak, 1)) - 5, counts[i], "" if counts[i] == 1 else "s"))
+        if dots[i] is not None:
+            dot_group.append('<circle class="pt" style="fill:var(--series-2)" cx="%.1f" cy="%.1f" r="6" tabindex="0"%s/>'
+                             % (cx, height - bottom - dots[i] / dhigh * plot_h, tip("%s, %s: %s" % (labels[i], dot_name, dot_fmt(dots[i])))))
+        parts_label = '<text class="tk" x="%.1f" y="%d" text-anchor="middle">%s</text>' % (cx, height - bottom + 16, esc(labels[i]))
+        bar_group.append(parts_label)
+    parts.append('<g data-series="Spend share">%s</g><g data-series="%s">%s</g>' % ("".join(bar_group), esc(dot_name), "".join(dot_group)))
+    parts.append('<line class="axis" x1="%d" y1="%d" x2="%d" y2="%d"/>' % (left, height - bottom, width - right, height - bottom))
+    parts.append('<text transform="rotate(-90 12 %.1f)" x="12" y="%.1f" text-anchor="middle">Share of spend (%%)</text>' % (top + plot_h / 2, top + plot_h / 2))
+    parts.append('<text transform="rotate(90 %d %.1f)" x="%d" y="%.1f" text-anchor="middle">%s</text>' % (width - 8, top + plot_h / 2, width - 8, top + plot_h / 2, esc(dot_name)))
+    return _figure("".join(parts) + "</svg>", esc(caption or label), chips([("Spend share", "var(--series-neutral)"), (dot_name, "var(--series-2)")]))
