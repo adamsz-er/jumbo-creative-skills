@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """The account's creative portfolio: theme x format coverage, ad types, spend concentration.
 
-Usage: python3 mix.py ads.csv [--pattern concept,format,...] [--no-family] [--json]
+Usage: python3 mix.py ads.csv [--pattern concept,format,...] [--key-map PX=concept] [--group-by market] [--no-family] [--json]
 
 Standard library only. Ad names are split with the naming convention (see
 creative-context). Names that do not parse go to an "unclassified" bucket that
-is counted and listed, never dropped. Performance read-outs (which concepts and
+is counted and listed, never dropped. Ad types outside the six known ones are kept as
+written, counted, and flagged so the agent asks the user about them. Performance read-outs (which concepts and
 formats are top quartile) use pooled ROAS over BAU ads only, relative to this
 account, with no benchmark. Promo and BAU are shown separately, never blended.
 """
@@ -83,12 +84,18 @@ def _top_quartile(values: Dict[str, Optional[float]]) -> List[str]:
 
 
 def analyse_mix(rows: Sequence[Dict[str, Any]], pattern: Optional[Sequence[str]] = None,
-                families: bool = True) -> Dict[str, Any]:
-    """Portfolio tables and read-outs from daily or per-ad rows."""
-    ads = cm.aggregate_by_ad(rows)
+                families: bool = True, group_by: Optional[Sequence[str]] = None,
+                key_map: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    """Portfolio tables and read-outs from daily or per-ad rows.
+
+    `group_by` adds a table by any column the data carries (market, objective, ...).
+    """
+    ads = cm.aggregate_by_ad(rows, key_map=key_map)
+    group_by = cm.resolve_group_by(ads, group_by) if group_by else ()
+    learned = cm.learn_names([a["ad_name"] for a in ads if a.get("ad_name")], key_map)
     classified, unclassified = [], []
     for ad in ads:
-        fields = cm.parse_name(ad["ad_name"], pattern) if ad.get("ad_name") else {}
+        fields = cm.parse_name(ad["ad_name"], pattern, key_map, learned) if ad.get("ad_name") else {}
         if not fields and pattern is None and ad.get("concept") and ad.get("format"):
             fields = {f: ad.get(f) for f in cm.NAME_FIELDS if ad.get(f)}
         (classified if fields else unclassified).append(dict(ad, fields=fields))
@@ -120,6 +127,10 @@ def analyse_mix(rows: Sequence[Dict[str, Any]], pattern: Optional[Sequence[str]]
             hit = [a for a in classified if a["family"] == name and (a["fields"].get("format") or "unknown") == fmt]
             line[fmt] = {"ads": len(hit), "spend": sum(a.get("spend") or 0 for a in hit)}
         cells.append(line)
+
+    for ad in classified:
+        ad["fields"]["group"] = cm.group_key(ad, group_by) if group_by else None
+    by_group = _table(classified, "group", total) if group_by else []
 
     stage_ads = [a for a in classified if a["fields"].get("funnel_stage")]
     by_stage = _table(stage_ads, "funnel_stage", sum(a.get("spend") or 0 for a in stage_ads))
@@ -172,6 +183,9 @@ def analyse_mix(rows: Sequence[Dict[str, Any]], pattern: Optional[Sequence[str]]
         "by_format": _table(classified, "format", total),
         "by_concept": by_concept,
         "by_type": _table(classified, "ad_type", total),
+        "group_by": list(group_by), "by_group": by_group,
+        "unknown_types": sorted({a["fields"]["ad_type"] for a in classified
+                                 if a["fields"].get("ad_type") and a["fields"]["ad_type"] not in TYPES}),
         "by_stage": by_stage,
         "grid": {"formats": formats, "families": family_names, "cells": cells},
         "top_concepts": top_concepts, "top_formats": top_formats,
@@ -223,6 +237,12 @@ def render(result: Dict[str, Any]) -> str:
     out += _fmt_table([label, "ads", "spend", "share%", "roas", "cpa", "grouped from"], lines)
     out += ["", "By ad type (shown separately, never blended: promo and BAU do different jobs)"]
     out += _simple(result["by_type"], "ad_type", "ad type", " (not in the ad-type list)")
+    if result["unknown_types"]:
+        out.append("Ad types not in the list: %s. Ask the user which type each one is (one question listing them); "
+                   "until then they stay as written, counted, never dropped." % ", ".join(result["unknown_types"]))
+    if result["group_by"]:
+        out += ["", "By %s" % ", ".join(result["group_by"])]
+        out += _simple(result["by_group"], "group", ", ".join(result["group_by"]))
     grid = result["grid"]
     out += ["", "Concept x format grid (ads / spend; gap = no ad)"]
     lines = []
@@ -269,12 +289,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("path", help="Ads Manager CSV, or a .json file of rows")
     parser.add_argument("--pattern", help="comma-separated naming-convention fields, in order "
                                           "(default: concept,format,creator,ad_type,product,tone,launch_date)")
+    parser.add_argument("--key-map", help="extra KEY=field pairs for KEY:value ad names, e.g. PX=concept")
+    parser.add_argument("--group-by", help="also show a table by these comma-separated columns: a name field or "
+                                           "any column in the data, e.g. market or format,market")
     parser.add_argument("--no-family", action="store_true",
                         help="do not group '-suffix' variants of a concept into one family")
     parser.add_argument("--json", action="store_true", help="print JSON instead of text")
     args = parser.parse_args(argv)
     pattern = [f.strip() for f in args.pattern.split(",")] if args.pattern else None
-    result = analyse_mix(cm.load_rows(args.path), pattern, families=not args.no_family)
+    group_by = tuple(g.strip() for g in args.group_by.split(",") if g.strip()) if args.group_by else None
+    try:
+        key_map = cm.parse_key_map(args.key_map) if args.key_map else None
+        result = analyse_mix(cm.load_rows(args.path), pattern, families=not args.no_family,
+                             group_by=group_by, key_map=key_map)
+    except (cm.GroupColumnError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     print(json.dumps(result, indent=2) if args.json else render(result))
     return 0
 

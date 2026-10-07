@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Grade each ad against the account's own baseline and diagnose the first broken funnel step.
 
-Usage: python3 grade.py ads.csv [--group-by format] [--min-impressions 1000] [--json]
+Usage: python3 grade.py ads.csv [--group-by format] [--key-map PX=concept] [--min-impressions 1000] [--json]
 
 Standard library only. Every band is relative to the same account: top quartile
 (at or above p75), middle, bottom quartile (at or below p25), within the ad's
@@ -80,9 +80,10 @@ def diagnose(bands: Dict[str, str], notes: Sequence[str] = ()) -> Dict[str, Any]
 
 
 def grade_ads(rows: Sequence[Dict[str, Any]], group_by: Sequence[str] = ("format",),
-              min_impressions: int = 1000) -> List[Dict[str, Any]]:
+              min_impressions: int = 1000, key_map: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
     """One entry per ad: grades per metric, then the diagnosis."""
-    ads = cm.aggregate_by_ad(rows)
+    ads = cm.aggregate_by_ad(rows, key_map=key_map)
+    group_by = cm.resolve_group_by(ads, group_by)
     results = []
     for ad in ads:
         graded = (ad.get("impressions") or 0) >= min_impressions
@@ -101,7 +102,7 @@ def grade_ads(rows: Sequence[Dict[str, Any]], group_by: Sequence[str] = ("format
                          "also_weak": [], "skipped": []}
         results.append({
             "ad": ad.get("ad_id") or ad.get("ad_name"), "name": ad.get("ad_name"),
-            "format": ad.get("format"), "group": cm.group_key(ad, group_by),
+            "format": ad.get("format"), "group": cm.group_key(ad, group_by), "group_by": list(group_by),
             "impressions": ad.get("impressions"), "graded": graded,
             "ctr_clicks": cm.metric_basis(ad, "ctr")["numerator"],
             "conversions_source": ad.get("conversions_source"),
@@ -196,14 +197,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Grade ads against the account's own baseline.")
     parser.add_argument("path", help="Ads Manager CSV, or a .json file of rows")
     parser.add_argument("--group-by", default="format",
-                        help="comma-separated fields to compare within (default: format)")
+                        help="comma-separated columns to compare within: a name field or any column in the "
+                             "data, e.g. format,ad_type,market (default: format)")
+    parser.add_argument("--key-map", help="extra KEY=field pairs for KEY:value ad names, e.g. PX=concept")
     parser.add_argument("--min-impressions", type=int, default=1000,
                         help="ads below this are not graded (arbitrary default; set from your own account)")
     parser.add_argument("--json", action="store_true", help="print JSON instead of a table")
     args = parser.parse_args(argv)
     group_by = tuple(g.strip() for g in args.group_by.split(",") if g.strip())
     rows = cm.load_rows(args.path)
-    results = grade_ads(rows, group_by=group_by, min_impressions=args.min_impressions)
+    try:
+        key_map = cm.parse_key_map(args.key_map) if args.key_map else None
+        results = grade_ads(rows, group_by=group_by, min_impressions=args.min_impressions, key_map=key_map)
+    except (cm.GroupColumnError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    group_by = tuple(results[0]["group_by"]) if results else group_by
     if args.json:
         print(json.dumps({"basis": basis_header(rows, results, group_by, args.min_impressions),
                           "ads": results}, indent=2))
