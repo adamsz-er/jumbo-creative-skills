@@ -164,7 +164,8 @@ def tabs_html(ctx: Ctx) -> str:
             inner.append('<section class="card panel" id="panel-%s" data-state="%s"><p class="eyebrow">%s</p><h3>%s</h3>%s</section>'
                          % (panel_id, state, esc(eyebrow), esc(heading), content))
         banner = panels.missing_everywhere(ctx) if tab_id == "overview" else ""
-        out.append('<section class="tab" id="tab-%s" aria-label="%s">%s%s</section>' % (tab_id, esc(title), banner, "".join(inner)))
+        recap = panels.changes_panel(ctx.changes) if tab_id == "overview" else ""
+        out.append('<section class="tab" id="tab-%s" aria-label="%s">%s%s%s</section>' % (tab_id, esc(title), banner, recap, "".join(inner)))
     return "".join(out)
 
 
@@ -236,7 +237,8 @@ def build_html(rows: Optional[Sequence[Dict[str, Any]]] = None, grade: Optional[
                prior: Optional[Sequence[Dict[str, Any]]] = None, previews: Optional[Previews] = None,
                top_n: int = panels.TOP_N_CARDS, pareto_share: float = panels.PARETO_SHARE,
                breakdowns: Optional[Sequence[Dict[str, Any]]] = None, briefs: Optional[Any] = None,
-               scope: Optional[str] = None, key_map: Optional[Dict[str, str]] = None) -> str:
+               scope: Optional[str] = None, key_map: Optional[Dict[str, str]] = None,
+               changes: Optional[Dict[str, Any]] = None) -> str:
     """Render the dashboard. `rows` are normalised ad rows (creative_metrics.load_rows).
 
     The title is `title` when given, else the brand from the profile; `scope`
@@ -245,6 +247,7 @@ def build_html(rows: Optional[Sequence[Dict[str, Any]]] = None, grade: Optional[
     ctx = Ctx(rows=rows, verdicts=verdicts, grade=grade, mix=mix, currency=currency, top_n=top_n,
               pareto_share=pareto_share, account=account, prior=prior, previews=previews, breakdowns=breakdowns, briefs=briefs,
               key_map=key_map)
+    ctx.changes = changes
     brand = brand_from_profile(profile)
     heading, page_title = heading_for(title or brand, scope)
     start, end = cm.data_window(ctx.rows)
@@ -364,6 +367,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--thumbs", help="folder of small thumbnails or video stills named <ad_id>.<ext>")
     parser.add_argument("--breakdowns", help="a second Ads Manager export with age, gender, placement or region columns, for the segment tables")
     parser.add_argument("--briefs", help="a JSON list of briefs written with the creative-brief and hook-writer skills")
+    parser.add_argument("--changes", help="changes.json from creative-review: adds 'What changed since last time' at the top of Overview")
     parser.add_argument("--preview-max-kb", type=int, default=DEFAULT_MAX_KB, help="skip an image larger than this (default %(default)s)")
     parser.add_argument("--preview-budget-kb", type=int, default=DEFAULT_BUDGET_KB, help="stop embedding images past this total (default %(default)s)")
     parser.add_argument("--top-n", type=int, default=panels.TOP_N_CARDS, help="ad cards shown per list before the rest collapse (default %(default)s)")
@@ -389,7 +393,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                           previews=Previews(args.previews, args.thumbs, args.preview_max_kb, args.preview_budget_kb),
                           top_n=args.top_n, pareto_share=args.pareto_share, scope=args.scope or cm.describe_where(where),
                           breakdowns=cm.load_rows(args.breakdowns) if args.breakdowns else None, briefs=_load_json(args.briefs),
-                          key_map=key_map)
+                          key_map=key_map, changes=_load_json(args.changes))
     except (OSError, ValueError) as error:
         parser.error(str(error))
     Path(args.output).write_text(page, encoding="utf-8")
