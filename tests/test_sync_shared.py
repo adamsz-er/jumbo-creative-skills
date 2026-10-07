@@ -57,6 +57,17 @@ class SyncSharedTest(unittest.TestCase):
         self.assertEqual(dirty.returncode, 1)
         self.assertIn("out of sync", dirty.stdout)
 
+    def test_demo_csv_is_copied_and_drift_is_caught(self):
+        (self.root / "examples" / "acme").mkdir(parents=True)
+        (self.root / "examples" / "acme" / "ads_daily.csv").write_text("a,b\n1,2\n")
+        copy = self.root / "skills" / "creative-review" / "assets" / "demo" / "ads_daily.csv"
+        self.assertIn(copy, sync_shared.sync(self.root, check=True))
+        sync_shared.sync(self.root)
+        self.assertEqual(copy.read_text(), "a,b\n1,2\n")
+        self.assertEqual(sync_shared.sync(self.root, check=True), [])
+        copy.write_text("drifted\n")
+        self.assertEqual(sync_shared.sync(self.root, check=True), [copy])
+
     def test_real_repo_is_in_sync(self):
         self.assertEqual(sync_shared.sync(ROOT, check=True), [])
 

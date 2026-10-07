@@ -115,6 +115,7 @@ class Ctx:
         self.rows_by_ad: Dict[str, List[Dict[str, Any]]] = {}
         for row in self.rows:
             self.rows_by_ad.setdefault(str(row.get("ad_id") or row.get("ad_name")), []).append(row)
+        self.changes: Optional[Dict[str, Any]] = None
         self.gaps = list((mix or {}).get("gaps") or [])
         self.gap_numbers = {(g["concept"], g["format"]): n for n, g in enumerate(self.gaps, 1)}
         self.retention_headers: Dict[str, Optional[str]] = {}
@@ -1868,6 +1869,40 @@ def prompts_panel(ctx: Ctx) -> Tuple[str, str]:
 
 
 # (tab id, tab title, ((panel id, eyebrow, heading, function), ...)): the order is part of the spec.
+CHANGES_SHOWN = 9  # moves listed before the rest collapse; arbitrary display cap
+
+
+def _run_label(folder: str) -> str:
+    """"2026-03-30_093018" as "on 2026-03-30 at 09:30:18"; any other name is shown as it is."""
+    found = re.fullmatch(r"(\d{4}-\d{2}-\d{2})_(\d{2})(\d{2})(\d{2})", folder or "")
+    return "on %s at %s:%s:%s" % found.groups() if found else folder
+
+
+def changes_panel(changes: Optional[Dict[str, Any]]) -> str:
+    """"What changed since last time", the card at the top of Overview; empty when no --changes file was given."""
+    if changes is None:
+        return ""
+    if changes.get("first_run"):
+        inner = '<div class="empty"><p>%s</p></div>' % esc("First review of this account: next time this shows what changed.")
+        state = "empty"
+    elif changes.get("not_compared"):
+        inner = '<div class="empty"><p>%s</p></div>' % esc(changes["not_compared"])
+        state = "empty"
+    else:
+        state = "data"
+        account = "".join("<li>%s</li>" % say(m.get("sentence")) for m in changes.get("account") or [])
+        moves = changes.get("ads") or []
+        ad_items = ["<li>%s</li>" % say(m.get("sentence")) for m in moves]
+        shown = "".join(ad_items[:CHANGES_SHOWN])
+        more = ""
+        if len(ad_items) > CHANGES_SHOWN:
+            more = "<details><summary>%d more</summary><ul>%s</ul></details>" % (len(ad_items) - CHANGES_SHOWN, "".join(ad_items[CHANGES_SHOWN:]))
+        ads = ("<ul>%s</ul>%s" % (shown, more)) if moves else "<p>No ad changed its verdict, and no ad came or went.</p>"
+        inner = '<p class="note">Compared with the review run %s.</p><ul>%s</ul>%s' % (esc(_run_label(changes.get("previous_run", ""))), account, ads)
+    return ('<section class="card panel" id="panel-changes" data-state="%s"><p class="eyebrow">Overview</p>'
+            '<h3>What changed since last time</h3>%s</section>' % (state, inner))
+
+
 TABS = (
     ("overview", "Overview analysis", (
         ("kpis", "Overview", "Key numbers", kpi_strip),

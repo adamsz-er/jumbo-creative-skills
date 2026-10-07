@@ -2,7 +2,8 @@
 """Copy the shared modules into each skill that carries its own copy.
 
 Every skill must run on its own after install, so shared/creative_metrics.py and
-shared/from_mcp.py are duplicated into skills/<name>/scripts/. A skill gets the
+shared/from_mcp.py are duplicated into skills/<name>/scripts/, and the Acme example CSV
+into creative-review's demo folder. A skill gets the
 copies if it already has creative_metrics.py, and creative-context always does.
 `--check` copies nothing and exits 1 on drift.
 """
@@ -16,21 +17,25 @@ from pathlib import Path
 MODULE = "creative_metrics.py"
 MODULES = (MODULE, "from_mcp.py")
 ALWAYS = ("creative-context",)
+DEMO = (Path("examples/acme/ads_daily.csv"), Path("skills/creative-review/assets/demo/ads_daily.csv"))
 
 
 def targets(root):
+    """(source, copy) pairs: the shared modules for each skill that carries them, and the demo CSV."""
     root = Path(root)
     scripts = {root / "skills" / name / "scripts" for name in ALWAYS}
     scripts.update(p.parent for p in (root / "skills").glob("*/scripts/" + MODULE))
-    return sorted(folder / module for folder in scripts for module in MODULES)
+    pairs = [(root / "shared" / module, folder / module) for folder in sorted(scripts) for module in MODULES]
+    if (root / DEMO[0]).exists():
+        pairs.append((root / DEMO[0], root / DEMO[1]))
+    return sorted(pairs, key=lambda pair: pair[1])
 
 
 def sync(root, check=False):
     """Return the copies that differ from shared/; write them unless check is set."""
     root = Path(root)
     drifted = []
-    for target in targets(root):
-        source = root / "shared" / target.name
+    for source, target in targets(root):
         if not target.exists() or target.read_bytes() != source.read_bytes():
             drifted.append(target)
             if not check:
@@ -52,7 +57,7 @@ def main(argv=None):
         print("run: python3 tools/sync_shared.py")
         return 1
     if not drifted:
-        print("OK: all copies match shared/ (%s)" % ", ".join(MODULES))
+        print("OK: all copies match shared/ (%s) and the demo CSV" % ", ".join(MODULES))
     return 0
 
 

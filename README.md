@@ -2,6 +2,10 @@
 
 A package of agent skills that teach any brand to analyse and make Meta (Facebook and Instagram) ad creative. The skills grade ads against your own account's baseline, never against generic benchmarks, and they work for any brand: the brand is something you tell the agent, not something baked in. Data comes from Meta's ads connector, an Ads Manager CSV export, or nothing at all.
 
+## Start here
+
+Install the skills (below), then say **"review my Meta ads"**. The `creative-review` skill pulls your data, grades every ad against your own account, and gives you three bullets plus a dashboard to open in your browser. Run it again later and it tells you what changed since last time. No ad data yet? Say "show me a sample review" and it runs on a made-up account.
+
 ## Quick start
 
 1. **Install** the skills (table below).
@@ -32,6 +36,7 @@ Try it on made-up data first: `python3 -I skills/creative-context/scripts/creati
 
 | Skill | What it does |
 |---|---|
+| `creative-review` | The front door: one sentence runs the whole review (data, grades, keep or kill, mix, dashboard) and reports what changed since last time |
 | `creative-context` | Builds the brand profile, detects the data mode, fixes metric definitions, ad types and naming fields |
 | `creative-ideation` | Generates concepts across themes, formats, ad types and personas, aimed at the gaps in your mix |
 | `creative-grader` | Grades each ad against your own account's median and quartiles and names the first broken funnel step |
