@@ -22,14 +22,14 @@ Turns one chosen concept into a brief a producer can make without asking questio
 
 - Output of `creative-ideation`, `hook-writer` and `persona-builder`: the concept, the hook and the persona.
 - `grade.md`, `verdicts.md`, `mix.md` from the analyse skills.
-- An Ads Manager CSV (daily rows) or a Meta ads connector. Save connector rows to a JSON file and pass that file to the script.
+- An Ads Manager CSV (daily rows) or a Meta ads connector. For the connector, call read-only tools only (never one that activates, updates or changes anything), save every response to a JSON file, and convert them with `python3 scripts/from_mcp.py responses.json -o ads.csv --expect-spend <account total> --expect-impressions <account total>` as `creative-context/references/data-inputs.md` describes. A `WARNING` line or exit 3 means the pull does not reconcile: re-fetch or drop duplicates and run it again.
 
 ## Build the evidence
 
 With data, run:
 
 ```
-python3 scripts/evidence.py ads.csv          # or ads.json from the connector
+python3 scripts/evidence.py ads.csv          # ads.csv from the connector: see above
 python3 scripts/evidence.py ads.csv --json
 python3 scripts/evidence.py ads.csv --include-types bau,promo   # briefing a sale: promo winners seed gaps too
 ```

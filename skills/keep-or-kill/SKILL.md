@@ -17,14 +17,14 @@ If there is no `creative-profile.md` yet, suggest running `creative-context` fir
 
 Follow `creative-context/references/data-inputs.md`.
 
-1. **Meta ads connector.** List its tools, then pull an ad-level report with a **daily** breakdown (one row per ad per day) for at least 30 days, so fatigue can be read. Fetch: ad name, ad id, date, spend, impressions, reach, link clicks, 3-second video plays (the `video_view` action), ThruPlays, purchases and purchase value. Paused ads that delivered in the window must be included. Write the returned rows, unchanged, to a JSON file (a list of row objects, or `{"data": [...]}`) and pass it to the script.
+1. **Meta ads connector.** Call read-only tools only: never one that activates, updates or changes anything. Pull an ad-level report with a **daily** breakdown (one row per ad per day) for several weeks, so fatigue can be read, and include paused ads that delivered in the window. Follow the numbered steps in `creative-context/references/data-inputs.md`: field catalogue first, every response saved to a JSON file, then `python3 scripts/from_mcp.py responses.json -o ads.csv --expect-spend <account total> --expect-impressions <account total>` and use `ads.csv` wherever a CSV is named below. A `WARNING` line or exit 3 means the pull does not reconcile: re-fetch or drop duplicates the missing ads and run it again before you analyse. 3-second plays are derived per ad and shown as "(derived)"; say so when you quote a hook rate.
 2. **CSV or screenshots.** Ask for a daily-breakdown Ads Manager export (`creative-context/references/export-recipe.md`). Screenshots cannot show a trend: say fatigue is unreadable and give weaker, clearly labelled calls.
 3. **No data.** Say what is needed and offer the export recipe. Give no verdicts: label anything you say "no performance data".
 
 ## Run it
 
 ```
-python3 scripts/verdicts.py ads.csv                    # or ads.json from the connector
+python3 scripts/verdicts.py ads.csv                    # ads.csv from the connector: see step 1
 python3 scripts/verdicts.py ads.csv --young-days 5 --window 6 --min-change 8 --top-n 3
 python3 scripts/verdicts.py ads.csv --json
 ```

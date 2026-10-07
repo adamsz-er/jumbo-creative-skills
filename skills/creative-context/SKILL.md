@@ -25,7 +25,7 @@ Every field in the profile comes from the user. Never fill a gap from what you a
 
 Work out which of three modes you are in, and say which one out loud.
 
-1. **Connector.** If a Meta ads MCP server is connected, list its tools first. Then call its field-discovery tool, if it has one, or run one small ad-level report for a single day. Check which fields come back before you rely on any video metric: 3-second plays, ThruPlays, reach, frequency, ad creation date, daily rows. Anything missing means that metric is unavailable from the connector, and you fall back to a CSV for it. Do not assume a field exists. Meta's connector is new and its field list can change, so check in your session.
+1. **Connector.** If a Meta ads MCP server is connected, follow the numbered steps in `references/data-inputs.md`: read-only calls only, field catalogue first, ad-level daily rows saved to JSON files, then `scripts/from_mcp.py` with the account totals so a short pull is caught. Anything the connector does not return means that metric is unavailable from it, and you fall back to a CSV for it. 3-second plays are derived per ad and labelled "(derived)". Meta's connector is new and its field list can change, so check in your session.
 2. **CSV or screenshots.** If there is no connector, or it lacks the fields you need, ask for an Ads Manager export using `references/export-recipe.md`. Load it with `scripts/creative_metrics.py` when you can run Python. If you cannot run code, ask for screenshots of the table with those columns and compute by hand from the formulas.
 3. **No data.** If the user has neither, work in ideation-only mode. Label every grade, ranking and recommendation "no performance data" so nobody mistakes a judgement from craft for a result.
 

@@ -45,6 +45,10 @@ NUMERIC_FIELDS = (
     "link_clicks", "clicks", "conversions", "conversion_value", "add_to_carts",
     "revenue",
 )
+COST_PER_VIEW = "cost_per_action_type:video_view"
+DERIVED_3S = "derived: spend / cost per 3-second view"
+AGE_FROM_CREATED = "created_time"
+AGE_FROM_DELIVERY = "first delivery in window (older ads may be understated)"
 NAME_FIELDS = ("concept", "format", "creator", "ad_type", "product", "tone", "launch_date")
 
 _ALIASES = {
@@ -67,11 +71,17 @@ _ALIASES = {
     "revenue": "revenue", "storerevenue": "revenue",
     "adname": "ad_name", "adid": "ad_id",
     "day": "date", "date": "date", "reportingstarts": "date", "datestart": "date",
+    # Meta's hosted Ads MCP field names (not in Meta's documentation as of this writing and may change: check in your own session).
+    "linkclick": "link_clicks", "omnipurchase": "conversions",
+    "omnipurchasevalues": "conversion_value", "omniaddtocart": "add_to_carts",
+    "costperactiontypevideoview": COST_PER_VIEW, "createdtime": "created_time",
 }
+# `id` and `name` are ad fields only on a row that is marked as an ad row.
+_ID_NAME_ALIASES = {"id": "ad_id", "name": "ad_name"}
 # "Results" means whatever the campaign objective optimises for, so it only
 # fills conversions when no purchases column exists.
 _WEAK_ALIASES = {"results": "conversions"}
-_STRING_FIELDS = ("ad_name", "ad_id", "date")
+_STRING_FIELDS = ("ad_name", "ad_id", "date", "created_time")
 _API_ACTION_TYPES = {
     "video_view": "video_views_3s",
     "purchase": "conversions",
@@ -96,6 +106,8 @@ def _norm(key: Any) -> str:
 def _num(value: Any) -> Optional[float]:
     if value is None or isinstance(value, bool):
         return None
+    if isinstance(value, dict):
+        return _num(value.get("value"))
     if isinstance(value, (int, float)):
         return float(value)
     text = re.sub(r"[,$€£%\s]", "", str(value))
@@ -114,10 +126,18 @@ def _list_value(items: Any) -> Optional[float]:
     return sum(values) if values else None
 
 
-def _normalise_row(raw: Dict[str, Any]) -> Dict[str, Any]:
+def _is_ad_row(raw: Dict[str, Any], level: Optional[str]) -> bool:
+    if str(raw.get("level") or level or "").lower() == "ad":
+        return True
+    return any(_norm(k) == "adname" for k in raw)
+
+
+def _normalise_row(raw: Dict[str, Any], level: Optional[str] = None) -> Dict[str, Any]:
     passthrough: Dict[str, Any] = {}
     out: Dict[str, Any] = {}
     weak: Dict[str, Any] = {}
+    id_name: Dict[str, Any] = {}
+    ad_row = _is_ad_row(raw, level)
 
     def put(target: Dict[str, Any], field: str, value: Any) -> None:
         if value is not None and target.get(field) is None:
@@ -138,7 +158,11 @@ def _normalise_row(raw: Dict[str, Any]) -> Dict[str, Any]:
             continue
         norm = _norm(key)
         field = _ALIASES.get(norm) or ("spend" if norm.startswith("amountspent") else None)
-        if field in _STRING_FIELDS:
+        if field is None and ad_row and norm in _ID_NAME_ALIASES:
+            text = "" if value is None else str(value).strip()
+            if text:
+                id_name[_ID_NAME_ALIASES[norm]] = text
+        elif field in _STRING_FIELDS:
             text = "" if value is None else str(value).strip()
             put(out, field, text or None)
         elif field:
@@ -158,11 +182,23 @@ def _normalise_row(raw: Dict[str, Any]) -> Dict[str, Any]:
         if out.get(field) is None:
             out[field] = value
             out["conversions_source"] = source
+    for field, text in id_name.items():
+        if out.get(field) is None:
+            out[field] = text
+    if out.get("video_views_3s") is not None:
+        kept = raw.get("video_views_3s_source")
+        out["video_views_3s_source"] = str(kept) if kept else "reported"
+    else:
+        spend, per_view = out.get("spend"), out.get(COST_PER_VIEW)
+        if spend is not None and per_view is not None and per_view > 0:
+            out["video_views_3s"] = spend / per_view
+            out["video_views_3s_source"] = DERIVED_3S
     passthrough.update(out)
     return passthrough
 
 
-def load_rows(path_or_rows: Union[str, "os.PathLike[str]", Iterable[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+def load_rows(path_or_rows: Union[str, "os.PathLike[str]", Iterable[Dict[str, Any]]],
+              level: Optional[str] = None) -> List[Dict[str, Any]]:
     """Load an Ads Manager CSV (path), a .json file of rows, or Meta API rows (list of dicts).
 
     A .json path holds a list of row dicts, or an API response with a "data" list.
@@ -174,18 +210,26 @@ def load_rows(path_or_rows: Union[str, "os.PathLike[str]", Iterable[Dict[str, An
     Unknown columns pass through untouched. `conversions_source` records which
     column fed conversions: "Purchases" wins over "Results" when both exist, so
     a non-purchase objective's Results never silently become purchases.
+
+    Meta's hosted Ads MCP names are mapped too (link_click, omni_purchase,
+    omni_purchase_values, omni_add_to_cart, date_start, created_time). Its `id`
+    and `name` fields are ad fields only on an ad row: pass level="ad", or the
+    row carries `level` == "ad" or an `ad_name`. Amounts shaped like
+    {"value": x, "unit": ...} read as x. When 3-second plays are missing but
+    spend and `cost_per_action_type:video_view` exist, plays are derived as
+    spend / cost per view and `video_views_3s_source` says so.
     """
     if isinstance(path_or_rows, (str, bytes)) or hasattr(path_or_rows, "__fspath__"):
         if str(path_or_rows).lower().endswith(".json"):
             with open(path_or_rows, encoding="utf-8-sig") as handle:
                 loaded = json.load(handle)
-            raw_rows = loaded.get("data", []) if isinstance(loaded, dict) else loaded
+            raw_rows = loaded.get("data") or loaded.get("rows") or [] if isinstance(loaded, dict) else loaded
         else:
             with open(path_or_rows, newline="", encoding="utf-8-sig") as handle:
                 raw_rows = list(csv.DictReader(handle))
     else:
         raw_rows = path_or_rows
-    return [_normalise_row(dict(r)) for r in raw_rows]
+    return [_normalise_row(dict(r), level) for r in raw_rows]
 
 
 def _pick(row: Dict[str, Any], fields: Sequence[str]) -> Tuple[str, Optional[float]]:
@@ -269,12 +313,16 @@ def _delivered(row: Dict[str, Any]) -> bool:
 def aggregate_by_ad(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Sum base fields per ad (by ad id, else ad name) and compute metrics.
 
-    Adds first_date, last_date, active_days (days with delivery) and age_days
-    (days from first delivery to the latest date in the data). Reach is summed
-    across rows, so with daily rows `frequency` is an average per-row frequency,
-    not lifetime frequency; export a lifetime row for that. Age is measured
-    inside the export window, so an ad older than the window looks as young as
-    the window start.
+    Adds first_date, last_date, active_days (days with delivery), age_days and
+    age_basis. With a `created_time` on the rows (and no later than first
+    delivery), age is the days from creation to the latest date in the data.
+    Without one it is the days from first
+    delivery in the window, so an ad older than the window looks as young as the
+    window start, and age_basis says so. Reach is summed across rows, so with
+    daily rows `frequency` is an average per-row frequency, not lifetime
+    frequency; export a lifetime row for that. `video_views_3s_source` is
+    "derived: ..." when any row's 3-second plays were derived from a cost per
+    view, else "reported", else None.
     """
     groups: Dict[str, List[Dict[str, Any]]] = {}
     for row in rows:
@@ -298,7 +346,16 @@ def aggregate_by_ad(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
         ad["first_date"] = min(dated).isoformat() if dated else None
         ad["last_date"] = max(dated).isoformat() if dated else None
         ad["active_days"] = len(set(delivered)) if delivered else None
-        ad["age_days"] = (data_end - min(dated)).days if dated and data_end else None
+        created = next((d for d in (_parse_date(r.get("created_time")) for r in group) if d), None)
+        first = min(dated) if dated else None
+        if created and first and created > first:
+            created = None
+        start = created or first
+        ad["age_days"] = (data_end - start).days if start and data_end else None
+        ad["age_basis"] = (AGE_FROM_CREATED if created else AGE_FROM_DELIVERY) if ad["age_days"] is not None else None
+        sources = {r["video_views_3s_source"] for r in group if r.get("video_views_3s_source")}
+        derived = sorted(x for x in sources if x.startswith("derived"))
+        ad["video_views_3s_source"] = derived[0] if derived else ("reported" if sources else None)
         parsed = parse_name(ad["ad_name"]) if ad["ad_name"] else {}
         ad["conversions_source"] = next((r["conversions_source"] for r in group
                                          if r.get("conversions_source")), None)

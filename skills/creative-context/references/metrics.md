@@ -32,7 +32,7 @@ Ads Manager exports may contain both "Purchases" and "Results". "Results" is wha
 
 ## Reading the numbers
 
-- Compare an ad with its own account: median and quartiles of the same metric over a trailing window (for example 30 days), within the same format and funnel stage. Top quartile of the account's own distribution is that account's "good". There are no universal thresholds.
+- Compare an ad with its own account: median and quartiles of the same metric over a trailing window (the window you analyse, for example several weeks), within the same format and funnel stage. Top quartile of the account's own distribution is that account's "good". There are no universal thresholds.
 - Require volume before judging. Ads under a minimum number of impressions are shown but not graded. Pick the minimum from the account's own spend per ad and say what you chose.
 - Read the funnel in order and diagnose the first broken step: CPM (cost of reach) then hook rate (stops the scroll) then hold rate (message sustained) then CTR (click offer) then add-to-cart and conversion (site) then CPA and ROAS (payback).
 - Platform ROAS is a creative-level signal. Whether the business is healthy is answered by MER and by new-customer cost, which need data from outside Ads Manager.

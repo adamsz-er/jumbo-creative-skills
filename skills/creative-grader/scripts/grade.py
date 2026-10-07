@@ -13,9 +13,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-import creative_metrics as cm
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import creative_metrics as cm  # noqa: E402
 
 GRADED = ("cpm", "hook_rate", "hold_rate", "ctr", "cvr", "add_to_cart_rate", "cpa", "roas")
 LOW_VOLUME = "not graded (low volume)"
@@ -102,6 +105,7 @@ def grade_ads(rows: Sequence[Dict[str, Any]], group_by: Sequence[str] = ("format
             "impressions": ad.get("impressions"), "graded": graded,
             "ctr_clicks": cm.metric_basis(ad, "ctr")["numerator"],
             "conversions_source": ad.get("conversions_source"),
+            "hook_source": ad.get("video_views_3s_source"),
             "grades": grades, "diagnosis": diagnosis,
         })
     return results
@@ -129,6 +133,10 @@ def basis_header(rows: Sequence[Dict[str, Any]], results: Sequence[Dict[str, Any
         "CTR uses: %s. Conversions column: %s." % (", ".join(clicks) or "n/a (no clicks)",
                                                     ", ".join(sources) or "n/a (no conversions column)"),
     ]
+    derived = sorted({r["hook_source"] for r in results if (r.get("hook_source") or "").startswith("derived")})
+    if derived:
+        lines.append("Hook rate: 3-second plays are not reported per ad here, so they are %s. "
+                     "Hold rate uses ThruPlays." % derived[0])
     if fallback:
         lines.append("Groups with fewer than 5 ads fall back to account-wide numbers: %s." % ", ".join(fallback))
     return "\n".join(lines)
@@ -149,7 +157,10 @@ def render(rows, results, group_by=("format",), min_impressions=1000) -> str:
     header = ["ad", "group", "hook%", "hold%", "ctr%", "cpm", "cpa", "roas", "diagnosis"]
     lines = []
     for entry in results:
-        lines.append([str(entry["ad"]), entry["group"], _cell(entry, "hook_rate"),
+        hook = _cell(entry, "hook_rate")
+        if hook != "n/a" and (entry.get("hook_source") or "").startswith("derived"):
+            hook += " (derived)"
+        lines.append([str(entry["ad"]), entry["group"], hook,
                       _cell(entry, "hold_rate"), _cell(entry, "ctr", 2), _cell(entry, "cpm", 2),
                       _cell(entry, "cpa", 2), _cell(entry, "roas", 2), entry["diagnosis"]["summary"]])
     widths = [max(len(header[i]), *(len(r[i]) for r in lines)) for i in range(len(header))]

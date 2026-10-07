@@ -65,4 +65,4 @@ Run each hook through `references/hook-checklist.md` and show pass or fail. Fix 
 - Claims in a hook must be ones the brand can substantiate. Mark anything that needs approval "needs sign-off".
 - Regulated categories (health, finance, alcohol, weight loss and similar): flag them and tell the user to check the platform's ad policies and local advertising law. Avoid hooks that imply the viewer has a personal condition or characteristic.
 - Do not cast by stereotype; describe the energy of the person, not their demographic.
-- Read only. Do not touch the ad account.
+- Read only: only read data, and never call a tool that changes ads, budgets or status. Do not touch the ad account.
