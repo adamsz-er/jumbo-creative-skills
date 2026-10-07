@@ -238,22 +238,22 @@ class PartialCoverageTest(unittest.TestCase):
 
     def test_a_tile_with_partial_coverage_shows_its_value_and_how_many_rows_lack_it(self):
         html, _ = panels.kpi_strip(panels.Ctx(rows=self.half_blank(), currency="USD"))
-        self.assertIn("purchase value missing on 3 of 6 rows", html)
-        self.assertEqual(html.count("purchase value missing on 3 of 6 rows"), 2)
+        self.assertIn("purchase value recorded on 3 of 6 ads; the rest had none in this window", html)
+        self.assertEqual(html.count("purchase value recorded on 3 of 6 ads; the rest had none in this window"), 2)
         self.assertIn("USD 630", html)
 
     def test_fully_present_and_fully_missing_are_not_partial(self):
         full, _ = panels.kpi_strip(panels.Ctx(rows=self.ROWS, currency="USD"))
-        self.assertNotIn("missing on", full)
+        self.assertNotIn("recorded on", full)
         none, _ = panels.kpi_strip(panels.Ctx(rows=[dict(r, conversion_value=None) for r in self.ROWS], currency="USD"))
         self.assertIn("n/a (missing purchase value)", none)
-        self.assertNotIn("conversion_value missing on", none)
+        self.assertNotIn("recorded on", none)
 
     def test_the_pareto_sentence_states_value_coverage_when_partial(self):
         html, _ = panels.pareto(panels.Ctx(rows=self.half_blank(), currency="USD"))
-        self.assertIn("Purchase value is present for 3 of 6 ads and on 3 of 6 rows", html)
+        self.assertIn("Purchase value was recorded on 3 of 6 ads; the rest had none in this window and count as no value.", html)
         clean, _ = panels.pareto(panels.Ctx(rows=self.ROWS, currency="USD"))
-        self.assertNotIn("is present for", clean)
+        self.assertNotIn("was recorded on", clean)
 
 
 class KpiTest(unittest.TestCase):
@@ -565,3 +565,67 @@ class PageStructureTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReaderText(HTMLParser):
+    """Text and text-bearing attributes a reader can see, leaving out scripts, styles and the Data and method details."""
+
+    def __init__(self):
+        super().__init__()
+        self.hidden, self.method, self.text = 0, 0, []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag in ("script", "style"):
+            self.hidden += 1
+        elif tag == "details" and (self.method or "method" in (attrs.get("class") or "").split()):
+            self.method += 1
+        elif not self.method:
+            self.text.extend(v for k, v in attrs.items() if k in ("title", "aria-label", "alt", "placeholder") and v)
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style") and self.hidden:
+            self.hidden -= 1
+        elif tag == "details" and self.method:
+            self.method -= 1
+
+    def handle_data(self, data):
+        if not self.hidden and not self.method:
+            self.text.append(data)
+
+
+def reader_text(page):
+    parser = ReaderText()
+    parser.feed(page)
+    return " ".join(parser.text)
+
+
+class ReaderWordsTest(unittest.TestCase):
+    """Reader-visible text speaks of ads, never of rows or command flags (those live in SKILL.md and the Data and method details)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.rows = cm.load_rows(str(FIXTURE))
+        cls.verdicts = acme_verdicts()
+        cls.grade = acme_grade()
+        blank = [dict(r, conversion_value=None, conversions=None) if str(r["ad_id"])[-1] in "02468" else r for r in cls.rows]
+        cls.pages = {
+            "full": report.build_html(rows=cls.rows, verdicts=cls.verdicts, grade=cls.grade, currency="USD", title="Acme"),
+            "partial": report.build_html(rows=blank, verdicts=cls.verdicts, grade=cls.grade, currency="USD", title="Acme"),
+            "rows only": report.build_html(rows=cls.rows, currency="USD", title="Acme"),
+            "no data": report.build_html(verdicts=cls.verdicts, title="Acme"),
+            "undated": report.build_html(rows=[{k: v for k, v in r.items() if k != "date"} for r in cls.rows[:6]], currency="USD", title="Acme"),
+            "one day": report.build_html(rows=[r for r in cls.rows if r["date"] == cls.rows[0]["date"]], currency="USD", title="Acme"),
+        }
+
+    def test_no_reader_visible_text_says_rows(self):
+        for name, page in self.pages.items():
+            self.assertNotRegex(reader_text(page), r"(?i)\brows?\b", name)
+
+    def test_partial_coverage_is_said_in_ads(self):
+        text = reader_text(self.pages["partial"])
+        self.assertRegex(text, r"purchases recorded on \d+ of \d+ ads; the rest had none in this window")
+        self.assertRegex(text, r"purchase value recorded on \d+ of \d+ ads")
+
+    def test_the_method_details_may_still_count_rows(self):
+        self.assertIn("rows", self.pages["full"].split('<details class="method"')[1].split("</details>")[0] + " rows")

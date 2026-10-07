@@ -303,13 +303,13 @@ def _day(row: Dict[str, Any]) -> Optional[str]:
     return parsed.isoformat() if parsed else None
 
 
-def coverage(rows: Sequence[Dict[str, Any]], fields: Sequence[str]) -> List[str]:
-    """One note per field that is present on some rows and missing on others; fully present or fully missing is not partial."""
+def coverage(ads: Sequence[Dict[str, Any]], fields: Sequence[str]) -> List[str]:
+    """One note per field recorded on some ads and not others; fully present or fully missing is not partial."""
     notes = []
     for field in dict.fromkeys(fields):
-        missing = sum(1 for r in rows if r.get(field) is None)
-        if 0 < missing < len(rows):
-            notes.append("%s missing on %d of %d rows" % (interact.FIELD_WORDS.get(field, field), missing, len(rows)))
+        have = sum(1 for a in ads if a.get(field) is not None)
+        if 0 < have < len(ads):
+            notes.append("%s recorded on %d of %d ads; the rest had none in this window" % (interact.FIELD_WORDS.get(field, field), have, len(ads)))
     return notes
 
 
@@ -379,7 +379,7 @@ def video_ads(ads: Sequence[Dict[str, Any]], key: str) -> int:
 
 def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
     if not ctx.rows:
-        return empty_state("There are no ad rows, so no totals can be added up.",
+        return empty_state("There are no ads, so no totals can be added up.",
                            "Pass an Ads Manager export or the connector pull as the data file.")
     total = totals(ctx.rows)
     prior_total = totals(ctx.prior) if ctx.prior else None
@@ -417,9 +417,9 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
         if key not in ("reach", "frequency"):
             spark = charts.sparkline([_kpi_value(day_total, key) for _, day_total in sser], "%s by day" % name)
         spark_note = spark or ('<span class="muted">%s</span>' % ("one day of data" if len(sser) == 1 else
-                                                                   "no sparkline for reach or frequency" if key in ("reach", "frequency") else "no dated rows"))
+                                                                   "no sparkline for reach or frequency" if key in ("reach", "frequency") else "no dates in the data"))
         unit = " (%s)" % (ctx.currency or "account currency") if kind.startswith("money") else ""
-        partial = [] if video_note else coverage(ctx.rows, needs.get(key, ()))
+        partial = [] if video_note else coverage(ctx.ads, needs.get(key, ()))
         unknown = " unknown" if text.startswith("n/a") else ""
         notes = ([video_note] if video_note else []) + partial
         note_html = '<p class="kpi-note">%s</p>' % esc("; ".join(notes)) if notes else ""
@@ -435,8 +435,8 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
 def over_time(ctx: Ctx) -> Tuple[str, str]:
     series = daily(ctx.rows)
     if not series:
-        return empty_state("The rows carry no dates, so there is no daily series.",
-                           "Export or pull daily rows (a day column), not one summary row per ad.")
+        return empty_state("The data carries no dates, so there is no daily series.",
+                           "Export or pull the data by day (a day column), not as one summary line per ad.")
     labels = [d for d, _ in series]
     spend = [t["spend"] for _, t in series]
     roas = [cm.compute_metrics(t)["roas"] for _, t in series]
@@ -451,7 +451,7 @@ def over_time(ctx: Ctx) -> Tuple[str, str]:
     elif not use_roas:
         note = '<p class="muted">No purchase value in the data, so the line shows CPA instead of ROAS.</p>'
     if not chart:
-        return empty_state("Neither spend nor %s could be read from the rows." % unit, "Include the spend and purchase columns in the export.")
+        return empty_state("Neither spend nor %s could be read from the data." % unit, "Include the spend and purchase columns in the export.")
     return chart + note, "data"
 
 
@@ -495,7 +495,7 @@ def video_step(rows: Sequence[Dict[str, Any]], field: str, value: float) -> Tupl
 
 def funnel(ctx: Ctx) -> Tuple[str, str]:
     if not ctx.rows:
-        return empty_state("There are no ad rows to count funnel steps from.", "Pass an Ads Manager export or the connector pull as the data file.")
+        return empty_state("There are no ads to count funnel steps from.", "Pass an Ads Manager export or the connector pull as the data file.")
     counts = totals(ctx.rows)
     for field, aliases in FUNNEL_COLUMNS.items():
         counts[field], ctx.funnel_headers[field] = _sum_column(ctx.rows, aliases)
@@ -527,7 +527,7 @@ def funnel(ctx: Ctx) -> Tuple[str, str]:
     note = ('<p class="muted">Video steps count video ads only, so a step can be larger than the one before it where other formats add '
             'clicks. 3-second plays and ThruPlays are rated on video impressions (%d of %d ads are video); the other steps on all impressions.</p>'
             % (video_ads(ctx.ads, "hook_rate"), len(ctx.ads)))
-    partial = coverage(ctx.rows, [f for _, f in FUNNEL_STEPS if f in cm.NUMERIC_FIELDS])
+    partial = coverage(ctx.ads, [f for _, f in FUNNEL_STEPS if f in cm.NUMERIC_FIELDS])
     if partial:
         note += '<p class="muted">Partial coverage, so a step may be understated: %s.</p>' % esc("; ".join(partial))
     if counts.get("video_views_3s_source") == "derived":
@@ -560,12 +560,11 @@ def pareto_cut(ctx: Ctx) -> Optional[Dict[str, Any]]:
         if cut is None and cum_basis[-1] >= ctx.pareto_share:
             cut = i + 1
     ads_with = sum(1 for a in ranked if a.get("conversion_value") is not None)
-    rows_missing = sum(1 for r in ctx.rows if r.get("conversion_value") is None)
-    partial = has_value and (ads_with < len(ranked) or 0 < rows_missing < len(ctx.rows))
+    partial = has_value and ads_with < len(ranked)
     return {"ranked": ranked, "has_value": has_value, "cum_spend": cum_spend, "cum_basis": cum_basis, "cut": cut or len(ranked),
             "head_basis": cum_basis[(cut or len(ranked)) - 1],
-            "coverage": ("Purchase value is present for %d of %d ads and on %d of %d rows; an ad or row without it counts as no value."
-                         % (ads_with, len(ranked), len(ctx.rows) - rows_missing, len(ctx.rows))) if partial else None}
+            "coverage": ("Purchase value was recorded on %d of %d ads; the rest had none in this window and count as no value."
+                         % (ads_with, len(ranked))) if partial else None}
 
 
 def pareto_sentence(ctx: Ctx, info: Dict[str, Any]) -> str:
@@ -654,7 +653,7 @@ def fatigue(ctx: Ctx) -> Tuple[str, str]:
               for e in ads if e.get("age_days") is not None and (e.get("fatigue") or {}).get("ctr_change") is not None]
     top = sorted(ctx.ads, key=lambda a: -(a.get("spend") or 0))[:ctx.top_n]
     if not ctx.rows and not points:
-        return empty_state("Neither daily rows nor keep-or-kill fatigue readings were supplied.",
+        return empty_state("Neither daily data nor keep-or-kill fatigue readings were supplied.",
                            "Pass the daily data file, and run keep-or-kill with --json and pass --verdicts.")
     multiples = []
     for ad in top:
@@ -676,7 +675,7 @@ def fatigue(ctx: Ctx) -> Tuple[str, str]:
         parts.append("<h3>Age against CTR change</h3>" + plot)
     if not parts:
         return empty_state("No ad has two or more delivery days or a fatigue reading.",
-                           "Pull daily rows over a longer window, and run keep-or-kill with --json and pass --verdicts.")
+                           "Pull daily data over a longer window, and run keep-or-kill with --json and pass --verdicts.")
     return "".join(parts), "data"
 
 
@@ -733,7 +732,7 @@ def all_ads(ctx: Ctx) -> Tuple[str, str]:
     controls = ('<div class="gallery-controls"><label>Group by <select data-action="group">%s</select></label>'
                 '<label>Sort by <select data-action="sort">%s</select></label>'
                 '<button type="button" class="chip" aria-pressed="false" data-action="previews-only">Previews only</button></div>' % (group_options, sort_options))
-    lead = ('<p class="muted">Every ad, shown %s and sorted by spend at stake until you change it. The top %d of each group show as cards (N=%d, set it with <code>--top-n</code>), the rest as rows. '
+    lead = ('<p class="muted">Every ad, shown %s and sorted by spend at stake until you change it. The top %d of each group show as cards (N=%d, set it with <code>--top-n</code>), the rest as a compact list. '
             'Each group header adds up its own spend, with ROAS and CPA as ratios of sums.</p>'
             % ("grouped by verdict" if group == "verdict" else "in one list", ctx.top_n, ctx.top_n))
     return (lead + controls + '<div id="allads-static">%s</div><div id="allads-live" aria-live="polite"></div>' % "".join(sections)), "data"
@@ -750,7 +749,7 @@ def filter_bar(ctx: Ctx) -> str:
         chips = "".join('<button type="button" class="chip" aria-pressed="false" data-facet="%s" data-value="%s"><span class="chip-label">%s</span> <span class="n">%d</span></button>'
                         % (facet["key"], esc(v["value"]), esc(v["label"]), v["count"]) for v in facet["values"])
         groups.append('<fieldset class="facet"><legend>%s</legend><div class="chips-row">%s</div></fieldset>' % (esc(facet["label"]), chips))
-    note = '<p class="fb-note">Charts and key numbers stay account-wide. Filters change the ad cards, the rows and the All ads gallery.</p>'
+    note = '<p class="fb-note">Charts and key numbers stay account-wide. Filters change the ad cards, the lists and the All ads gallery.</p>'
     more = ('<details class="facets"><summary>More filters</summary><div class="facets-body">%s%s</div></details>' % (note, "".join(groups))) if groups else ""
     return ('<div class="filterbar" role="search" aria-label="Filter and group ads"><div class="fb-row">'
             '<label class="fb-search"><span class="fb-label">Search</span><input type="search" class="fb-input" placeholder="Label, name or ad ID" autocomplete="off"></label>'
@@ -789,7 +788,7 @@ OPENING_CHARS = 90  # arbitrary: where an opening line is cut, at a word boundar
 NOT_GRADED = "not graded: fewer than %d formats" % MIN_FORMATS
 NO_MIX = ("The creative-mix results were not supplied, so there is no format, concept or ad-type breakdown.",
           "Run creative-mix with --json and pass the file with --mix.")
-NO_ROWS = ("There are no ad rows to read this from.", "Pass an Ads Manager export or the connector pull as the data file.")
+NO_ROWS = ("There are no ads to read this from.", "Pass an Ads Manager export or the connector pull as the data file.")
 FORMAT_COLUMNS = (("ctr", "CTR"), ("cpm", "CPM"), ("cpa", "CPA"), ("roas", "ROAS"), ("hook_rate", "Hook rate"), ("hold_rate", "Hold rate"))
 LOWER_BETTER = ("cpm", "cpa")
 QUADRANTS = ("Keeps the few it stops", "Stops people and keeps them", "Neither yet", "Stops people, loses them")
@@ -1230,7 +1229,7 @@ def segments(ctx: Ctx) -> Tuple[str, str]:
                      for value, rs in sorted(groups.items(), key=lambda kv: -(_sum_field(kv[1], "spend") or 0))]
             parts.append("<h4>%s</h4>%s" % (esc(name), _table_of(lines, [(name, False), ("Spend", True), ("Spend share", True), ("ROAS", True), ("CPA", True)])))
         if ctx.breakdown_dims:
-            parts.append('<p class="muted">Each segment adds its own spend, purchases and purchase value, then divides: ROAS and CPA are ratios of sums, never an average of rows.</p>')
+            parts.append('<p class="muted">Each segment adds its own spend, purchases and purchase value, then divides: ROAS and CPA are ratios of sums, never an average of ratios.</p>')
         else:
             parts.append('<p class="muted">The breakdown file has no age, gender, placement, platform, region or country column.</p>')
     elif markets:
