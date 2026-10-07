@@ -163,7 +163,9 @@ def _normalise_row(raw: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def load_rows(path_or_rows: Union[str, "os.PathLike[str]", Iterable[Dict[str, Any]]]) -> List[Dict[str, Any]]:
-    """Load an Ads Manager CSV (path) or Meta API rows (list of dicts).
+    """Load an Ads Manager CSV (path), a .json file of rows, or Meta API rows (list of dicts).
+
+    A .json path holds a list of row dicts, or an API response with a "data" list.
 
     Column names are mapped to canonical fields through an alias map, ignoring
     case and punctuation. Numeric fields become floats (blank cells become
@@ -174,8 +176,13 @@ def load_rows(path_or_rows: Union[str, "os.PathLike[str]", Iterable[Dict[str, An
     a non-purchase objective's Results never silently become purchases.
     """
     if isinstance(path_or_rows, (str, bytes)) or hasattr(path_or_rows, "__fspath__"):
-        with open(path_or_rows, newline="", encoding="utf-8-sig") as handle:
-            raw_rows: Iterable[Dict[str, Any]] = list(csv.DictReader(handle))
+        if str(path_or_rows).lower().endswith(".json"):
+            with open(path_or_rows, encoding="utf-8-sig") as handle:
+                loaded = json.load(handle)
+            raw_rows = loaded.get("data", []) if isinstance(loaded, dict) else loaded
+        else:
+            with open(path_or_rows, newline="", encoding="utf-8-sig") as handle:
+                raw_rows = list(csv.DictReader(handle))
     else:
         raw_rows = path_or_rows
     return [_normalise_row(dict(r)) for r in raw_rows]
@@ -409,6 +416,140 @@ def parse_name(ad_name: Optional[str], pattern: Optional[Sequence[str]] = None) 
         if field in parsed:
             parsed[field] = parsed[field].lower()
     return parsed
+
+
+BAND_TOP, BAND_MID, BAND_BOTTOM = "top quartile", "middle", "bottom quartile"
+HIGHER_IS_BETTER = ("hook_rate", "hold_rate", "video_completion_rate", "ctr", "cvr",
+                    "add_to_cart_rate", "roas")
+LOWER_IS_BETTER = ("cpm", "cpc", "cpa", "cost_per_add_to_cart")
+# Fewer comparable ads than this is not enough to grade against. An arbitrary
+# default, not a statistical rule: set your own from how many ads you run per format.
+MIN_GROUP = 5
+
+
+def percentile_rank(value: Optional[float], values: Sequence[float]) -> Optional[float]:
+    """Where `value` sits among `values`, 0-100 (ties count half).
+
+    None when the value is missing or fewer than 5 values are given.
+    """
+    if value is None or len(values) < MIN_GROUP:
+        return None
+    below = sum(1 for v in values if v < value)
+    equal = sum(1 for v in values if v == value)
+    return (below + 0.5 * equal) / len(values) * 100
+
+
+def group_key(ad: Dict[str, Any], group_by: Sequence[str]) -> str:
+    return " / ".join(str(ad.get(g) or "unknown") for g in group_by)
+
+
+def grade_against(ad: Dict[str, Any], ads: Sequence[Dict[str, Any]], metric: str,
+                  group_by: Sequence[str] = ("format",), min_impressions: int = 1000) -> Dict[str, Any]:
+    """Grade one ad's metric against the account's own distribution.
+
+    Returns value, group, basis, percentile and band. The comparison set is the
+    ad's own group (for example its format); a group with fewer than 5 ads falls
+    back to the whole account, and `basis` says so. Higher-is-better metrics
+    band top quartile at or above p75 and bottom quartile at or below p25;
+    lower-is-better metrics (costs) are inverted. The band reads "not graded
+    (<reason>)" for a missing value, low volume or too little comparison data,
+    and "not banded" for frequency. The 1000-impression volume floor is an
+    arbitrary default: set it from your own spend per ad.
+    """
+    metric = resolve_metric(metric)
+    group = group_key(ad, group_by)
+    result: Dict[str, Any] = {"metric": metric, "value": ad.get(metric), "group": group,
+                              "basis": None, "percentile": None, "band": None}
+
+    def not_graded(reason: str) -> Dict[str, Any]:
+        result["band"] = "not graded (%s)" % reason
+        return result
+
+    if metric == "frequency":
+        result["band"] = "not banded"
+        return result
+    if result["value"] is None:
+        return not_graded(describe_missing(ad, metric) or "no value")
+    if (ad.get("impressions") or 0) < min_impressions:
+        return not_graded("low volume")
+    base = baseline(ads, metric, group_by=group_by, min_impressions=min_impressions)
+    stats = base["groups"].get(group, base["account"])
+    result["basis"] = stats["basis"]
+    eligible = [a for a in ads if a.get(metric) is not None
+                and (a.get("impressions") or 0) >= min_impressions]
+    if stats["basis"] == "group":
+        pool = [a[metric] for a in eligible if group_key(a, group_by) == group]
+    else:
+        pool = [a[metric] for a in eligible]
+    if len(pool) < MIN_GROUP:
+        return not_graded("too little comparison data: %d comparable ads, need %d" % (len(pool), MIN_GROUP))
+    result["percentile"] = percentile_rank(result["value"], pool)
+    result["p25"], result["median"], result["p75"] = stats["p25"], stats["median"], stats["p75"]
+    if stats["p25"] == stats["p75"]:
+        result["band"] = BAND_MID
+        return result
+    high = result["value"] >= stats["p75"]
+    low = result["value"] <= stats["p25"]
+    if metric in LOWER_IS_BETTER:
+        high, low = low, high
+    result["band"] = BAND_TOP if high else BAND_BOTTOM if low else BAND_MID
+    return result
+
+
+def data_window(rows: Sequence[Dict[str, Any]]) -> Tuple[Optional[str], Optional[str]]:
+    """First and last date (ISO) found in the rows, or (None, None)."""
+    days = [d for d in (_parse_date(r.get("date")) for r in rows) if d]
+    return (min(days).isoformat(), max(days).isoformat()) if days else (None, None)
+
+
+def window_aggregate(rows: Sequence[Dict[str, Any]], window: int = 7,
+                     which: str = "first") -> List[Dict[str, Any]]:
+    """Aggregate each ad over its first or last `window` delivery days.
+
+    `which` is "first" or "last". An ad with fewer than `window` delivery days
+    is left out, so it is never graded on a window it does not have. The default
+    window of 7 days is arbitrary: set it from your own account.
+    """
+    if which not in ("first", "last"):
+        raise ValueError("which must be 'first' or 'last'")
+    by_ad: Dict[str, Dict[dt.date, List[Dict[str, Any]]]] = {}
+    for row in rows:
+        key = row.get("ad_id") or row.get("ad_name")
+        day = _parse_date(row.get("date"))
+        if key is None or day is None or not _delivered(row):
+            continue
+        by_ad.setdefault(key, {}).setdefault(day, []).append(row)
+    chosen: List[Dict[str, Any]] = []
+    for days in by_ad.values():
+        ordered = sorted(days)
+        if len(ordered) < window:
+            continue
+        keep = ordered[:window] if which == "first" else ordered[-window:]
+        chosen.extend(r for d in keep for r in days[d])
+    return aggregate_by_ad(chosen) if chosen else []
+
+
+def spend_share(ads: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Ads sorted by spend, each with its share and the running cumulative share (%)."""
+    spent = [a for a in ads if a.get("spend")]
+    total = sum(a["spend"] for a in spent)
+    if not total:
+        return []
+    out, running = [], 0.0
+    for ad in sorted(spent, key=lambda a: a["spend"], reverse=True):
+        running += ad["spend"]
+        out.append({"ad": ad.get("ad_id") or ad.get("ad_name"), "spend": ad["spend"],
+                    "share": ad["spend"] / total * 100, "cumulative": running / total * 100})
+    return out
+
+
+def concentration(ads: Sequence[Dict[str, Any]], top_n: int = 3) -> Optional[float]:
+    """Share of spend (%) held by the top `top_n` ads; None when there is no spend.
+
+    top_n=3 is an arbitrary default: set your own from how many ads you run.
+    """
+    shares = spend_share(ads)
+    return shares[min(top_n, len(shares)) - 1]["cumulative"] if shares else None
 
 
 def _cell(value: Optional[float], digits: int = 2) -> str:

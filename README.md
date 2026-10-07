@@ -30,15 +30,25 @@ Try it on made-up data first: `python3 skills/creative-context/scripts/creative_
 |---|---|---|
 | `creative-context` | Builds the brand profile, detects the data mode, fixes metric definitions, ad types and naming fields | available |
 | `creative-ideation` | Generates concepts from your brand profile and what has worked | coming soon |
-| `creative-grading` | Grades each ad against your own account's median and quartiles | coming soon |
-| `keep-or-kill` | Weekly keep, kill or iterate call for every ad | coming soon |
+| `creative-grader` | Grades each ad against your own account's median and quartiles and names the first broken funnel step | available |
+| `keep-or-kill` | Keep, kill, iterate or scale call for every ad, with age, learning flag and fatigue trend | available |
 | `ad-fatigue` | Reads ad age and week-over-week trends to catch fatigue early | coming soon |
 | `creative-brief` | Writes a brief from evidence: what won, what faded, where the gaps are | coming soon |
 | `hook-analysis` | Breaks down openings and hook archetypes for video | coming soon |
 | `persona-hooks` | Maps personas to hooks and angles | coming soon |
 | `transcript-analysis` | Reads video transcripts for the claims and structure that perform | coming soon |
-| `creative-coverage` | Finds empty cells in your concept by format grid | coming soon |
+| `creative-mix` | Maps your portfolio: concept by format grid, ad types, spend concentration, gaps worth testing | available |
 | `creative-report` | Turns a review into a shareable report | coming soon |
+
+## Try the analyse skills
+
+Each prints its basis first, then the result. On the made-up Acme data (outputs are saved in `examples/acme/`):
+
+- `creative-grader`: "Grade my ads and tell me what to fix first." Runs `python3 skills/creative-grader/scripts/grade.py examples/acme/ads_daily.csv` ([output](examples/acme/grade.md)).
+- `keep-or-kill`: "Which ads should I pause, refresh or scale this week?" Runs `python3 skills/keep-or-kill/scripts/verdicts.py examples/acme/ads_daily.csv` ([output](examples/acme/verdicts.md)).
+- `creative-mix`: "What creative am I missing, and am I leaning too hard on one thing?" Runs `python3 skills/creative-mix/scripts/mix.py examples/acme/ads_daily.csv` ([output](examples/acme/mix.md)).
+
+With a Meta ads connector, the agent saves the rows it pulls to a JSON file and passes that file to the same scripts.
 
 ## Privacy
 
