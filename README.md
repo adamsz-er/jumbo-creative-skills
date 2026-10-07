@@ -37,9 +37,10 @@ Try it on made-up data first: `python3 skills/creative-context/scripts/creative_
 | `hook-analysis` | Breaks down openings and hook archetypes for video | coming soon |
 | `persona-builder` | Builds personas by emotional starting state and awareness stage, mapped to concepts and hooks | available |
 | `hook-writer` | Writes video and text hooks, and one-change variants of a winning hook | available |
-| `transcript-analysis` | Reads video transcripts for the claims and structure that perform | coming soon |
 | `creative-mix` | Maps your portfolio: concept by format grid, ad types, spend concentration, gaps worth testing | available |
-| `creative-report` | Turns a review into a shareable report | coming soon |
+| `ad-transcript` | Breaks a video script into beats, scores its structure, flags claims, and rewrites it | available |
+| `colour-grade` | Extracts the palette of ad images and gives colour and grading direction | available |
+| `creative-report` | Turns the analyse outputs into one shareable HTML report | available |
 
 ## Try the analyse skills
 
@@ -48,6 +49,9 @@ Each prints its basis first, then the result. On the made-up Acme data (outputs 
 - `creative-grader`: "Grade my ads and tell me what to fix first." Runs `python3 skills/creative-grader/scripts/grade.py examples/acme/ads_daily.csv` ([output](examples/acme/grade.md)).
 - `keep-or-kill`: "Which ads should I pause, refresh or scale this week?" Runs `python3 skills/keep-or-kill/scripts/verdicts.py examples/acme/ads_daily.csv` ([output](examples/acme/verdicts.md)).
 - `creative-mix`: "What creative am I missing, and am I leaning too hard on one thing?" Runs `python3 skills/creative-mix/scripts/mix.py examples/acme/ads_daily.csv` ([output](examples/acme/mix.md)).
+- `ad-transcript`: "Break this script into beats and tighten it." Runs `python3 skills/ad-transcript/scripts/beats.py examples/acme/transcript.txt` on an illustrative script ([output](examples/acme/transcript-analysis.md)).
+- `colour-grade`: "What does the palette of these ads say, and do they all look alike?" Runs `python3 skills/colour-grade/scripts/palette.py examples/acme/swatch.png` ([output](examples/acme/palette.md)).
+- `creative-report`: "Put this review in a report I can share." Builds one HTML file from the three analyses. See an example report: [examples/acme/report.html](examples/acme/report.html) (download it and open it in a browser).
 
 With a Meta ads connector, the agent saves the rows it pulls to a JSON file and passes that file to the same scripts.
 
@@ -62,7 +66,7 @@ They work with no data and get sharper with a brand profile or the analyse outpu
 
 ## Privacy
 
-The skills never send your data anywhere. They run inside your agent, and the bundled script uses only the Python standard library.
+The skills never send your data anywhere. They run inside your agent, and the bundled scripts use only the Python standard library. `colour-grade` reads other image formats too if you have Pillow installed, and the report is one local HTML file whose only outside request is the font stylesheet.
 
 ## License
 
