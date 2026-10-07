@@ -963,7 +963,7 @@ class ShellTest(unittest.TestCase):
         self.assertIn(':root:not([data-theme="light"]) .logo-dark { display: inline-block; }', self.css)
 
     def test_the_scope_bar_reads_window_currency_source_and_attribution(self):
-        bar = re.search(r'<div class="scope-bar".*?</div>\s*</header>', self.header, re.S).group(0)
+        bar = re.search(r'<div class="scope-bar".*?</div>\s*(<p class="scope-note">[^<]*</p>\s*)?</header>', self.header, re.S).group(0)
         segments = re.findall(r'<div class="scope-seg"><span class="scope-label">([^<]*)</span> <b>([^<]*)</b></div>', bar)
         self.assertEqual(segments, [("Window", "1 Mar – 30 Mar 2026"), ("Scope", "all ads in the data"), ("Currency", "USD"), ("Source", "Meta ads connector"), ("Attribution", "7-day click")])
         self.assertRegex(self.css, r"\.scope-bar \{[^}]*background: var\(--bar\)[^}]*border-radius: 12px")
@@ -1115,3 +1115,111 @@ class ReviewFixesTest(unittest.TestCase):
         html, _ = panels.kpi_strip(panels.Ctx(rows=cm.load_rows(str(FIXTURE)), currency="USD"))
         self.assertRegex(html, r'<p class="kpi-note">video ads \u00b7 \d+ of \d+</p>')
         self.assertRegex(self.css, r"\.kpi-note \{[^}]*color: var\(--text-muted\)")
+
+
+import importlib.util  # noqa: E402
+import struct  # noqa: E402
+import zlib  # noqa: E402
+
+EXAMPLE = ROOT / "examples" / "acme"
+
+
+def load_make_previews():
+    spec = importlib.util.spec_from_file_location("make_previews", ROOT / "tests" / "fixtures" / "make_previews.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class MockPreviewTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.make = load_make_previews()
+        cls.ads = cls.make.acme_ads(FIXTURE)
+        cls.images = {ad_id: cls.make.mock_ad(ad_id, concept, fmt) for ad_id, concept, fmt in cls.ads}
+
+    def test_every_image_is_a_valid_1080_by_1350_png_under_60_kb(self):
+        self.assertEqual(len(self.images), 30)
+        for ad_id, data in self.images.items():
+            self.assertTrue(data.startswith(b"\x89PNG\r\n\x1a\n"), ad_id)
+            self.assertEqual(struct.unpack(">II", data[16:24]), (1080, 1350), ad_id)
+            self.assertLess(len(data), 60 * 1024, ad_id)
+            idat = b""
+            at = 8
+            while at < len(data):
+                size, kind = struct.unpack(">I4s", data[at:at + 8])
+                body = data[at + 8:at + 8 + size]
+                self.assertEqual(struct.unpack(">I", data[at + 8 + size:at + 12 + size])[0], zlib.crc32(kind + body) & 0xFFFFFFFF)
+                idat += body if kind == b"IDAT" else b""
+                at += 12 + size
+            self.assertEqual(len(zlib.decompress(idat)), 1350 * (1 + 3 * 1080), ad_id)
+
+    def test_the_ads_look_different_from_each_other_and_the_same_ad_always_looks_the_same(self):
+        self.assertEqual(len(set(self.images.values())), len(self.images))
+        ad_id, concept, fmt = self.ads[0]
+        self.assertEqual(self.make.mock_ad(ad_id, concept, fmt), self.images[ad_id])
+
+    def test_a_concept_picks_its_colour_from_six_fixed_choices(self):
+        self.assertEqual(len(self.make.PALETTE), 6)
+        concepts = {c for _, c, _ in self.ads}
+        self.assertGreater(len({self.make._concept_index(c) for c in concepts}), 2)
+
+    def test_the_committed_previews_are_the_generator_output_for_every_acme_ad(self):
+        committed = {p.stem: p.read_bytes() for p in (EXAMPLE / "previews").glob("*.png")}
+        self.assertEqual(set(committed), set(self.images))
+        self.assertEqual(committed, self.images)
+
+
+class ExamplePreviewTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.html = (EXAMPLE / "report.html").read_text()
+        cls.ids = [a for a, _, _ in load_make_previews().acme_ads(FIXTURE)]
+
+    def test_every_acme_card_in_the_example_shows_a_png_preview(self):
+        for ad_id in self.ids:
+            symbol = re.search(r'<symbol id="pv-%s" viewBox="0 0 1080 1350"><image href="data:image/png;base64,' % ad_id, self.html)
+            self.assertTrue(symbol, ad_id)
+            self.assertIn('<use href="#pv-%s"' % ad_id, self.html)
+        self.assertIn("Ad images: previews embedded 30, thumbnails used 0, placeholders 0", self.html)
+        self.assertNotIn('<span class="ph-note">', self.html)
+
+    def test_the_example_says_nothing_is_missing(self):
+        self.assertNotIn("Previews for", self.html)
+
+
+class PreviewCountTest(unittest.TestCase):
+    def rows(self):
+        return [ad_row(str(n), "c%d | static | bau" % n, 10, 30) for n in (1, 2, 3)]
+
+    def build(self, have):
+        with tempfile.TemporaryDirectory() as tmp:
+            for n in have:
+                (Path(tmp) / ("%d.png" % n)).write_bytes(PNG)
+            return report.build_html(rows=self.rows(), currency="USD", title="Acme", previews=Previews(tmp))
+
+    def test_the_count_sits_under_the_scope_bar_when_some_previews_are_missing(self):
+        html = self.build([1, 2])
+        self.assertIn("Previews for 2 of 3 ads", html)
+        self.assertLess(html.index('class="scope-bar"'), html.index("Previews for 2 of 3 ads"))
+        self.assertLess(html.index("Previews for 2 of 3 ads"), html.index('<div class="shell">'))
+
+    def test_the_count_is_absent_when_every_ad_has_one(self):
+        self.assertNotIn("Previews for", self.build([1, 2, 3]))
+
+    def test_the_count_reads_none_when_no_previews_were_given(self):
+        self.assertIn("Previews for 0 of 3 ads", report.build_html(rows=self.rows(), currency="USD", title="Acme"))
+
+    def test_the_coverage_counts_each_ad_once_however_many_cards_show_it(self):
+        ctx = panels.Ctx(rows=self.rows(), currency="USD")
+        for _ in range(3):
+            panels.ad_card(ctx, {"ad": "1", "ad_name": "c1 | static | bau"})
+        self.assertEqual(ctx.previews.coverage(), (0, 1))
+        self.assertIn("Previews for 0 of 1 ads", panels.previews_note(ctx))
+        panels.pool_html(ctx)
+        self.assertEqual(ctx.previews.coverage(), (0, 3))
+        self.assertIn("Previews for 0 of 3 ads", panels.previews_note(ctx))
+
+
+if __name__ == "__main__":
+    unittest.main()

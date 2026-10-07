@@ -262,7 +262,7 @@ def build_html(rows: Optional[Sequence[Dict[str, Any]]] = None, grade: Optional[
         ("Window", format_window(start, end)), ("Scope", scope or "all ads in the data"), ("Currency", currency or "account currency (not stated)"), ("Source", source),
         ("Attribution", attribution)))
     fills = {"title": esc(page_title), "heading": heading, "sprite": ctx.previews.sprite(), "brand": lockup("h"),
-             "filterbar": bar, "dialog": panels.DIALOG, "data": data, "pool": pool, "meta": meta, "badge": badge, "nav": nav_html(), "body": body,
+             "filterbar": bar, "scope_note": panels.previews_note(ctx), "dialog": panels.DIALOG, "data": data, "pool": pool, "meta": meta, "badge": badge, "nav": nav_html(), "body": body,
              "footer": footer_html(ctx, grade, verdicts, mix, brand, completeness, attribution, source, window, generated, caps, scope)}
     return re.sub(r"\{\{(\w+)\}\}", lambda m: fills[m.group(1)], TEMPLATE.read_text(encoding="utf-8"))
 

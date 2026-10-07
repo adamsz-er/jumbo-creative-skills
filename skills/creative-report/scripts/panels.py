@@ -1127,6 +1127,12 @@ DIALOG = ('<dialog class="ad-dialog" id="ad-dialog" aria-labelledby="ad-dialog-t
           '<div class="dlg-body"></div></dialog>')
 
 
+def previews_note(ctx: Ctx) -> str:
+    """"Previews for N of M ads" under the scope bar when some ads have none; empty when every ad has one. Read after every card is built."""
+    shown, total = ctx.previews.coverage()
+    return '<p class="scope-note">Previews for %d of %d ads</p>' % (shown, total) if shown < total else ""
+
+
 def pool_html(ctx: Ctx) -> str:
     """Every ad's full card in an inert template, so the page script can show any ad when the gallery is regrouped."""
     if not ctx.records:
