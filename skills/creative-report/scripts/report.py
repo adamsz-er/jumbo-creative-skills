@@ -106,10 +106,15 @@ def brand_from_profile(text: Optional[str]) -> Optional[str]:
     return match.group(1).strip() if match else None
 
 
-def heading_for(label: Optional[str]) -> str:
-    """"<account label> creative review", the last word in the gradient; a label already ending in review is kept."""
+def heading_for(label: Optional[str], scope: Optional[str] = None) -> str:
+    """"<account> · <scope> creative review" (no scope: "<account> creative review"), the last word in the gradient; a label already ending in review is kept once."""
     text = (label or "").strip()
-    if not text:
+    scope = (scope or "").strip()
+    if scope:
+        text = re.sub(r"\s*(creative\s+)?review$", "", text, flags=re.I).strip()
+        text = ("%s · %s" % (text, scope)) if text else scope
+        text += " creative review"
+    elif not text:
         text = "Creative review"
     elif not text.lower().endswith("review"):
         text += " creative review"
@@ -195,12 +200,13 @@ def build_html(rows: Optional[Sequence[Dict[str, Any]]] = None, grade: Optional[
                completeness: Optional[str] = None, account: Optional[Dict[str, float]] = None,
                prior: Optional[Sequence[Dict[str, Any]]] = None, previews: Optional[Previews] = None,
                top_n: int = panels.TOP_N_CARDS, pareto_share: float = panels.PARETO_SHARE,
-               breakdowns: Optional[Sequence[Dict[str, Any]]] = None, briefs: Optional[Any] = None) -> str:
+               breakdowns: Optional[Sequence[Dict[str, Any]]] = None, briefs: Optional[Any] = None,
+               scope: Optional[str] = None) -> str:
     """Render the dashboard. `rows` are normalised ad rows (creative_metrics.load_rows)."""
     ctx = Ctx(rows=rows, verdicts=verdicts, grade=grade, mix=mix, currency=currency, top_n=top_n,
               pareto_share=pareto_share, account=account, prior=prior, previews=previews, breakdowns=breakdowns, briefs=briefs)
     brand = brand_from_profile(profile)
-    heading, page_title = heading_for(brand or title)
+    heading, page_title = heading_for(title or brand, scope)
     start, end = cm.data_window(ctx.rows)
     window = "%s to %s" % (start, end) if start else "n/a (no dates)"
     generated = generated or dt.date.today().isoformat()
@@ -258,7 +264,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--profile", help="creative-profile.md, used for the account name")
     parser.add_argument("--csv", help="the Ads Manager CSV behind the JSON files, only to read the currency code from its spend header")
     parser.add_argument("--currency", help="three-letter currency code to show; default: read from the export's spend header")
-    parser.add_argument("--title", help="account label for the title when there is no --profile; 'Acme' reads 'Acme creative review'")
+    parser.add_argument("--title", help="account label for the title; it wins over the name in --profile ('Acme' reads 'Acme creative review')")
+    parser.add_argument("--scope", help="what the review covers, shown after the account ('Prospecting' reads 'Acme · Prospecting creative review')")
     parser.add_argument("--source", default="Ads Manager export", help='data source shown in the header (pass "Meta ads connector" for a connector pull)')
     parser.add_argument("--attribution", help="attribution setting shown in the header (default: not stated)")
     parser.add_argument("--completeness", help='what from_mcp printed: "reconciled" or "incomplete:<percent>"; absent reads Not reconciled')
@@ -285,7 +292,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                           source=args.source, attribution=args.attribution, completeness=args.completeness,
                           account=load_account(args.account), prior=cm.load_rows(args.prior) if args.prior else None,
                           previews=Previews(args.previews, args.thumbs, args.preview_max_kb, args.preview_budget_kb),
-                          top_n=args.top_n, pareto_share=args.pareto_share,
+                          top_n=args.top_n, pareto_share=args.pareto_share, scope=args.scope,
                           breakdowns=cm.load_rows(args.breakdowns) if args.breakdowns else None, briefs=_load_json(args.briefs))
     except ValueError as error:
         parser.error(str(error))

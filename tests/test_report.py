@@ -1,3 +1,4 @@
+import html as html_lib
 import json
 import re
 import subprocess
@@ -122,6 +123,35 @@ class ReportTest(unittest.TestCase):
     def test_title_uses_gradient_keyword(self):
         self.assertIn('class="grad"', self.html)
         self.assertIn("Acme", self.html)
+
+    def heading_text(self, **kw):
+        html = report.build_html(rows=report.cm.load_rows(str(FIXTURE)), **kw)
+        h1 = re.search(r"<h1>(.*?)</h1>", html, re.S).group(1)
+        return html_lib.unescape(re.sub(r"<[^>]+>", "", h1)), html_lib.unescape(re.search(r"<title>(.*?)</title>", html).group(1))
+
+    def test_scope_goes_in_the_title_after_the_account(self):
+        self.assertEqual(self.heading_text(title="Acme", scope="Prospecting"), ("Acme · Prospecting creative review",) * 2)
+        self.assertEqual(self.heading_text(title="Acme"), ("Acme creative review",) * 2)
+
+    def test_scope_is_escaped_and_blank_scope_is_ignored(self):
+        self.assertEqual(self.heading_text(title="Acme", scope="  "), ("Acme creative review",) * 2)
+        html = report.build_html(rows=report.cm.load_rows(str(FIXTURE)), title="Acme", scope="<b>x</b>")
+        self.assertNotIn("<b>x</b>", html)
+        self.assertIn("Acme · &lt;b&gt;x&lt;/b&gt; creative review", html)
+
+    def test_an_explicit_title_wins_over_the_profile_name(self):
+        profile = "# Creative profile: Profile Name\n- Name: Profile Name\n"
+        self.assertEqual(self.heading_text(title="Explicit", profile=profile), ("Explicit creative review",) * 2)
+        self.assertEqual(self.heading_text(profile=profile), ("Profile Name creative review",) * 2)
+        self.assertEqual(self.heading_text(title="Explicit", profile=profile, scope="Retention"), ("Explicit · Retention creative review",) * 2)
+
+    def test_a_title_already_ending_in_review_keeps_one_review(self):
+        self.assertEqual(self.heading_text(title="Acme creative review", scope="Retention"), ("Acme · Retention creative review",) * 2)
+
+    def test_the_scope_flag_reaches_the_page(self):
+        out = Path(self._tmp.name) / "scope.html"
+        self.assertEqual(report.main([str(FIXTURE), "--title", "Acme", "--scope", "Prospecting", "-o", str(out)]), 0)
+        self.assertIn("Acme · Prospecting creative review", out.read_text(encoding="utf-8"))
 
     def test_verdict_and_mix_content_rendered(self):
         self.assertIn("Pause it:", self.html)
