@@ -29,13 +29,14 @@ Try it on made-up data first: `python3 skills/creative-context/scripts/creative_
 | Skill | What it does | Status |
 |---|---|---|
 | `creative-context` | Builds the brand profile, detects the data mode, fixes metric definitions, ad types and naming fields | available |
-| `creative-ideation` | Generates concepts from your brand profile and what has worked | coming soon |
+| `creative-ideation` | Generates concepts across themes, formats, ad types and personas, aimed at the gaps in your mix | available |
 | `creative-grader` | Grades each ad against your own account's median and quartiles and names the first broken funnel step | available |
 | `keep-or-kill` | Keep, kill, iterate or scale call for every ad, with age, learning flag and fatigue trend | available |
 | `ad-fatigue` | Reads ad age and week-over-week trends to catch fatigue early | coming soon |
-| `creative-brief` | Writes a brief from evidence: what won, what faded, where the gaps are | coming soon |
+| `creative-brief` | Writes a production-ready brief from evidence: what won, what faded, where the gaps are | available |
 | `hook-analysis` | Breaks down openings and hook archetypes for video | coming soon |
-| `persona-hooks` | Maps personas to hooks and angles | coming soon |
+| `persona-builder` | Builds personas by emotional starting state and awareness stage, mapped to concepts and hooks | available |
+| `hook-writer` | Writes video and text hooks, and one-change variants of a winning hook | available |
 | `transcript-analysis` | Reads video transcripts for the claims and structure that perform | coming soon |
 | `creative-mix` | Maps your portfolio: concept by format grid, ad types, spend concentration, gaps worth testing | available |
 | `creative-report` | Turns a review into a shareable report | coming soon |
@@ -49,6 +50,15 @@ Each prints its basis first, then the result. On the made-up Acme data (outputs 
 - `creative-mix`: "What creative am I missing, and am I leaning too hard on one thing?" Runs `python3 skills/creative-mix/scripts/mix.py examples/acme/ads_daily.csv` ([output](examples/acme/mix.md)).
 
 With a Meta ads connector, the agent saves the rows it pulls to a JSON file and passes that file to the same scripts.
+
+## Try the make skills
+
+They work with no data and get sharper with a brand profile or the analyse outputs. On the made-up Acme data (worked examples in `examples/acme/`):
+
+- `creative-ideation`: "Give me nine ad concepts that fill the gaps in my mix." ([output](examples/acme/ideas.md))
+- `hook-writer`: "Write hooks for my rain shell, and variants of the ad that is fatiguing." ([output](examples/acme/hooks.md))
+- `persona-builder`: "Who am I really talking to? Build me personas for this brand." ([output](examples/acme/personas.md))
+- `creative-brief`: "Write a production brief for the boot test with a new opening." Runs `python3 skills/creative-brief/scripts/evidence.py examples/acme/ads_daily.csv` for the evidence block ([output](examples/acme/brief.md)).
 
 ## Privacy
 
