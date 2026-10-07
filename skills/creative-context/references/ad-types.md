@@ -11,6 +11,21 @@ Tag every ad with exactly one type. Compare ads within a type, because a promo a
 | `partnership` (partnership / creator) | Creator-fronted or brand-handle ads. | Track usage-rights end dates. Run as a dedicated test. Quality varies with the source of the creator. |
 | `retention` | Aimed at people who already bought. | Judge separately. It flatters blended results and does not acquire anyone. |
 
+## Synonyms
+
+Names use many words for the six types. `creative_metrics.SYNONYMS` maps them (case-insensitive), so `TYPE:sale` reads as `promo`:
+
+| Type | Words read as that type |
+|---|---|
+| `promo` | sale, promo, offer, discount, bfcm |
+| `bau` | bau, evergreen, always-on, aon |
+| `launch` | launch, drop, newin |
+| `hype` | hype, teaser, tease |
+| `partnership` | collab, partnership, influencer, whitelist, spark |
+| `retention` | retention, rtg, existing, loyalty |
+
+A word that is not on this list is kept as written, counted, and shown in the mix and detection output. Ask the user which type it is, in one question that lists every unknown word, and never drop those ads or guess. Then pass the answer on as the type for those ads.
+
 ## Rules
 
 - One type per ad. If an ad is both a launch and a creator ad, record the purpose (`launch`) and put the creator in the creator field.

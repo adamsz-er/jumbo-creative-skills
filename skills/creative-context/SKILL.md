@@ -57,7 +57,13 @@ Tag every ad with one type from `references/ad-types.md`: BAU/evergreen, promo/s
 
 ## Step 5: Read the names
 
-Ad names carry the variables you need to slice results. Use `references/naming-convention.md` to split a name into concept, format, creator, ad type, product, tone and launch date. If the names do not follow a convention, say so, propose one, and ask the user to confirm before you tag ads from the name. Treat a parsed field as a guess until the user confirms it.
+Ad names carry the variables you need to slice results. Before you say anything about how the names are structured, run detection on ALL the ad names in the pull and report the match rate:
+
+```
+python3 scripts/detect_naming.py ads.csv
+```
+
+Never propose a convention from a few example names. Ask the user to confirm only when the match rate is under 85% of names (an arbitrary default: set it from how tidy the account is) or a second convention covers at least 5% of names (report both, with counts). Otherwise carry on: list the stray names as unparsed and do not ask. If the ad types include words outside the six known ones, ask once which type each is. `references/naming-convention.md` has the key map (`TYPE:`, `ANGLE:`, `FMT:` and others, plus keys it reads from their values), the separators and the grouping columns; `references/ad-types.md` has the type synonyms (sale is promo, drop is launch, collab is partnership).
 
 ## Hand-off to other skills
 

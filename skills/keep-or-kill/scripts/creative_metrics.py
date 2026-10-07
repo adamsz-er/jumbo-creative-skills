@@ -49,7 +49,45 @@ COST_PER_VIEW = "cost_per_action_type:video_view"
 DERIVED_3S = "derived: spend / cost per 3-second view"
 AGE_FROM_CREATED = "created_time"
 AGE_FROM_DELIVERY = "first delivery in window (older ads may be understated)"
-NAME_FIELDS = ("concept", "format", "creator", "ad_type", "product", "tone", "launch_date")
+# The original positional convention: what a name of exactly this many parts is read as.
+LEGACY_PATTERN = ("concept", "format", "creator", "ad_type", "product", "tone", "launch_date")
+NAME_FIELDS = LEGACY_PATTERN + ("market", "funnel_stage", "collection", "range")
+AD_TYPES = ("bau", "promo", "launch", "hype", "partnership", "retention")
+# Words an account uses for the six ad types. A word not here is kept as written, counted, and asked about.
+SYNONYMS = {
+    "sale": "promo", "promo": "promo", "offer": "promo", "discount": "promo", "bfcm": "promo",
+    "bau": "bau", "evergreen": "bau", "always-on": "bau", "aon": "bau",
+    "launch": "launch", "drop": "launch", "newin": "launch",
+    "hype": "hype", "teaser": "hype", "tease": "hype",
+    "collab": "partnership", "partnership": "partnership", "influencer": "partnership", "whitelist": "partnership", "spark": "partnership",
+    "retention": "retention", "rtg": "retention", "existing": "retention", "loyalty": "retention",
+}
+# KEY in a KEY:value name segment -> canonical field. A key that is not listed is read from its
+# values (see learn_names); --key-map overrides both.
+KEY_MAP = {
+    "TYPE": "ad_type", "ADTYPE": "ad_type",
+    "ANGLE": "concept", "CONCEPT": "concept", "THEME": "concept",
+    "FMT": "format", "FORMAT": "format",
+    "SKU": "product", "PROD": "product", "PRODUCT": "product",
+    "COLL": "collection", "COLLECTION": "collection",
+    "RNG": "range", "RANGE": "range",
+    "CR": "creator", "CREATOR": "creator", "TALENT": "creator",
+    "MKT": "market", "MARKET": "market", "GEO": "market", "REGION": "market",
+    "STG": "funnel_stage", "STAGE": "funnel_stage", "FUNNEL": "funnel_stage",
+    "TONE": "tone",
+    "LD": "launch_date", "DATE": "launch_date", "LAUNCH": "launch_date",
+}
+SEPARATORS = (" | ", "|", " _ ", "_", " - ")
+FORMAT_WORDS = frozenset(("image", "static", "video", "carousel", "collection", "catalogue", "catalog",
+                          "ugc", "reel", "story", "dpa"))
+MARKET_CODES = frozenset((
+    "AU NZ US UK GB CA IE DE FR ES IT NL SE NO DK FI JP KR CN HK SG IN AE SA ZA BR MX AR CL CO PE PL CH BE PT "
+    "TR IL TH MY ID PH VN TW EG NG KE INT ROW ME EU").split())
+# Detection asks the user only below this share of names read (an arbitrary default: set it from how
+# messy your account's names are), or when a second convention covers at least COEXIST_SHARE percent.
+MATCH_RATE_ASK = 85.0
+COEXIST_SHARE = 5.0
+UNPARSED_SHOWN = 8  # display cap on listed examples (arbitrary)
 
 _ALIASES = {
     "spend": "spend", "amountspent": "spend", "adspend": "spend",
@@ -89,6 +127,10 @@ _API_ACTION_TYPES = {
 }
 _API_VALUE_TYPES = {"purchase": "conversion_value"}
 _API_LIST_FIELDS = {"video_thruplay_watched_actions": "video_thruplay"}
+
+
+class GroupColumnError(ValueError):
+    """A requested --group-by column is not in the data."""
 
 
 def resolve_metric(name: str) -> str:
@@ -310,7 +352,25 @@ def _delivered(row: Dict[str, Any]) -> bool:
     return (row.get("impressions") or 0) > 0
 
 
-def aggregate_by_ad(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _snake(key: Any) -> str:
+    name = re.sub(r"[^a-z0-9]+", "_", str(key).lower()).strip("_")
+    return "adset_name" if name == "ad_set_name" else name
+
+
+def _most_common_text(values: Iterable[Any], skip_numbers: bool = False) -> Optional[str]:
+    counts: Dict[str, int] = {}
+    for value in values:
+        if not isinstance(value, str) or not value.strip():
+            continue
+        text = value.strip()
+        if skip_numbers and _num(text) is not None:
+            continue
+        counts[text] = counts.get(text, 0) + 1
+    return max(counts, key=counts.__getitem__) if counts else None
+
+
+def aggregate_by_ad(rows: Sequence[Dict[str, Any]],
+                    key_map: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
     """Sum base fields per ad (by ad id, else ad name) and compute metrics.
 
     Adds first_date, last_date, active_days (days with delivery), age_days and
@@ -323,6 +383,12 @@ def aggregate_by_ad(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
     frequency; export a lifetime row for that. `video_views_3s_source` is
     "derived: ..." when any row's 3-second plays were derived from a cost per
     view, else "reported", else None.
+
+    Name fields come from a column of that name when the data has one (market,
+    ad type, ...), else from the ad name (see parse_name; `key_map` extends the
+    KEY:value keys). Every other text column (objective, campaign name, placement,
+    country, ...) is carried through under its snake_case heading, taking the
+    most common value per ad, so any of them can be a --group-by column.
     """
     groups: Dict[str, List[Dict[str, Any]]] = {}
     for row in rows:
@@ -334,6 +400,8 @@ def aggregate_by_ad(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
     all_dates = [d for d in (_parse_date(r.get("date")) for r in rows) if d]
     data_end = max(all_dates) if all_dates else None
 
+    learned = learn_names([n for n in (next((r["ad_name"] for r in g if r.get("ad_name")), None)
+                                       for g in groups.values()) if n], key_map)
     ads = []
     for group in groups.values():
         ad: Dict[str, Any] = {
@@ -356,15 +424,63 @@ def aggregate_by_ad(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
         sources = {r["video_views_3s_source"] for r in group if r.get("video_views_3s_source")}
         derived = sorted(x for x in sources if x.startswith("derived"))
         ad["video_views_3s_source"] = derived[0] if derived else ("reported" if sources else None)
-        parsed = parse_name(ad["ad_name"]) if ad["ad_name"] else {}
+        parsed = parse_name(ad["ad_name"], key_map=key_map, learned=learned) if ad["ad_name"] else {}
         ad["conversions_source"] = next((r["conversions_source"] for r in group
                                          if r.get("conversions_source")), None)
+        columns: Dict[str, List[Any]] = {}
+        for row in group:
+            seen = set()
+            for key, value in row.items():
+                name = _snake(key)
+                if name and name not in seen:
+                    seen.add(name)
+                    columns.setdefault(name, []).append(value)
         for field in NAME_FIELDS:
-            carried = next((r[field] for r in group if r.get(field)), None)
+            carried = _most_common_text(columns.get(field, ()))
             ad[field] = carried or parsed.get(field)
+        if ad.get("ad_type"):
+            ad["ad_type"] = normalise_ad_type(ad["ad_type"])
         ad.update(compute_metrics(ad))
+        for name, values in columns.items():
+            if name in ad or name in _ROW_INTERNALS or name.startswith("reported_"):
+                continue
+            text = _most_common_text(values, skip_numbers=True)
+            if text is not None:
+                ad[name] = text
         ads.append(ad)
     return ads
+
+
+# Row keys that are the loader's own bookkeeping, never carried as grouping columns.
+_ROW_INTERNALS = frozenset(("date", "created_time", "level", "conversions_source", "video_views_3s_source",
+                            _snake(COST_PER_VIEW)))
+
+# Keys of an aggregated ad that are not columns to group by.
+_NOT_GROUPABLE = frozenset(("ad_id", "ad_name", "first_date", "last_date", "age_basis", "video_views_3s_source",
+                            "conversions_source", "created_time", "date", "spend_unit"))
+
+
+def groupable_columns(ads: Sequence[Dict[str, Any]]) -> List[str]:
+    """Columns of aggregated ads that hold text for at least one ad, sorted."""
+    return sorted({k for a in ads for k, v in a.items()
+                   if isinstance(v, str) and v and k not in _NOT_GROUPABLE})
+
+
+def resolve_group_by(ads: Sequence[Dict[str, Any]], group_by: Sequence[str]) -> Tuple[str, ...]:
+    """Canonical column names for a --group-by list; GroupColumnError when one is absent.
+
+    A column is absent when no ad carries a value for it. `format` (the default
+    grouping) is always accepted: where names do not parse it reads as "unknown".
+    """
+    available = groupable_columns(ads)
+    resolved = []
+    for column in group_by:
+        name = _snake(column)
+        if name != "format" and name not in available:
+            raise GroupColumnError("column %s not in the data; available: %s"
+                                   % (column, ", ".join(available) or "none"))
+        resolved.append(name)
+    return tuple(resolved)
 
 
 def _stats(values: Sequence[float]) -> Dict[str, Optional[float]]:
@@ -453,26 +569,458 @@ def fatigue_trend(rows: Sequence[Dict[str, Any]], ad_key: str, metric: str = "ct
     }
 
 
-def parse_name(ad_name: Optional[str], pattern: Optional[Sequence[str]] = None) -> Dict[str, str]:
-    """Split an ad name into naming-convention fields; {} when it does not fit.
+def normalise_ad_type(value: Any) -> str:
+    """Map an ad-type word to one of AD_TYPES through SYNONYMS; an unknown word is kept, lowercased."""
+    text = str(value).strip().lower()
+    return SYNONYMS.get(text, text)
 
-    Names split on " | " or on "_". `pattern` is the ordered list of field
-    names (default: NAME_FIELDS). The part count must match exactly.
+
+def parse_key_map(text: str) -> Dict[str, str]:
+    """Read "PX=concept,KND=ad_type" into {"PX": "concept", "KND": "ad_type"}."""
+    result: Dict[str, str] = {}
+    for pair in (text or "").split(","):
+        if not pair.strip():
+            continue
+        key, sep, field = pair.partition("=")
+        if not sep or not key.strip() or not field.strip():
+            raise ValueError("bad --key-map entry %r: write KEY=field, for example PX=concept" % pair)
+        result[key.strip()] = field.strip()
+    return result
+
+
+_KEYED = re.compile(r"^([A-Za-z]{2,10})\s*[:=]\s*(.+)$")
+_ISO_DATE = re.compile(r"^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$")
+_DAY_FIRST = re.compile(r"^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$")
+_READ_FIELDS = ("format", "concept", "ad_type")
+_NUMBERISH = re.compile(r"^[A-Za-z]?\d+$")
+# Keys that usually name a person; their values are never guessed to be the concept.
+_PERSON_KEYS = frozenset(("WHO", "PERSON", "NAME"))
+
+
+def _person_like(key: str, taken: Sequence[str]) -> bool:
+    """A key that looks like a creator or person field, or whose values include format or ad-type words."""
+    return key in _PERSON_KEYS or any(v.lower() in FORMAT_WORDS or v.lower() in SYNONYMS for v in taken)
+
+
+def _name_date(text: str, order: Optional[str] = None) -> Tuple[Optional[str], str]:
+    """Read a date in a name: (ISO date or None, status).
+
+    Status is "ok", "ambiguous" (day and month could swap and `order` - "dmy" or
+    "mdy" - is not known), "invalid" (looks like a date but is not one) or "no"
+    (not date-shaped). Year-first dates are never ambiguous.
     """
-    fields = tuple(pattern) if pattern else NAME_FIELDS
-    if not ad_name:
-        return {}
-    separator = " | " if " | " in ad_name else "_" if "_" in ad_name else None
+    text = text.strip()
+    try:
+        iso = _ISO_DATE.match(text)
+        if iso:
+            return dt.date(int(iso.group(1)), int(iso.group(2)), int(iso.group(3))).isoformat(), "ok"
+        dmy = _DAY_FIRST.match(text)
+        if not dmy:
+            return None, "no"
+        first, second, year = int(dmy.group(1)), int(dmy.group(2)), int(dmy.group(3))
+        if first > 12 and second > 12:
+            return None, "invalid"
+        if first > 12:
+            day, month = first, second
+        elif second > 12:
+            day, month = second, first
+        elif first == second or order:
+            day, month = (second, first) if order == "mdy" else (first, second)
+        else:
+            return None, "ambiguous"
+        return dt.date(year, month, day).isoformat(), "ok"
+    except ValueError:
+        return None, "invalid"
+
+
+def _merged_key_map(key_map: Optional[Dict[str, str]],
+                    learned: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+    """Built-in keys, then keys read from values, then the user's own map (which wins)."""
+    merged = dict(KEY_MAP)
+    merged.update((learned or {}).get("key_map", {}))
+    merged.update({str(k).strip().upper(): str(v).strip() for k, v in (key_map or {}).items()})
+    return merged
+
+
+def _split(name: str, separator: str) -> List[str]:
+    return [p.strip() for p in name.split(separator)]
+
+
+def _pick_separator(name: str) -> Optional[str]:
+    """The separator a single name uses: the one that yields the most KEY:value segments, else the first present."""
+    best, best_score = None, -1
+    for separator in SEPARATORS:
+        if separator in name:
+            score = sum(1 for part in _split(name, separator) if _KEYED.match(part))
+            if score > best_score:
+                best, best_score = separator, score
+    return best
+
+
+def learn_names(names: Sequence[str], key_map: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    """Read what a whole set of names says about itself, so a single name can be read correctly.
+
+    Returns `key_map` (KEY -> field for keys that are not built in, read from the
+    values the key takes: a field is chosen when most of a key's values are
+    format words, ad-type words, market codes or dates), `inferred` (the field,
+    the computed share of values and the evidence, for each such key),
+    `market_positions` (positions where most names carry a market code: a bare
+    code elsewhere is not read as a market) and `date_order` ("dmy" or "mdy"
+    when some date in the names settles day-versus-month order, else None).
+    When nothing is read as the concept, the one unmapped key with free-text
+    values (more than one distinct value, none of the kinds above) is read as the
+    concept; with two or more such keys none is, and `concept_candidates` lists
+    them so the agent asks one question. A key only counts when more than half of
+    all names carry it, counted over the names as given (its `coverage` is
+    reported), a key whose values are mostly numbers (3, v2) is never a concept
+    candidate, and a key that looks like a person field (WHO, PERSON, NAME) or
+    whose values include format or ad-type words is never assigned the concept:
+    it stays in `concept_candidates` for the one question.
+    Nothing is stored. `key_map` entries override the reading.
+    """
+    names = [str(n).strip() for n in names if n is not None and str(n).strip()]
+    known = _merged_key_map(key_map)
+    values: Dict[str, List[str]] = {}
+    hits: Dict[str, int] = {}
+    positions: Dict[int, int] = {}
+    seen_orders = set()
+    concept_keyed = False
+    counted = 0
+    for name in names:
+        separator = _pick_separator(name)
+        if separator is None:
+            continue
+        counted += 1
+        in_name = set()
+        for position, part in enumerate(_split(name, separator), start=1):
+            match = _KEYED.match(part)
+            value = match.group(2).strip() if match else part
+            if match and match.group(1).upper() not in known:
+                key = match.group(1).upper()
+                values.setdefault(key, []).append(value)
+                if key not in in_name:
+                    in_name.add(key)
+                    hits[key] = hits.get(key, 0) + 1
+            elif match and known[match.group(1).upper()] == "concept":
+                concept_keyed = True
+            elif not match and part.upper() in MARKET_CODES:
+                positions[position] = positions.get(position, 0) + 1
+            dmy = _DAY_FIRST.match(value)
+            if dmy and int(dmy.group(1)) > 12 >= int(dmy.group(2)):
+                seen_orders.add("dmy")
+            elif dmy and int(dmy.group(2)) > 12 >= int(dmy.group(1)):
+                seen_orders.add("mdy")
+    order = next(iter(seen_orders)) if len(seen_orders) == 1 else None
+    checks = (
+        ("format", "format words", lambda v: v.lower() in FORMAT_WORDS),
+        ("ad_type", "ad-type words", lambda v: v.lower() in SYNONYMS),
+        ("market", "market codes", lambda v: v.upper() in MARKET_CODES),
+        ("launch_date", "dates", lambda v: _name_date(v, order)[1] in ("ok", "ambiguous")),
+    )
+    inferred: Dict[str, Dict[str, Any]] = {}
+    # A key counts only when more than half of all names carry it.
+    common = {k for k, n in hits.items() if n * 2 > len(names)}
+    coverage = {k: n / len(names) * 100 for k, n in hits.items()}
+    for key, taken in values.items():
+        if key not in common:
+            continue
+        best = max(((sum(1 for v in taken if test(v)) / len(taken), -i, field, basis)
+                    for i, (field, basis, test) in enumerate(checks)))
+        if best[0] > 0.5:
+            inferred[key] = {"field": best[2], "share": best[0] * 100, "basis": best[3], "count": len(taken),
+                             "coverage": coverage[key]}
+    candidates: List[str] = []
+    if not concept_keyed and not any(v["field"] == "concept" for v in inferred.values()):
+        candidates = sorted(
+            k for k, taken in values.items()
+            if k in common and k not in inferred and len(set(taken)) > 1
+            and sum(1 for v in taken if _NUMBERISH.match(v)) * 2 <= len(taken))
+        if len(candidates) == 1 and not _person_like(candidates[0], values[candidates[0]]):
+            key = candidates[0]
+            inferred[key] = {"field": "concept", "share": None, "basis": "the only free-text key",
+                             "count": len(values[key]), "coverage": coverage[key]}
+            candidates = []
+    return {
+        "key_map": {k: v["field"] for k, v in inferred.items()}, "inferred": inferred,
+        "concept_candidates": candidates,
+        "market_positions": {p for p, c in positions.items() if c * 2 > counted} if counted else None,
+        "date_order": order,
+    }
+
+
+def _shape_field(part: str, position: int, learned: Dict[str, Any]) -> Optional[str]:
+    if _name_date(part, learned.get("date_order"))[1] != "no":
+        return "launch_date"
+    allowed = learned.get("market_positions")
+    if part.upper() in MARKET_CODES:
+        # An upper-case code is read anywhere unless markets are known to sit elsewhere; a lower-case
+        # one (it, no, me are also words) only where most names carry a market.
+        if part == part.upper():
+            if allowed is None or position in allowed:
+                return "market"
+        elif allowed is not None and position in allowed:
+            return "market"
+    if part.lower() in FORMAT_WORDS:
+        return "format"
+    return None
+
+
+def _read_name(ad_name: Optional[str], pattern: Optional[Sequence[str]] = None,
+               key_map: Optional[Dict[str, str]] = None,
+               learned: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    """Read one name: fields, the separator, the style, the keys used and any dates it could not read.
+
+    None when the name has no separator. style is "keyed" (KEY:value segments),
+    "positional" (an exact-length name or an explicit pattern) or "shape"
+    (unkeyed segments recognised by what they look like). A name is keyed only
+    when at least half its parts are KEY:value or one key is in the key map.
+    """
+    if not ad_name or not str(ad_name).strip():
+        return None
+    learned = learned or {}
+    name = str(ad_name).strip()
+    keys = _merged_key_map(key_map, learned)
+    separator = _pick_separator(name)
     if separator is None:
+        return None
+    parts = _split(name, separator)
+    result: Dict[str, Any] = {"separator": separator, "fields": {}, "keys": [], "leftover": [], "bad_dates": []}
+    fields = result["fields"]
+
+    def assign(field: str, value: str, position: int) -> None:
+        original = value
+        if field == "launch_date":
+            iso, status = _name_date(value, learned.get("date_order"))
+            if iso is None:
+                result["bad_dates"].append((value, status))
+                field = None
+            else:
+                value = iso
+        elif field in ("format", "tone"):
+            value = value.lower()
+        elif field == "market" and value.upper() in MARKET_CODES:
+            value = value.upper()
+        elif field == "ad_type":
+            value = normalise_ad_type(value)
+        if field is None or field in fields:
+            fields["segment_%d" % position] = original
+            result["leftover"].append((position, original))
+        else:
+            fields[field] = value
+
+    if pattern:
+        if len(parts) != len(pattern):
+            return None
+        result["style"] = "positional"
+        for position, (field, part) in enumerate(zip(pattern, parts), start=1):
+            assign(field, part, position)
+        return result
+    matches = [_KEYED.match(p) for p in parts]
+    keyed = sum(1 for m in matches if m)
+    is_keyed = any(m and m.group(1).upper() in keys for m in matches) or (keyed > 0 and keyed * 2 >= len(parts))
+    if not is_keyed and len(parts) == len(LEGACY_PATTERN):
+        result["style"] = "positional"
+        for position, (field, part) in enumerate(zip(LEGACY_PATTERN, parts), start=1):
+            assign(field, part, position)
+        return result
+    result["style"] = "keyed" if is_keyed else "shape"
+    for position, (part, match) in enumerate(zip(parts, matches), start=1):
+        if not part:
+            continue
+        if match and is_keyed:
+            key = match.group(1).upper()
+            field = keys.get(key, key.lower())
+            result["keys"].append((key, field, key in keys))
+            assign(field, match.group(2).strip(), position)
+        else:
+            assign(_shape_field(part, position, learned), part, position)
+    return result
+
+
+def _is_read(fields: Dict[str, Any]) -> bool:
+    """The one rule for a name that counts as read: it yields a format, concept or ad type."""
+    return any(fields.get(f) for f in _READ_FIELDS)
+
+
+def parse_name(ad_name: Optional[str], pattern: Optional[Sequence[str]] = None,
+               key_map: Optional[Dict[str, str]] = None,
+               learned: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+    """Split an ad name into naming-convention fields; {} unless it yields a format, concept or ad type.
+
+    Names split on " | ", "|", " _ ", "_" or " - " (whichever the name uses).
+    Segments written KEY:value or KEY=value (KEY is 2-10 letters) are read through
+    KEY_MAP, which `key_map` extends or overrides, case-insensitively; a name is
+    keyed only when at least half its parts are KEY:value or one key is mapped.
+    An unmapped key takes the field its values suggest when `learned` (from
+    learn_names, over all the names) is given, else keeps its lowercase name.
+    Other segments are read by shape: a date, a market code (US, UK, ... and,
+    when `learned` says where markets sit, only in that position) or a format
+    word; anything else is kept as segment_<position>. A date is labelled
+    launch_date only when it parses; day-versus-month order must be known or
+    obvious. A name with no key and exactly the original seven parts
+    (LEGACY_PATTERN) reads positionally, as does any name when `pattern` (an
+    ordered field list) is given, which then needs an exact part count. An
+    ad_type goes through SYNONYMS; a type that is not known is kept as written.
+    """
+    read = _read_name(ad_name, pattern, key_map, learned)
+    if read is None or (not pattern and not _is_read(read["fields"])):
         return {}
-    parts = [p.strip() for p in ad_name.split(separator)]
-    if len(parts) != len(fields):
-        return {}
-    parsed = dict(zip(fields, parts))
-    for field in ("format", "ad_type", "tone"):
-        if field in parsed:
-            parsed[field] = parsed[field].lower()
-    return parsed
+    return dict(read["fields"])
+
+
+def _choose_separator(names: Sequence[str]) -> Optional[str]:
+    """The separator that splits the most names into the same number of parts."""
+    best, best_score = None, 0
+    for separator in SEPARATORS:
+        counts: Dict[int, int] = {}
+        for name in names:
+            if separator in name:
+                size = len(_split(name, separator))
+                counts[size] = counts.get(size, 0) + 1
+        if counts and max(counts, key=counts.__getitem__) >= 2:
+            score = max(counts.values())
+            if score > best_score:
+                best, best_score = separator, score
+    return best
+
+
+_STYLE_WORDS = {"keyed": "KEY:value segments", "positional": "fixed positions",
+                "shape": "unlabelled segments recognised by what they look like"}
+
+
+def detect_convention(names: Sequence[str], key_map: Optional[Dict[str, str]] = None,
+                      min_match_rate: float = MATCH_RATE_ASK,
+                      coexist_share: float = COEXIST_SHARE) -> Dict[str, Any]:
+    """Test how a set of ad names is structured, against ALL of them. Pure: nothing is stored.
+
+    A name is matched when at least a format, a concept or an ad type is read
+    from it (the same rule parse_name applies). Returns the dominant separator,
+    each field's coverage (percent of all names), the KEY:value keys seen, the
+    fields inferred for unlisted keys from their values (`inferred_keys`, with the
+    computed share), the conventions in use with counts, the overall `match_rate`,
+    the first UNPARSED_SHOWN names (a display cap, arbitrary) that did not match,
+    dates that were ambiguous or unparseable (`date_issues`), and a plain-English
+    `description`. `ask` is True, with `ask_reasons`, only when the match rate is
+    under `min_match_rate` or a second convention covers at least `coexist_share`
+    percent of names; a few stray names are listed, not asked about. Both
+    thresholds are arbitrary defaults: set them from your account.
+    """
+    names = [str(n).strip() for n in names if n is not None and str(n).strip()]
+    total = len(names)
+    learned = learn_names(names, key_map)
+    result: Dict[str, Any] = {
+        "names": total, "separator": _choose_separator(names), "match_rate": None, "matched": 0,
+        "fields": {}, "keys": {}, "unknown_keys": {}, "inferred_keys": learned["inferred"],
+        "concept_candidates": learned["concept_candidates"],
+        "conventions": [], "coexisting": False, "unlabelled": [], "unparsed": [], "unparsed_count": 0,
+        "ad_types": {}, "unknown_ad_types": {},
+        "date_issues": {"order": learned["date_order"], "ambiguous": [], "unparseable": [],
+                        "ambiguous_count": 0, "unparseable_count": 0},
+        "ask": True, "ask_reasons": [], "min_match_rate": min_match_rate, "coexist_share": coexist_share,
+    }
+    if not total:
+        result["ask_reasons"] = ["no ad names to test"]
+        result["description"] = "There are no ad names to read, so no naming convention can be tested."
+        return result
+
+    field_counts: Dict[str, int] = {}
+    field_sources: Dict[str, set] = {}
+    conventions: Dict[Tuple[str, str], int] = {}
+    unparsed: List[str] = []
+    unlabelled: Dict[int, List[str]] = {}
+    issues = result["date_issues"]
+    for name in names:
+        read = _read_name(name, None, key_map, learned)
+        if read:
+            for value, status in read["bad_dates"]:
+                bucket = issues["ambiguous" if status == "ambiguous" else "unparseable"]
+                if value not in bucket:
+                    bucket.append(value)
+        fields = {f: v for f, v in read["fields"].items() if not f.startswith("segment_")} if read else {}
+        if not read or not _is_read(fields):
+            unparsed.append(name)
+            continue
+        result["matched"] += 1
+        signature = (read["separator"], read["style"])
+        conventions[signature] = conventions.get(signature, 0) + 1
+        keyed_fields = {field for _, field, _ in read["keys"]}
+        for field in fields:
+            field_counts[field] = field_counts.get(field, 0) + 1
+            field_sources.setdefault(field, set()).add("keyed" if field in keyed_fields else "by position or shape")
+        for key, field, known in read["keys"]:
+            entry = result["keys"].setdefault(key, {"field": field, "count": 0})
+            entry["count"] += 1
+            if not known:
+                result["unknown_keys"][key] = result["unknown_keys"].get(key, 0) + 1
+        for position, value in read["leftover"]:
+            unlabelled.setdefault(position, []).append(value)
+        kind = fields.get("ad_type")
+        if kind:
+            bucket = "ad_types" if kind in AD_TYPES else "unknown_ad_types"
+            result[bucket][kind] = result[bucket].get(kind, 0) + 1
+    issues["ambiguous_count"], issues["unparseable_count"] = len(issues["ambiguous"]), len(issues["unparseable"])
+    issues["ambiguous"] = issues["ambiguous"][:UNPARSED_SHOWN]
+    issues["unparseable"] = issues["unparseable"][:UNPARSED_SHOWN]
+
+    result["match_rate"] = result["matched"] / total * 100
+    result["fields"] = {f: {"count": c, "coverage": c / total * 100, "source": " and ".join(sorted(field_sources[f]))}
+                        for f, c in sorted(field_counts.items(), key=lambda kv: -kv[1])}
+    result["conventions"] = [{"separator": sep, "style": style, "count": c, "share": c / total * 100}
+                             for (sep, style), c in sorted(conventions.items(), key=lambda kv: -kv[1])]
+    result["coexisting"] = len(conventions) > 1
+    result["unlabelled"] = [{"position": p, "count": len(v), "examples": sorted(set(v))[:3]}
+                            for p, v in sorted(unlabelled.items())]
+    result["unparsed"] = unparsed[:UNPARSED_SHOWN]
+    result["unparsed_count"] = len(unparsed)
+
+    reasons = []
+    if result["match_rate"] < min_match_rate:
+        reasons.append("only %.0f%% of names could be read (under %g%%)" % (result["match_rate"], min_match_rate))
+    for convention in result["conventions"][1:]:
+        if convention["share"] >= coexist_share:
+            reasons.append("two conventions coexist: %s" % "; ".join(
+                "%d names use %s with %s" % (c["count"], _sep_label(c["separator"]), _STYLE_WORDS[c["style"]])
+                for c in result["conventions"]))
+            break
+    result["ask_reasons"] = reasons
+    result["ask"] = bool(reasons)
+    result["description"] = _describe(result)
+    return result
+
+
+def _sep_label(separator: Optional[str]) -> str:
+    return "no separator" if separator is None else "'%s'" % separator
+
+
+def _describe(found: Dict[str, Any]) -> str:
+    total, matched = found["names"], found["matched"]
+    parts = ["%d of %d ad names (%.0f%%) could be read" % (matched, total, found["match_rate"])]
+    if found["conventions"]:
+        parts[0] += ": " + "; ".join(
+            "%d use %s with %s" % (c["count"], _sep_label(c["separator"]), _STYLE_WORDS[c["style"]])
+            for c in found["conventions"])
+    text = parts[0] + "."
+    if found["fields"]:
+        shown = ", ".join("%s (%.0f%%)" % (f, v["coverage"]) for f, v in list(found["fields"].items())[:8])
+        text += " Fields found, with the share of all names carrying each: %s." % shown
+    if found["unparsed_count"]:
+        text += " %d names could not be read and are listed below, not guessed." % found["unparsed_count"]
+    for key, info in sorted(found["inferred_keys"].items()):
+        text += (" Key %s was read as %s because %.0f%% of its values are %s (key in %.0f%% of names)." % (
+            key, info["field"], info["share"], info["basis"], info["coverage"]) if info["share"] is not None else
+            " Key %s was read as %s: %s (key in %.0f%% of names)." % (
+                key, info["field"], info["basis"], info["coverage"]))
+    if found["concept_candidates"]:
+        text += " No key was read as the concept; any of %s could be it, so ask the user which." % ", ".join(
+            found["concept_candidates"])
+    issues = found["date_issues"]
+    if issues["ambiguous_count"] or issues["unparseable_count"]:
+        text += " Dates left unlabelled: %d ambiguous (day and month could swap), %d unparseable." % (
+            issues["ambiguous_count"], issues["unparseable_count"])
+    if found["unknown_ad_types"]:
+        text += " Ad types not in the six known types: %s." % ", ".join(
+            "%s (%d)" % kv for kv in sorted(found["unknown_ad_types"].items()))
+    return text
 
 
 BAND_TOP, BAND_MID, BAND_BOTTOM = "top quartile", "middle", "bottom quartile"
@@ -560,7 +1108,8 @@ def data_window(rows: Sequence[Dict[str, Any]]) -> Tuple[Optional[str], Optional
 
 
 def window_aggregate(rows: Sequence[Dict[str, Any]], window: int = 6,
-                     which: str = "first") -> List[Dict[str, Any]]:
+                     which: str = "first",
+                     key_map: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
     """Aggregate each ad over its first or last `window` delivery days.
 
     `which` is "first" or "last". An ad with fewer than `window` delivery days
@@ -583,7 +1132,7 @@ def window_aggregate(rows: Sequence[Dict[str, Any]], window: int = 6,
             continue
         keep = ordered[:window] if which == "first" else ordered[-window:]
         chosen.extend(r for d in keep for r in days[d])
-    return aggregate_by_ad(chosen) if chosen else []
+    return aggregate_by_ad(chosen, key_map=key_map) if chosen else []
 
 
 def spend_share(ads: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:

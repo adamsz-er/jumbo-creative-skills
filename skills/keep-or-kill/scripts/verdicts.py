@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A keep / kill / iterate / scale verdict per ad, with age, a learning flag and fatigue trend.
 
-Usage: python3 verdicts.py ads.csv [--young-days 5] [--window 6] [--min-change 8] [--top-n 3] [--json]
+Usage: python3 verdicts.py ads.csv [--young-days 5] [--window 6] [--min-change 8] [--top-n 3] [--key-map PX=concept] [--json]
 
 Standard library only. Needs daily rows (one row per ad per day) for fatigue.
 --young-days, --window, --min-impressions and --min-change are arbitrary
@@ -75,10 +75,12 @@ def _pct(value: Optional[float]) -> str:
 
 def judge_ads(rows: Sequence[Dict[str, Any]], young_days: int = 5, window: int = 6,
               min_impressions: int = 1000, min_change: float = 8.0,
-              group_by: Sequence[str] = ("format",)) -> List[Dict[str, Any]]:
+              group_by: Sequence[str] = ("format",),
+              key_map: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
     """One verdict per ad, first matching rule wins, every verdict lists its reasons."""
-    ads = cm.aggregate_by_ad(rows)
-    first_ads = cm.window_aggregate(rows, window, "first")
+    ads = cm.aggregate_by_ad(rows, key_map=key_map)
+    group_by = cm.resolve_group_by(ads, group_by)
+    first_ads = cm.window_aggregate(rows, window, "first", key_map=key_map)
     first_by_key = {_key(a): a for a in first_ads}
     results = []
     for ad in ads:
@@ -225,14 +227,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help="percent move that counts as real for ctr, frequency, hook rate "
                              "(arbitrary default: set from your own week-to-week noise)")
     parser.add_argument("--group-by", default="format",
-                        help="comma-separated fields to compare within, e.g. format,ad_type (default: format)")
+                        help="comma-separated columns to compare within: a name field or any column in the "
+                             "data, e.g. format,ad_type,market (default: format)")
+    parser.add_argument("--key-map", help="extra KEY=field pairs for KEY:value ad names, e.g. PX=concept")
     parser.add_argument("--top-n", type=int, default=3,
                         help="how many top-spend ads the concentration line counts (arbitrary default)")
     parser.add_argument("--json", action="store_true", help="print JSON instead of text")
     args = parser.parse_args(argv)
     rows = cm.load_rows(args.path)
     group_by = tuple(g.strip() for g in args.group_by.split(",") if g.strip())
-    results = judge_ads(rows, args.young_days, args.window, args.min_impressions, args.min_change, group_by)
+    try:
+        key_map = cm.parse_key_map(args.key_map) if args.key_map else None
+        results = judge_ads(rows, args.young_days, args.window, args.min_impressions, args.min_change,
+                            group_by, key_map)
+    except (cm.GroupColumnError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     if args.json:
         print(json.dumps({"summary": summarise(results, args.top_n), "settings": vars(args), "ads": results}, indent=2))
     else:
