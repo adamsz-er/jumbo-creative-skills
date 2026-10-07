@@ -134,7 +134,7 @@ def axis_format(kind: str, currency: Optional[str] = None):
 
 
 def combo_chart(labels: Sequence[str], bars: Optional[Sequence[Optional[float]]], line: Optional[Sequence[Optional[float]]],
-                bar_unit: str, line_unit: str, label: str, width: int = 560, height: int = 280,
+                bar_unit: str, line_unit: str, label: str, width: int = 880, height: int = 300,
                 bar_fmt=_axis_text, line_fmt=_axis_text) -> str:
     """Bars on the left axis and a line on the right axis over the same x labels; either may be absent.
 
@@ -195,7 +195,7 @@ def combo_chart(labels: Sequence[str], bars: Optional[Sequence[Optional[float]]]
 
 
 def pareto_chart(spend: Sequence[float], cum_spend: Sequence[float], cum_value: Optional[Sequence[float]],
-                 cut: Optional[int], label: str, currency: str, width: int = 600, height: int = 300) -> str:
+                 cut: Optional[int], label: str, currency: str, width: int = 880, height: int = 300) -> str:
     """Ads ranked by spend as bars, with cumulative share of spend and of purchase value as lines (percent axis).
 
     `cut` is the count of top ads to mark with a vertical line (None for no mark).

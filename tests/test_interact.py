@@ -407,7 +407,7 @@ class StructureTest(Fixture):
             self.assertIn(text, gallery)
         self.assertIn("more", gallery)
         for tag in re.findall(r"<[a-z][^>]*>", re.search(r"<main[^>]*>(.*?)</main>", self.html, re.S).group(1)):
-            self.assertNotRegex(tag, r"\bhidden\b")
+            self.assertNotRegex(tag, r"(?<![-\w])hidden\b")
             self.assertNotRegex(tag, r'style="[^"]*(display\s*:\s*none|visibility\s*:\s*hidden)')
         self.assertRegex(self.html, r"\.filterbar \{[^}]*display: none")
         self.assertRegex(self.html, r"\.js \.filterbar \{[^}]*display: flex")
@@ -690,10 +690,10 @@ class ReviewPythonTest(Fixture):
         tile = re.search(r'<div class="kpi[^"]*"><p class="kpi-name">Hook rate.*?</div></div>', html, re.S).group(0)
         self.assertIn("25.00%", tile)
         self.assertNotIn("12.50%", tile)
-        self.assertIn("video ads only (1 of 2 ads)", tile)
+        self.assertIn("video ads \u00b7 1 of 2", tile)
         hold = re.search(r'<div class="kpi[^"]*"><p class="kpi-name">Hold rate.*?</div></div>', html, re.S).group(0)
         self.assertIn("40.00%", hold)
-        self.assertIn("video ads only (1 of 2 ads)", hold)
+        self.assertIn("video ads \u00b7 1 of 2", hold)
 
     def test_the_funnel_rates_the_video_steps_on_video_impressions(self):
         html, _ = panels.funnel(panels.Ctx(rows=two_ads(), currency="USD"))

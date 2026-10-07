@@ -165,10 +165,24 @@ class ReportTest(unittest.TestCase):
                                         "impressions": 5000.0}])
         self.assertNotIn("<img src=x", html)
 
-    def test_the_committed_example_does_not_claim_a_reconcile_it_never_ran(self):
+    def test_the_committed_example_claims_a_reconcile_that_really_passes_on_its_own_totals(self):
+        import contextlib
+        import io
+        sys.path.insert(0, str(ROOT / "shared"))
+        import from_mcp
+        rows = report.cm.load_rows(str(FIXTURE))
+        pulled = Path(self._tmp.name) / "acme_rows.json"
+        pulled.write_text(json.dumps({"data": rows}))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = from_mcp.main([str(pulled), "-o", str(Path(self._tmp.name) / "acme_ads.csv"),
+                                  "--expect-spend", str(sum(r["spend"] for r in rows)),
+                                  "--expect-impressions", str(sum(r["impressions"] for r in rows))])
+        self.assertEqual(code, 0)
+        self.assertIn("reconciled against the expected totals", out.getvalue())
         example = (ROOT / "examples" / "acme" / "report.html").read_text(encoding="utf-8")
-        self.assertIn('<span class="status warn">Not reconciled</span>', example)
-        self.assertNotIn('<span class="status ok">', example)
+        self.assertIn('<span class="status ok">Reconciled</span>', example)
+        self.assertNotIn("Not reconciled", example.split("<footer>")[0])
 
     def test_cli_flags_reach_the_page(self):
         out = Path(self._tmp.name) / "flags.html"

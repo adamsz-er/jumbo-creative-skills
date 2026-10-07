@@ -328,7 +328,9 @@ class KpiTest(unittest.TestCase):
 
     def test_every_tile_says_no_prior_period_without_a_prior_file(self):
         html, _ = panels.kpi_strip(panels.Ctx(rows=self.rows, currency="USD"))
-        self.assertEqual(html.count("no prior period"), 12)
+        self.assertEqual(len(re.findall("no prior period", html, re.I)), 1)
+        self.assertIn("No prior period supplied: deltas appear when you pass one.", html)
+        self.assertNotIn('<span class="muted">no prior period', html)
 
     def test_prior_period_gives_a_signed_change(self):
         prior = [dict(r, spend=(r.get("spend") or 0) / 2) for r in self.rows]
@@ -726,7 +728,7 @@ class OverviewBannerTest(unittest.TestCase):
         tab = self.overview(rows=self.rows, account=self.account)
         self.assertEqual(tab.count(BANNER), 0)
         hook = re.search(r'<p class="kpi-name">Hook rate.*?</div></div>', tab, re.S).group(0)
-        self.assertRegex(hook, r"video ads only \(\d+ of \d+ ads\)")
+        self.assertRegex(hook, r"video ads \u00b7 \d+ of \d+")
 
     def test_the_account_file_removes_the_reach_sentence_only(self):
         tab = self.overview(rows=NO_VIDEO, account=self.account)
@@ -949,3 +951,53 @@ class ShellTest(unittest.TestCase):
             self.assertIn(selector, hidden)
         self.assertRegex(self.html, r"@media print[^@]*section\.tab\[hidden\]\s*\{\s*display: block !important")
         self.assertEqual(self.css.count("@media print"), 1)
+
+
+class ReviewFixesTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.rows = cm.load_rows(str(FIXTURE))
+        cls.html = report.build_html(rows=cls.rows, verdicts=acme_verdicts(), grade=acme_grade(), currency="USD", title="Acme")
+        cls.css = squash(re.search(r"<style>(.*?)</style>", cls.html, re.S).group(1))
+
+    def test_every_chart_svg_scales_with_its_card_and_has_no_fixed_size(self):
+        svgs = re.findall(r"<figure class=\"chart[^\"]*\"><svg[^>]*>", self.html)
+        self.assertGreater(len(svgs), 5)
+        for tag in svgs:
+            self.assertIn("viewBox=", tag)
+            self.assertNotRegex(tag, r'\swidth="(?!100%)|\sheight="')
+        self.assertRegex(self.css, r"\.chart svg \{[^}]*width: 100%[^}]*height: auto[^}]*max-height: 360px")
+        self.assertNotRegex(self.css, r"\.chart(\.wide)? svg \{[^}]*max-width: 6[04]0px")
+
+    def test_wide_charts_are_drawn_wide_enough_to_fill_a_desktop_card_under_the_height_cap(self):
+        import charts
+        svg = charts.combo_chart(["2026-03-01", "2026-03-02"], [1.0, 2.0], [1.0, 2.0], "a", "b", "x")
+        w, h = map(int, re.search(r'viewBox="0 0 (\d+) (\d+)"', svg).groups())
+        self.assertGreaterEqual(w / h, 2.8)
+        svg = charts.pareto_chart([3.0, 2.0], [60.0, 100.0], None, 1, "x", "USD")
+        w, h = map(int, re.search(r'viewBox="0 0 (\d+) (\d+)"', svg).groups())
+        self.assertGreaterEqual(w / h, 2.8)
+
+    def test_the_all_missing_note_is_a_compact_info_note_not_a_warning(self):
+        tab = report.build_html(rows=NO_VIDEO, currency="USD", title="Acme").split('id="tab-overview"')[1].split('id="tab-pareto"')[0]
+        note = re.search(r'<div class="banner".*?</div>', tab, re.S).group(0)
+        self.assertRegex(note, r'<svg class="ico"[^>]*aria-hidden="true"')
+        rule = re.search(r"\.banner \{[^}]*\}", self.css).group(0)
+        for want in ("background: var(--surface-muted)", "color: var(--text-muted)", "font-size: 13px"):
+            self.assertIn(want, rule)
+        self.assertNotIn("warning", rule)
+        self.assertNotIn("border-left-width", rule)
+
+    def test_prior_period_is_said_once_in_the_caption_when_no_tile_has_one(self):
+        html, _ = panels.kpi_strip(panels.Ctx(rows=cm.load_rows(str(FIXTURE)), currency="USD"))
+        self.assertEqual(html.count("No prior period supplied"), 1)
+        self.assertNotIn("kpi-delta", html)
+        prior = [dict(r, spend=(r.get("spend") or 0) / 2) for r in cm.load_rows(str(FIXTURE))]
+        with_prior, _ = panels.kpi_strip(panels.Ctx(rows=cm.load_rows(str(FIXTURE)), currency="USD", prior=prior))
+        self.assertNotIn("No prior period supplied", with_prior)
+        self.assertEqual(with_prior.count("kpi-delta"), 12)
+
+    def test_the_video_sub_label_is_short_and_muted(self):
+        html, _ = panels.kpi_strip(panels.Ctx(rows=cm.load_rows(str(FIXTURE)), currency="USD"))
+        self.assertRegex(html, r'<p class="kpi-note">video ads \u00b7 \d+ of \d+</p>')
+        self.assertRegex(self.css, r"\.kpi-note \{[^}]*color: var\(--text-muted\)")

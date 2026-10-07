@@ -389,6 +389,10 @@ def missing_everywhere(ctx: Ctx) -> List[str]:
     return gone + ([] if ctx.account else list(ACCOUNT_KPIS))
 
 
+INFO_ICON = ('<svg class="ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" '
+             'stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>')
+
+
 def overview_banner(ctx: Ctx) -> str:
     """One banner for every metric that is missing for all ads, so the tiles can read a plain n/a; "" when nothing is missing everywhere."""
     gone = missing_everywhere(ctx)
@@ -403,7 +407,7 @@ def overview_banner(ctx: Ctx) -> str:
                      "Pull account-level reach and frequency for the same window and add them when you rebuild this report.")
     if not lines:
         return ""
-    return '<div class="banner" role="note">%s</div>' % "".join("<p>%s</p>" % esc(line) for line in lines)
+    return '<div class="banner" role="note">%s<div>%s</div></div>' % (INFO_ICON, "".join("<p>%s</p>" % esc(line) for line in lines))
 
 
 def _tile_value(text: str) -> Tuple[str, str]:
@@ -438,7 +442,7 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
             vrows = video_rows(ctx.rows, key)
             tot, sser = totals(vrows), daily(vrows)
             ptot = totals(video_rows(ctx.prior, key)) if ctx.prior else None
-            video_note = "" if key in gone else "video ads only (%d of %d ads)" % (video_ads(ctx.ads, key), len(ctx.ads))
+            video_note = "" if key in gone else "video ads \u00b7 %d of %d" % (video_ads(ctx.ads, key), len(ctx.ads))
         if key == "reach":
             text = "{:,.0f}".format(ctx.account["reach"]) if ctx.account else "n/a"
         elif key == "frequency":
@@ -451,8 +455,10 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
         if key == "hook_rate" and derived:
             label += " (derived)"
         value, reason = ("n/a", "") if key in gone else _tile_value(text)
-        if key in ACCOUNT_KPIS or prior_total is None:
-            delta = '<span class="muted">%s</span>' % esc("no prior period" if prior_total is None else "n/a (reach is account-level only)")
+        if prior_total is None:
+            delta = ""
+        elif key in ACCOUNT_KPIS:
+            delta = '<span class="muted">n/a (reach is account-level only)</span>'
         else:
             change = _pct_change(_kpi_value(tot, key), _kpi_value(ptot, key)) if ptot is not None else None
             delta = '<span class="muted">n/a (prior value missing or zero)</span>' if change is None else _delta_pill(key, change)
@@ -465,9 +471,10 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
         partial = [] if video_note or key in gone else coverage(ctx.ads, needs.get(key, ()))
         notes = ([reason] if reason else []) + ([video_note] if video_note else []) + partial
         note_html = '<p class="kpi-note">%s</p>' % esc("; ".join(notes)) if notes else ""
-        tiles.append('<div class="kpi%s%s"><p class="kpi-name">%s%s</p><p class="kpi-value">%s</p>%s<p class="kpi-delta">%s</p><div class="kpi-spark">%s</div></div>'
-                     % (" unknown" if value == "n/a" else "", " partial" if partial else "", esc(label), esc(unit), esc(value), note_html, delta, spark_note))
-    return '<div class="kpis">%s</div>' % "".join(tiles), "data"
+        tiles.append('<div class="kpi%s%s"><p class="kpi-name">%s%s</p><p class="kpi-value">%s</p>%s%s<div class="kpi-spark">%s</div></div>'
+                     % (" unknown" if value == "n/a" else "", " partial" if partial else "", esc(label), esc(unit), esc(value), note_html, '<p class="kpi-delta">%s</p>' % delta if delta else "", spark_note))
+    caption = "" if prior_total is not None else '<p class="muted kpi-caption">No prior period supplied: deltas appear when you pass one.</p>'
+    return '<div class="kpis">%s</div>%s' % ("".join(tiles), caption), "data"
 
 
 def over_time(ctx: Ctx) -> Tuple[str, str]:
