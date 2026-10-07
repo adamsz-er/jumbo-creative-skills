@@ -91,7 +91,7 @@ class ReportTest(unittest.TestCase):
             notes |= set(re.findall(r"n/a \(missing [^)]*\)", path.read_text()))
         self.assertTrue(notes, "fixture should carry at least one missing-data note")
         for note in notes:
-            self.assertIn(note, self.html)
+            self.assertIn(report.interact.plain_ids(note), self.html)
 
     def test_html_is_balanced(self):
         parser = Balance()
@@ -159,7 +159,7 @@ class ReportTest(unittest.TestCase):
         for heading in HEADINGS:
             self.assertIn(heading, html)
         self.assertIn("keep-or-kill", html)
-        self.assertEqual(html.count('data-state="empty"'), 5)
+        self.assertEqual(html.count('data-state="empty"'), 6)
         parser = Balance()
         parser.feed(html)
         self.assertEqual((parser.errors, parser.stack), ([], []))

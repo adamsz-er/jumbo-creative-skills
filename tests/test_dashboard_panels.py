@@ -59,15 +59,23 @@ def acme_verdicts():
     return json.loads(out.stdout)
 
 
+def acme_grade():
+    out = subprocess.run([sys.executable, str(ROOT / "skills" / "creative-grader" / "scripts" / "grade.py"), str(FIXTURE), "--json"],
+                         capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    return json.loads(out.stdout)
+
+
 class PanelStateTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.rows = cm.load_rows(str(FIXTURE))
         cls.verdicts = acme_verdicts()
-        cls.ctx = panels.Ctx(rows=cls.rows, verdicts=cls.verdicts, currency="USD")
+        cls.grade = acme_grade()
+        cls.ctx = panels.Ctx(rows=cls.rows, verdicts=cls.verdicts, grade=cls.grade, currency="USD")
 
-    def test_eight_data_panels_and_three_placeholders_exist(self):
-        self.assertEqual(len(DATA_PANELS), 8)
+    def test_ten_data_panels_and_three_placeholders_exist(self):
+        self.assertEqual(len(DATA_PANELS), 10)
         self.assertEqual(len(PLACEHOLDERS), 3)
 
     def test_every_panel_is_data_on_the_acme_inputs(self):
@@ -117,7 +125,7 @@ class PanelStateTest(unittest.TestCase):
         self.assertLessEqual(len(items), 5)
         self.assertNotIn("cant_judge", {e["verdict_id"] for e in items})
         html, _ = panels.do_first(self.ctx)
-        self.assertEqual(html.count('<article class="ad-card">'), len(items))
+        self.assertEqual(html.count('<article class="ad-card" '), len(items))
 
     def test_board_columns_carry_counts_and_every_pause_card_the_check_line(self):
         html, _ = panels.verdict_board(self.ctx)
@@ -132,7 +140,7 @@ class PanelStateTest(unittest.TestCase):
         ctx = panels.Ctx(rows=self.rows, verdicts=self.verdicts, top_n=2)
         html, _ = panels.verdict_board(ctx)
         keep = next(c for c in html.split('<div class="col col-')[1:] if c.startswith("keep"))
-        self.assertEqual(keep.count('<article class="ad-card">'), 2)
+        self.assertEqual(keep.count('<article class="ad-card" '), 2)
         self.assertIn("more keep ads", keep)
         self.assertIn("N=2", html)
         self.assertIn("<details", keep)
@@ -198,8 +206,8 @@ class VerdictRobustnessTest(unittest.TestCase):
         html, _ = panels.verdict_board(panels.Ctx(rows=rows, verdicts=verdicts, currency="USD"))
         cant = next(c for c in html.split('<div class="col col-')[1:] if c.startswith("cant"))
         early = next(c for c in html.split('<div class="col col-')[1:] if c.startswith("early"))
-        self.assertEqual(cant.count('<article class="ad-card">'), 2)
-        self.assertEqual(early.count('<article class="ad-card">'), 0)
+        self.assertEqual(cant.count('<article class="ad-card" '), 2)
+        self.assertEqual(early.count('<article class="ad-card" '), 0)
         self.assertEqual(cant.count("unrecognised verdict"), 2)
 
 
@@ -236,15 +244,15 @@ class PartialCoverageTest(unittest.TestCase):
 
     def test_a_tile_with_partial_coverage_shows_its_value_and_how_many_rows_lack_it(self):
         html, _ = panels.kpi_strip(panels.Ctx(rows=self.half_blank(), currency="USD"))
-        self.assertIn("conversion_value missing on 3 of 6 rows", html)
-        self.assertEqual(html.count("conversion_value missing on 3 of 6 rows"), 2)
+        self.assertIn("purchase value missing on 3 of 6 rows", html)
+        self.assertEqual(html.count("purchase value missing on 3 of 6 rows"), 2)
         self.assertIn("USD 630", html)
 
     def test_fully_present_and_fully_missing_are_not_partial(self):
         full, _ = panels.kpi_strip(panels.Ctx(rows=self.ROWS, currency="USD"))
         self.assertNotIn("missing on", full)
         none, _ = panels.kpi_strip(panels.Ctx(rows=[dict(r, conversion_value=None) for r in self.ROWS], currency="USD"))
-        self.assertIn("n/a (missing conversion_value)", none)
+        self.assertIn("n/a (missing purchase value)", none)
         self.assertNotIn("conversion_value missing on", none)
 
     def test_the_pareto_sentence_states_value_coverage_when_partial(self):
@@ -321,7 +329,7 @@ class FunnelTest(unittest.TestCase):
         ctx = panels.Ctx(rows=rows, currency="USD")
         html, state = panels.funnel(ctx)
         self.assertEqual(state, "data")
-        self.assertIn("n/a (missing landing_page_views)", html)
+        self.assertIn("n/a (missing landing page views)", html)
         self.assertIn("n/a (missing checkouts)", html)
         self.assertIn("not computed across the missing Landing page views step", html)
         self.assertIn("not computed across the missing Checkouts step", html)
@@ -335,7 +343,7 @@ class FunnelTest(unittest.TestCase):
         self.assertEqual(ctx.funnel_headers, {"landing_page_views": "Landing page views", "checkouts": "Checkouts initiated"})
         self.assertIn(">140<", html)
         self.assertIn("70.00%", html)
-        self.assertNotIn("n/a (missing landing_page_views)", html)
+        self.assertNotIn("n/a (missing landing page views)", html)
         self.assertNotIn("n/a (missing checkouts)", html)
 
     def test_funnel_headers_are_named_in_the_footer_for_both_cases(self):
@@ -380,14 +388,14 @@ class ParetoTest(unittest.TestCase):
 
     def test_head_gallery_stops_at_the_cut_and_the_tail_is_collapsed_with_a_summary(self):
         html, _ = panels.head_tail(panels.Ctx(rows=self.ROWS, currency="USD"))
-        self.assertEqual(html.count('<article class="ad-card">'), 2)
+        self.assertEqual(html.count('<article class="ad-card" '), 2)
         self.assertIn("Long tail: 4 ads", html)
         self.assertIn("<details", html)
         self.assertNotIn("<details open", html)
 
     def test_the_gallery_is_capped_at_top_n_and_the_overflow_is_listed_compactly(self):
         html, _ = panels.head_tail(panels.Ctx(rows=self.ROWS, currency="USD", pareto_share=99.0, top_n=2))
-        self.assertEqual(html.count('<article class="ad-card">'), 2)
+        self.assertEqual(html.count('<article class="ad-card" '), 2)
         self.assertIn("more head ads are listed below the cards", html)
 
 
@@ -449,12 +457,12 @@ class ScaleTest(unittest.TestCase):
         columns = board.split('<div class="col col-')[1:]
         self.assertEqual(len(columns), 7)
         for column in columns:
-            self.assertLessEqual(column.count('<article class="ad-card">'), top_n)
+            self.assertLessEqual(column.count('<article class="ad-card" '), top_n)
             self.assertLessEqual(column.count('<td class="adname">'), panels.LIST_CAP)
         self.assertIn("more are not listed", board)
         tail = html[html.index('id="panel-head-tail"'):html.index('id="tab-keep-kill"')]
         self.assertLessEqual(tail.count('<td class="adname">'), panels.LIST_CAP)
-        self.assertLessEqual(tail.count('<article class="ad-card">'), top_n)
+        self.assertLessEqual(tail.count('<article class="ad-card" '), top_n)
 
 
 class PageStructureTest(unittest.TestCase):
@@ -499,8 +507,8 @@ class PageStructureTest(unittest.TestCase):
 
     def test_header_has_both_logo_variants_title_window_currency_and_source(self):
         header = re.search(r"<header class=\"top\">.*?</header>", self.html, re.S).group(0)
-        light = re.search(r'<span class="logo-light".*?</span>', header, re.S).group(0)
-        dark = re.search(r'<span class="logo-dark".*?</span>', header, re.S).group(0)
+        light = re.search(r'<span class="logo-light" role="img" aria-label="Elephant Room">.*?</span>', header, re.S).group(0)
+        dark = re.search(r'<span class="logo-dark" role="img" aria-label="Elephant Room">.*?</span>', header, re.S).group(0)
         self.assertIn('fill="#1a1a1a"', light)
         self.assertIn('fill="white"', dark)
         self.assertIn("Acme creative <span class=\"grad\">review</span>", header)

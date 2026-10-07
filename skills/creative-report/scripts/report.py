@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional, Sequence
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import creative_metrics as cm  # noqa: E402
+import interact  # noqa: E402
 import panels  # noqa: E402
 from panels import Ctx, esc  # noqa: E402
 from previews import DEFAULT_BUDGET_KB, DEFAULT_MAX_KB, Previews  # noqa: E402
@@ -35,12 +36,22 @@ ASSETS = Path(__file__).resolve().parent.parent / "assets"
 TEMPLATE = ASSETS / "report-template.html"
 MISSING = re.compile(r"n/a \(missing [^)]*\)")
 CLIP_ID = "clip0_1738_1159"
+GRADIENT_ID = "paint0_linear_4_2"
 
 
 def logo(filename: str, suffix: str) -> str:
-    """The brand SVG inlined, without its namespace URL (HTML needs none); its clip id gets a suffix so no two logos share an id."""
+    """The brand SVG inlined, without its namespace URL (HTML needs none); its clip and gradient ids get a suffix so no two logos share an id."""
     text = (ASSETS / filename).read_text(encoding="utf-8")
-    return text.replace(CLIP_ID, CLIP_ID + suffix).replace(' xmlns="http://www.w3.org/2000/svg"', "")
+    return text.replace(CLIP_ID, CLIP_ID + suffix).replace(GRADIENT_ID, GRADIENT_ID + suffix).replace(' xmlns="http://www.w3.org/2000/svg"', "")
+
+
+def lockup(tag: str) -> str:
+    """Jumbo, a thin divider, "by" and Elephant Room; the light drawings show on light, the dark ones in dark mode."""
+    def pair(name: str, light: str, dark: str, n: int) -> str:
+        return ('<span class="logo-light" role="img" aria-label="%s">%s</span><span class="logo-dark" role="img" aria-label="%s">%s</span>'
+                % (name, logo(light, "-%s%da" % (tag, n)), name, logo(dark, "-%s%db" % (tag, n))))
+    return ('<div class="lockup">%s<span class="brand-div" aria-hidden="true"></span><span class="brand-by">by</span>%s</div>'
+            % (pair("Jumbo", "jumbo-logo.svg", "jumbo-logo-dark.svg", 1), pair("Elephant Room", "er-logo-dark.svg", "er-logo.svg", 2)))
 
 
 def completeness_badge(value: Optional[str]) -> str:
@@ -68,7 +79,7 @@ def collect_notes(grade, verdicts, mix) -> List[str]:
             seen.setdefault(note, 0)
     for note, count in sorted(seen.items()):
         where = "%d ad%s" % (count, "" if count == 1 else "s") if count else "the summary"
-        notes.append("<code>%s</code> in %s. The metrics that need it are skipped, never counted as 0." % (esc(note), esc(where)))
+        notes.append("<code>%s</code> in %s. The metrics that need it are skipped, never counted as 0." % (esc(interact.plain_ids(note)), esc(where)))
     if grade:
         low = sum(1 for a in grade.get("ads", []) if a["diagnosis"]["step"] == "not graded")
         if low:
@@ -134,20 +145,20 @@ def footer_html(ctx: Ctx, grade, verdicts, mix, brand: Optional[str], completene
                  % (source, window, attribution, ctx.currency or "the account's own currency (the export did not name one)"))
     lines.append("Completeness: %s." % ("not reconciled" if completeness is None else completeness))
     if grade:
-        lines += [l for l in str(grade.get("basis", "")).splitlines() if l.strip()]
+        lines += [interact.plain_ids(l) for l in str(grade.get("basis", "")).splitlines() if l.strip()]
     if verdicts:
         s = verdicts.get("settings") or {}
         lines.append("Verdict settings used (arbitrary defaults, set them from your own account): young-days=%s, window=%s, "
                      "min-impressions=%s, min-change=%s%%, top-n=%s, grouped by %s."
                      % (s.get("young_days", "n/a"), s.get("window", "n/a"), s.get("min_impressions", "n/a"),
-                        s.get("min_change", "n/a"), s.get("top_n", "n/a"), s.get("group_by", "n/a")))
+                        s.get("min_change", "n/a"), s.get("top_n", "n/a"), interact.plain_ids(s.get("group_by", "n/a"))))
     lines.append("Dashboard settings used: cards per list (--top-n) %d, Pareto cut (--pareto-share) %.0f%% (a common convention, not a rule), "
                  "concentration counts the top %d ads, previews capped at %d KB each and %d KB in total."
                  % (ctx.top_n, ctx.pareto_share, ctx.concentration_n, caps["max_kb"], caps["budget_kb"]))
     if ctx.funnel_headers:
         read = ["%s read from column %r" % (k.replace("_", " "), v) if v else "%s: no matching column" % k.replace("_", " ")
                 for k, v in sorted(ctx.funnel_headers.items())]
-        lines.append("Funnel columns beyond the standard fields: %s (matched by normalised header)." % "; ".join(read))
+        lines.append("Funnel columns beyond the standard fields: %s (matched by normalised header)." % interact.plain_ids("; ".join(read)))
     lines.append("Reach and frequency: %s." % ("from the account-level file" if ctx.account else "not shown, they need an account-level pull"))
     lines.append("Prior period: %s." % ("supplied" if ctx.prior else "not supplied"))
     lines.append(ctx.previews.summary())
@@ -155,10 +166,9 @@ def footer_html(ctx: Ctx, grade, verdicts, mix, brand: Optional[str], completene
     notes_html = '<ul class="note-list">%s</ul>' % "".join("<li>%s</li>" % n for n in notes) if notes else "<p>Nothing was missing from the inputs.</p>"
     return ('<footer><details class="method" open><summary>Data and method</summary><div class="basis"><pre>%s</pre></div>'
             '<h3>Missing data and caveats</h3>%s</details>'
-            '<div class="by"><span class="logo-light" role="img" aria-label="Elephant Room">%s</span>'
-            '<span class="logo-dark" role="img" aria-label="Elephant Room">%s</span><p><b>by Elephant Room</b> &middot; Generated %s</p></div>'
+            '<div class="by">%s<p>A Jumbo creative review <b>by Elephant Room</b> &middot; Generated %s</p></div>'
             '<p class="privacy">Numbers come from your own data. The only outside request this page makes is the font stylesheet, and it falls back to system fonts if blocked.</p></footer>'
-            % (esc("\n".join(lines)), notes_html, logo("er-logo-dark.svg", "-f1"), logo("er-logo.svg", "-f2"), esc(generated)))
+            % (esc("\n".join(lines)), notes_html, lockup("f"), esc(generated)))
 
 
 def build_html(rows: Optional[Sequence[Dict[str, Any]]] = None, grade: Optional[Dict[str, Any]] = None,
@@ -179,12 +189,13 @@ def build_html(rows: Optional[Sequence[Dict[str, Any]]] = None, grade: Optional[
     badge = completeness_badge(completeness)
     attribution = attribution or "not stated"
     body = tabs_html(ctx)
+    pool, data, bar = panels.pool_html(ctx), panels.data_block(ctx), panels.filter_bar(ctx)
     caps = {"max_kb": ctx.previews.max_kb, "budget_kb": ctx.previews.budget_kb}
     meta = "".join('<li><span>%s</span> %s</li>' % (esc(k), esc(v)) for k, v in (
         ("Window", window), ("Data source", source), ("Currency", currency or "account currency (not stated)"),
         ("Attribution", attribution)))
-    fills = {"title": esc(page_title), "heading": heading, "sprite": ctx.previews.sprite(), "logo_light": logo("er-logo-dark.svg", "-h1"),
-             "logo_dark": logo("er-logo.svg", "-h2"), "meta": meta, "badge": badge, "nav": nav_html(), "body": body,
+    fills = {"title": esc(page_title), "heading": heading, "sprite": ctx.previews.sprite(), "brand": lockup("h"),
+             "filterbar": bar, "dialog": panels.DIALOG, "data": data, "pool": pool, "meta": meta, "badge": badge, "nav": nav_html(), "body": body,
              "footer": footer_html(ctx, grade, verdicts, mix, brand, completeness, attribution, source, window, generated, caps)}
     return re.sub(r"\{\{(\w+)\}\}", lambda m: fills[m.group(1)], TEMPLATE.read_text(encoding="utf-8"))
 
