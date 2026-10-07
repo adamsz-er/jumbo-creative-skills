@@ -769,9 +769,10 @@ def all_ads(ctx: Ctx) -> Tuple[str, str]:
         ordered = interact.by_stake(g["records"])
         entries = [entry_for(ctx, r) for r in ordered]
         sections.append(
-            '<section class="group" data-group="%s"><header class="group-head"><h4>%s</h4><p class="group-sub">%d ads &middot; %s spend &middot; %s of spend &middot; ROAS %s &middot; CPA %s</p></header>%s%s</section>'
+            '<section class="group" data-group="%s"><header class="group-head"><h4>%s</h4><p class="group-sub">%d ads &middot; %s spend &middot; %s of spend &middot; ROAS %s &middot; CPA %s%s</p></header>%s%s</section>'
             % (esc(g["key"] if g["key"] is not None else "unknown"), esc(g["label"]), sub["ads"], esc(ctx.money(sub["spend"])),
                "n/a" if sub["share"] is None else "%.0f%%" % sub["share"], esc(sub["roas_text"]), esc(sub["cpa_text"]),
+               "".join(" &middot; %s" % esc(n) for n in (sub["roas_note"], sub["cpa_note"]) if n),
                card_grid([ad_card(ctx, e) for e in entries[:ctx.top_n]]), compact_list(ctx, entries[ctx.top_n:], "ads", cap=None)))
     lead = ('<p class="muted">Every ad, shown %s and sorted by spend at stake until you change it. The top %d of each group show as cards (N=%d, a default you can change when you rebuild the report), the rest as a compact list. '
             'Each group header adds up its own spend, with ROAS and CPA as ratios of sums.</p>'
@@ -783,16 +784,16 @@ SEARCH_ICON = ('<svg class="ico" viewBox="0 0 24 24" width="14" height="14" aria
                'stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>')
 
 
-def view_controls(ctx: Ctx) -> str:
+def view_controls(ctx: Ctx, kind: str) -> str:
     """Group, sort and previews-only: they shape the All ads gallery, so they sit with the filters and need the page script."""
     group = default_group(ctx)
     group_options = '<option value="none"%s>None</option>' % (" selected" if group == "none" else "") + "".join(
         '<option value="%s"%s>%s</option>' % (key, " selected" if key == group else "", esc(GROUP_LABELS[key]))
         for key in interact.GROUPS if any(f["key"] == key for f in ctx.facets))
     sort_options = "".join('<option value="%s"%s>%s</option>' % (key, " selected" if key == "stake" else "", esc(label)) for key, label in interact.SORTS)
-    return ('<div class="fb-view"><label>Group by <select data-action="group">%s</select></label>'
+    return ('<div class="fb-view %s"><label>Group by <select data-action="group">%s</select></label>'
             '<label>Sort by <select data-action="sort">%s</select></label>'
-            '<button type="button" class="chip" aria-pressed="false" data-action="previews-only">Previews only</button></div>' % (group_options, sort_options))
+            '<button type="button" class="chip" aria-pressed="false" data-action="previews-only">Previews only</button></div>' % (kind, group_options, sort_options))
 
 
 def filter_bar(ctx: Ctx) -> str:
@@ -807,16 +808,16 @@ def filter_bar(ctx: Ctx) -> str:
                         % (facet["key"], esc(v["value"]), esc(v["label"]), v["count"]) for v in facet["values"])
         groups.append('<fieldset class="facet"><legend>%s</legend><div class="chips-row">%s</div></fieldset>' % (esc(facet["label"]), chips))
     note = '<p class="fb-note">Charts and key numbers stay account-wide. Filters change the ad cards, the lists and the All ads gallery.</p>'
-    popover = ('<details class="facets"><summary class="fb-filters">Filters<span class="fb-k"></span></summary><div class="facets-body">%s'
+    popover = ('<details class="facets"><summary class="fb-filters">Filters<span class="fb-k"></span></summary><div class="facets-body">%s%s'
                '<fieldset class="facet"><legend>Smart views</legend><div class="chips-row" role="group" aria-label="Smart views">%s</div></fieldset>%s</div></details>'
-               % (note, views, "".join(groups)))
+               % (note, view_controls(ctx, "fb-view-pop"), views, "".join(groups)))
     return ('<div class="filterbar" role="search" aria-label="Filter and group ads">'
             '<label class="fb-search">%s<input type="search" class="fb-input" aria-label="Search ads" placeholder="Search label, name or ad ID" autocomplete="off"></label>'
             '%s<button type="button" class="btn ghost fb-clear" data-action="clear">Clear</button><span class="fb-spacer"></span>'
             '<span class="fb-count" role="status" aria-live="polite"></span>%s</div>'
             '<div class="fb-status"><p class="fb-summary" role="status" aria-live="polite"></p>'
             '<p class="fb-empty" role="status">No ads match these filters. <button type="button" class="btn" data-action="clear">Clear filters</button></p></div>'
-            % (SEARCH_ICON, popover, view_controls(ctx)))
+            % (SEARCH_ICON, popover, view_controls(ctx, "fb-view-row")))
 
 
 DIALOG = ('<dialog class="ad-dialog" id="ad-dialog" aria-labelledby="ad-dialog-title"><div class="dlg-head"><h2 id="ad-dialog-title">Ad</h2>'

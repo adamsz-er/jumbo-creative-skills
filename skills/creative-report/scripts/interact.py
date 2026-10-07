@@ -318,6 +318,12 @@ def ratio_of_sums(records: Sequence[Dict[str, Any]], num: str, den: str, num_wor
     return {"value": round(top / bottom, digits), "exact": top / bottom, "why": None}
 
 
+def recorded_note(records: Sequence[Dict[str, Any]], field: str, words: str) -> str:
+    """"value recorded on 2 of 3 ads" when only some ads carry the field; empty when all or none do."""
+    have = sum(1 for r in records if r.get(field) is not None)
+    return "%s recorded on %d of %d ads" % (words, have, len(records)) if 0 < have < len(records) else ""
+
+
 def totals_of(records: Sequence[Dict[str, Any]], total_spend: Optional[float], money: Optional[Callable[..., str]] = None) -> Dict[str, Any]:
     """Ads, spend, share of account spend, ROAS and CPA of a set of ads: ratios of sums over every ad in the set."""
     spend, conv, value = _money_sum(records, "spend"), _count(_sum(records, "conversions")), _money_sum(records, "conversion_value")
@@ -328,7 +334,9 @@ def totals_of(records: Sequence[Dict[str, Any]], total_spend: Optional[float], m
             "share": None if not total_spend or spend is None else spend / total_spend * 100,
             "roas": roas["value"], "cpa": cpa["value"],
             "roas_text": roas["why"] or "%.2fx" % roas["exact"],
-            "cpa_text": cpa["why"] or show_money(cpa["exact"], 2)}
+            "cpa_text": cpa["why"] or show_money(cpa["exact"], 2),
+            "roas_note": recorded_note(records, "conversion_value", "value"),
+            "cpa_note": recorded_note(records, "conversions", "purchases")}
 
 
 def group_records(records: Sequence[Dict[str, Any]], key: str) -> List[Dict[str, Any]]:

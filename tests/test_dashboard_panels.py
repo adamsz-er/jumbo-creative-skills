@@ -573,9 +573,23 @@ class PageStructureTest(unittest.TestCase):
         self.assertEqual(footer.count('role="img" aria-label="Elephant Room"'), 2)
 
     def test_three_completeness_states(self):
-        for value, css, text in ((None, "warn", "Not reconciled"), ("reconciled", "ok", "Reconciled"), ("incomplete:7.5", "bad", "Incomplete 7.5%")):
-            html = report.build_html(rows=self.rows, completeness=value)
-            self.assertIn('<span class="status %s">%s</span>' % (css, text), html)
+        tip = "Pull the account totals for the same window to check nothing is missing"
+        cases = ((None, '<span class="status neutral" title="%s">Totals not checked</span>' % tip),
+                 ("reconciled", '<span class="status ok">Reconciled</span>'),
+                 ("incomplete:7.5", "<span class=\"status warn\">Totals don't match (7.5% short)</span>"))
+        for value, badge in cases:
+            self.assertIn(badge, report.build_html(rows=self.rows, completeness=value))
+        self.assertRegex(self.css_of(report.build_html(rows=self.rows)), r"\.status\.neutral \{[^}]*background: var\(--flat-bg\)[^}]*color: var\(--flat-fg\)")
+
+    @staticmethod
+    def css_of(html):
+        return re.search(r"<style>(.*?)</style>", html, re.S).group(1)
+
+    def test_an_unchecked_pull_is_never_dressed_as_a_warning_or_a_pass(self):
+        page = report.build_html(rows=self.rows)
+        self.assertNotIn("Not reconciled", page)
+        self.assertNotIn('class="status ok"', page)
+        self.assertNotIn('class="status warn"', page)
 
     def test_a_bad_completeness_value_is_refused(self):
         with self.assertRaises(ValueError):
@@ -680,8 +694,10 @@ class ReaderWordsTest(unittest.TestCase):
         self.assertRegex(text, r"purchases recorded on \d+ of \d+ ads; the rest had none in this window")
         self.assertRegex(text, r"purchase value recorded on \d+ of \d+ ads")
 
-    def test_the_method_details_may_still_count_rows(self):
-        self.assertIn("rows", self.pages["full"].split('<details class="method"')[1].split("</details>")[0] + " rows")
+    def test_the_method_details_are_where_flags_and_row_counts_may_live(self):
+        method = self.pages["full"].split('<details class="method"')[1].split("</details>")[0]
+        self.assertIn("cards per list (--top-n)", method)
+        self.assertNotIn("--top-n", reader_text(self.pages["full"]))
 
 
 NO_VIDEO = [{k: v for k, v in r.items() if not k.startswith("video")} for r in cm.load_rows(str(FIXTURE))]
@@ -744,6 +760,36 @@ class OverviewBannerTest(unittest.TestCase):
         self.assertNotIn("unavailable in this pull", reader_text(outside))
         self.assertNotIn("none was supplied", reader_text(outside))
 
+
+
+HARNESS_JS = r'''
+var attrs = {}, listeners = {};
+var node = { id: "t", hidden: false, closest: function () { return null; }, addEventListener: function () {}, getAttribute: function () { return "#t"; },
+  setAttribute: function () {}, removeAttribute: function () {}, querySelector: function () { return null; } };
+function stub(store) {
+  attrs = {};
+  var root = { className: "", setAttribute: function (k, v) { attrs[k] = v; }, getAttribute: function (k) { return attrs[k] || null; } };
+  global.window = { localStorage: store, matchMedia: function () { return { matches: false }; }, addEventListener: function () {}, scrollTo: function () {}, innerWidth: 1200 };
+  global.history = { replaceState: function () {} };
+  global.location = { hash: "" };
+  global.document = { documentElement: root,
+    querySelectorAll: function (sel) { return sel === "section.tab" ? [node] : []; },
+    querySelector: function () { return { namespaceURI: "" }; }, getElementById: function () { return null; },
+    addEventListener: function (type, fn) { (listeners[type] = listeners[type] || []).push(fn); }, createElementNS: function () { return {}; } };
+}
+function click() {
+  var target = { closest: function (sel) { return sel.indexOf("theme") >= 0 ? {} : null; } };
+  listeners.click.forEach(function (fn) { fn({ target: target, preventDefault: function () {} }); });
+}
+function boot() { listeners = {}; new Function(SCRIPT)(); }
+var out = {};
+stub({ getItem: function () { throw new Error("blocked"); }, setItem: function () { throw new Error("blocked"); } });
+boot(); click(); out.afterBlockedClick = attrs["data-theme"];
+click(); out.afterSecondClick = attrs["data-theme"];
+stub({ getItem: function () { return "dark"; }, setItem: function () {} });
+boot(); out.storedApplied = attrs["data-theme"];
+console.log(JSON.stringify(out));
+'''
 
 
 def squash(css):
@@ -841,9 +887,32 @@ class ShellTest(unittest.TestCase):
         self.assertIn("aria-label=", button)
         script = re.search(r"<script>(.*?)</script>", self.html, re.S).group(1)
         self.assertIn('setAttribute("data-theme"', script)
-        self.assertRegex(script, r"try \{[^}]*localStorage[^}]*\} catch")
+        self.assertRegex(script, r"try \{ return storage\.getItem\(THEME_KEY\); \} catch")
+        self.assertRegex(script, r"try \{ storage\.setItem\(THEME_KEY, value\); \} catch")
         self.assertRegex(self.css, r"\.theme-toggle \{[^}]*display: none")
         self.assertRegex(self.css, r"\.js \.theme-toggle \{[^}]*display: inline-flex")
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed")
+    def test_the_toggle_flips_the_theme_when_storage_throws_and_a_stored_choice_is_applied_on_load(self):
+        script = re.search(r"<script>(.*?)</script>", self.html, re.S).group(1)
+        harness = HARNESS_JS
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "toggle.js"
+            path.write_text("var SCRIPT = %s;\n%s" % (json.dumps(script), harness))
+            done = subprocess.run(["node", str(path)], capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(json.loads(done.stdout), {"afterBlockedClick": "dark", "afterSecondClick": "light", "storedApplied": "dark"})
+
+    def test_group_sort_and_previews_move_into_the_filters_popover_on_a_phone_instead_of_vanishing(self):
+        pop = re.search(r'<details class="facets".*?</details>', self.html, re.S).group(0)
+        self.assertEqual(pop.count('class="fb-view fb-view-pop"'), 1)
+        for control in ('data-action="group"', 'data-action="sort"', 'data-action="previews-only"'):
+            self.assertIn(control, pop)
+        self.assertRegex(self.css, r"\.fb-view-pop \{[^}]*display: none")
+        small = self.css[self.css.index("@media (max-width: 640px) { .topbar"):]
+        small = small[:small.index("} }") + 1]
+        self.assertRegex(small, r"\.js \.fb-view-pop \{[^}]*display: flex")
+        self.assertRegex(small, r"\.js \.fb-view-row \{[^}]*display: none")
 
     def test_the_dark_logos_follow_the_chosen_theme_as_well_as_the_system(self):
         self.assertIn(':root[data-theme="dark"] .logo-light { display: none; }', self.css)
@@ -895,7 +964,9 @@ class ShellTest(unittest.TestCase):
     def test_the_filter_row_is_one_sticky_row_with_search_filters_clear_count_and_view_controls(self):
         main_at = self.html.index("<main")
         row = re.search(r'<div class="filterbar".*?</div>\s*(?=<div class="fb-status")', self.html[:main_at], re.S).group(0)
-        parts = [row.index(m) for m in ('type="search"', "<details", "Filters", 'data-action="clear"', 'class="fb-count"', 'data-action="group"', 'data-action="sort"')]
+        parts = [row.index(m) for m in ('type="search"', "<details", "Filters", 'data-action="clear"', 'class="fb-count"', 'class="fb-view fb-view-row"')]
+        view = row[row.index('class="fb-view fb-view-row"'):]
+        self.assertLess(view.index('data-action="group"'), view.index('data-action="sort"'))
         self.assertEqual(parts, sorted(parts))
         self.assertIn("fb-clear", re.search(r'<button[^>]*data-action="clear"[^>]*>', row).group(0))
         self.assertRegex(self.css, r"\.fb-clear \{[^}]*display: none")

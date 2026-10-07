@@ -139,6 +139,12 @@ class ReportTest(unittest.TestCase):
         self.assertNotIn("<b>x</b>", html)
         self.assertIn("Acme · &lt;b&gt;x&lt;/b&gt; creative review", html)
 
+    def test_a_label_ending_in_the_letters_review_is_not_cut_mid_word(self):
+        self.assertEqual(self.heading_text(title="Acme Preview", scope="Retention"), ("Acme Preview \u00b7 Retention creative review",) * 2)
+        self.assertEqual(self.heading_text(title="Acme Overview", scope="Retention"), ("Acme Overview \u00b7 Retention creative review",) * 2)
+        self.assertEqual(self.heading_text(title="Acme review", scope="Retention"), ("Acme \u00b7 Retention creative review",) * 2)
+        self.assertEqual(self.heading_text(title="Acme Preview"), ("Acme Preview creative review",) * 2)
+
     def test_an_explicit_title_wins_over_the_profile_name(self):
         profile = "# Creative profile: Profile Name\n- Name: Profile Name\n"
         self.assertEqual(self.heading_text(title="Explicit", profile=profile), ("Explicit creative review",) * 2)
@@ -165,24 +171,11 @@ class ReportTest(unittest.TestCase):
                                         "impressions": 5000.0}])
         self.assertNotIn("<img src=x", html)
 
-    def test_the_committed_example_claims_a_reconcile_that_really_passes_on_its_own_totals(self):
-        import contextlib
-        import io
-        sys.path.insert(0, str(ROOT / "shared"))
-        import from_mcp
-        rows = report.cm.load_rows(str(FIXTURE))
-        pulled = Path(self._tmp.name) / "acme_rows.json"
-        pulled.write_text(json.dumps({"data": rows}))
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            code = from_mcp.main([str(pulled), "-o", str(Path(self._tmp.name) / "acme_ads.csv"),
-                                  "--expect-spend", str(sum(r["spend"] for r in rows)),
-                                  "--expect-impressions", str(sum(r["impressions"] for r in rows))])
-        self.assertEqual(code, 0)
-        self.assertIn("reconciled against the expected totals", out.getvalue())
+    def test_the_committed_example_does_not_claim_a_reconcile_it_never_ran(self):
         example = (ROOT / "examples" / "acme" / "report.html").read_text(encoding="utf-8")
-        self.assertIn('<span class="status ok">Reconciled</span>', example)
-        self.assertNotIn("Not reconciled", example.split("<footer>")[0])
+        self.assertIn(">Totals not checked</span>", example)
+        self.assertNotIn('class="status ok"', example)
+        self.assertNotIn('class="status warn"', example)
 
     def test_cli_flags_reach_the_page(self):
         out = Path(self._tmp.name) / "flags.html"
@@ -193,7 +186,7 @@ class ReportTest(unittest.TestCase):
                             "--top-n", "4", "--pareto-share", "75", "--previews", str(Path(self._tmp.name) / "none"), "-o", str(out)])
         self.assertEqual(code, 0)
         html = out.read_text(encoding="utf-8")
-        for text in ("Meta ads connector", "7-day click", "Incomplete 8%", "98,765", "N=4", "75%", "placeholders"):
+        for text in ("Meta ads connector", "7-day click", "Totals don't match (8% short)", "98,765", "N=4", "75%", "placeholders"):
             self.assertIn(text, html)
 
     def test_csv_mode_runs_and_names_missing_sections(self):

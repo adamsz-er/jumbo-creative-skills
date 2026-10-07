@@ -54,16 +54,19 @@ def lockup(tag: str) -> str:
             % (pair("Jumbo", "jumbo-logo.svg", "jumbo-logo-dark.svg", 1), pair("Elephant Room", "er-logo-dark.svg", "er-logo.svg", 2)))
 
 
+UNCHECKED_TIP = "Pull the account totals for the same window to check nothing is missing"
+
+
 def completeness_badge(value: Optional[str]) -> str:
-    """The reconcile result as a badge: green Reconciled, red Incomplete <pct>%, amber Not reconciled."""
+    """The reconcile result as a badge: green Reconciled, amber "Totals don't match" when a check ran and fell short, a neutral grey "Totals not checked" when none ran."""
     if value is None:
-        return '<span class="status warn">Not reconciled</span>'
+        return '<span class="status neutral" title="%s">Totals not checked</span>' % esc(UNCHECKED_TIP)
     if value.strip().lower() == "reconciled":
         return '<span class="status ok">Reconciled</span>'
     found = re.fullmatch(r"incomplete:\s*(\d+(?:\.\d+)?)\s*%?", value.strip(), re.I)
     if not found:
         raise ValueError('--completeness must be "reconciled" or "incomplete:<percent>", got %r' % value)
-    return '<span class="status bad">Incomplete %s%%</span>' % esc(found.group(1))
+    return '<span class="status warn">Totals don\'t match (%s%% short)</span>' % esc(found.group(1))
 
 
 def collect_notes(grade, verdicts, mix) -> List[str]:
@@ -111,12 +114,12 @@ def heading_for(label: Optional[str], scope: Optional[str] = None) -> str:
     text = (label or "").strip()
     scope = (scope or "").strip()
     if scope:
-        text = re.sub(r"\s*(creative\s+)?review$", "", text, flags=re.I).strip()
+        text = re.sub(r"(?:^|\s+)(?:creative\s+)?review$", "", text, flags=re.I).strip()
         text = ("%s · %s" % (text, scope)) if text else scope
         text += " creative review"
     elif not text:
         text = "Creative review"
-    elif not text.lower().endswith("review"):
+    elif not re.search(r"(?:^|\s)review$", text, re.I):
         text += " creative review"
     words = text.split()
     return (esc(" ".join(words[:-1])) + " " if len(words) > 1 else "") + '<span class="grad">%s</span>' % esc(words[-1]), text
@@ -291,7 +294,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--scope", help="what the review covers, shown after the account ('Prospecting' reads 'Acme · Prospecting creative review')")
     parser.add_argument("--source", default="Ads Manager export", help='data source shown in the header (pass "Meta ads connector" for a connector pull)')
     parser.add_argument("--attribution", help="attribution setting shown in the header (default: not stated)")
-    parser.add_argument("--completeness", help='what from_mcp printed: "reconciled" or "incomplete:<percent>"; absent reads Not reconciled')
+    parser.add_argument("--completeness", help='what from_mcp printed: "reconciled" or "incomplete:<percent>"; absent reads Totals not checked')
     parser.add_argument("--account", help='JSON file with account-level "reach" and "frequency" for the window')
     parser.add_argument("--prior", help="CSV or JSON of the previous equal window, for change against prior period")
     parser.add_argument("--previews", help="folder of rendered ad previews named <ad_id>.<ext>")

@@ -299,6 +299,30 @@ class OneBasisTest(unittest.TestCase):
         self.assertEqual(total["cpa_text"], tile["CPA (USD)"])
 
 
+class CoverageNoteTest(unittest.TestCase):
+    RECS = OneBasisTest.RECS
+
+    def test_a_partly_recorded_operand_adds_a_plain_coverage_note_to_the_summary(self):
+        total = interact.totals_of(self.RECS, 300.0)
+        self.assertEqual(total["roas_note"], "value recorded on 2 of 3 ads")
+        self.assertEqual(total["cpa_note"], "purchases recorded on 2 of 3 ads")
+        self.assertEqual(total["roas_text"], "2.00x")
+
+    def test_a_fully_recorded_or_fully_missing_operand_adds_no_note(self):
+        full = [record("a", 100, conversions=1.0, conversion_value=5.0), record("b", 50, conversions=1.0, conversion_value=5.0)]
+        done = interact.totals_of(full, 150.0)
+        self.assertEqual((done["roas_note"], done["cpa_note"]), ("", ""))
+        bare = interact.totals_of([record("a", 100)], 100.0)
+        self.assertEqual((bare["roas_note"], bare["cpa_note"]), ("", ""))
+
+    def test_the_group_header_line_carries_the_note_in_the_page(self):
+        rows = [dict(r, conversion_value=None, conversions=None) if r["ad_id"] in ("c", "d") else r for r in PARTIAL_ROWS]
+        page = report.build_html(rows=rows, currency="USD", title="Acme")
+        line = re.search(r'<p class="group-sub">.*?</p>', page).group(0)
+        self.assertIn("value recorded on 2 of 4 ads", line)
+        self.assertIn("purchases recorded on 2 of 4 ads", line)
+
+
 class ImprovementTest(unittest.TestCase):
     def grade(self, step, action, also=()):
         return {"diagnosis": {"step": step, "metrics": [], "also_weak": list(also), "action": action, "summary": step}}
@@ -498,6 +522,7 @@ class StructureTest(Fixture):
 
     def test_the_filter_row_has_group_sort_and_previews_only_controls(self):
         gallery = re.search(r'<div class="filterbar".*?(?=<main)', self.html, re.S).group(0)
+        self.assertEqual(gallery.count('data-action="group"'), 2)
         for text in ('data-action="group"', 'data-action="sort"', 'data-action="previews-only"', "Previews only"):
             self.assertIn(text, gallery)
         for option in ("Verdict", "Format", "Concept", "Ad type", "Creator"):
@@ -565,6 +590,14 @@ class ScriptLogicTest(Fixture):
         self.assertAlmostEqual(out["one"]["share"], 50.0)
         self.assertEqual(out["none"]["roas_text"], "n/a (missing purchase value)")
         self.assertEqual(out["none"]["cpa_text"], "n/a (missing purchases)")
+
+    def test_the_browser_adds_the_same_coverage_note_as_python(self):
+        recs = OneBasisTest.RECS
+        py = interact.totals_of(recs, 300.0)
+        js = json.loads(node_run(self.html, "console.log(JSON.stringify(CR.summary(%s, 3, 300)));" % json.dumps(recs)))
+        self.assertEqual((js["roas_note"], js["cpa_note"]), (py["roas_note"], py["cpa_note"]))
+        done = json.loads(node_run(self.html, "console.log(JSON.stringify(CR.summary([{spend: 5, conversions: 1, conversion_value: 2}], 1, 5)));"))
+        self.assertEqual((done["roas_note"], done["cpa_note"]), ("", ""))
 
     def test_summary_divides_over_every_ad_with_no_count_suffix(self):
         body = ("var ads = [{spend: 100, conversions: 10, conversion_value: 300}, {spend: 100, conversions: null, conversion_value: null}];"
