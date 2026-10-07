@@ -284,8 +284,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     if not rows:
         start, end = cm.data_window(all_rows)
         window = " to ".join(x for x in (args.date_from or "the start", args.date_to or "the end"))
-        raise ReviewError("E-EMPTY", window=window, covers="%s to %s" % (start, end) if start else "no dated rows",
-                          recipe_step="step 1 of " + errors.RECIPE)
+        raise errors.empty_window_error(window, "%s to %s" % (start, end) if start else "no dated rows")
     currency = args.currency or cm.detect_currency(data) or (cm.read_settings(profile_path).get("currency") if profile_path else None)
     if not currency:
         raise ReviewError("E-CURRENCY")
@@ -302,8 +301,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             ReviewError("E-ANALYSIS", step="setup", detail=str(error), folder=args.cache_dir)
     where = sorted(c.strip().lower() for c in (setup.where or [])) or None
     if not scoped:
-        raise ReviewError("E-EMPTY", window="%s to %s" % (start, end), covers="%s to %s" % cm.data_window(all_rows),
-                          recipe_step="the --where filter %s keeps no rows; check it against the export" % ", ".join(where or []))
+        raise errors.empty_filter_error(where)
 
     moment = dt.datetime.now().astimezone()
     folder = run_folder(Path(args.cache_dir), who["slug"], end, moment)
@@ -326,9 +324,12 @@ def cmd_run(args: argparse.Namespace) -> int:
     mix = analyse("mix", path, flags, folder, profile_path)
 
     previous = changes_mod.latest_earlier_run(Path(args.cache_dir) / who["slug"], info["created_at"])
-    keep = lambda before: cm.filter_rows(before, cm.parse_where(setup.where), cm.parse_key_map(args.key_map) if args.key_map else None)  # noqa: E731
+    keep = lambda before: cm.filter_rows(before, cm.parse_where(setup.where), cm.parse_key_map(setup.key_map) if setup.key_map else None)  # noqa: E731
     diff = changes_mod.compare(previous, {"rows": scoped, "verdicts": verdicts, "currency": currency, "window_days": info["window_days"],
                                           "where": where, "scope": keep})
+    own_prior = not args.prior and diff.get("account") is not None
+    if not diff.get("first_run"):
+        diff["prior_is_previous_run"] = own_prior
     (folder / "changes.json").write_text(json.dumps(diff, indent=1), encoding="utf-8")
 
     title = who["name"] or brand
@@ -341,7 +342,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                         ("--attribution", args.attribution)):
         if value:
             report_flags += [flag, str(value)]
-    if not args.prior and previous is not None and diff.get("account") is not None:
+    if own_prior:
         report_flags += ["--prior", str(changes_mod.ads_file(previous))]
     done = run_script(sibling("report"), [path] + report_flags)
     if done.returncode != 0:
@@ -357,7 +358,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     elif diff.get("account") is not None and not diff.get("first_run") and not diff.get("not_compared"):
         moves, basis = diff["account"], "since the last review"
     elif diff.get("not_compared"):
-        moves, basis = None, diff["not_compared"].rstrip(".")
+        moves, basis = None, ("not compared with the last review: different window or filter" if diff["not_compared"] == changes_mod.DIFFERENT_SCOPE
+                              else "not compared with the last review: it looks like a different account")
     else:
         moves, basis = None, "first run: nothing to compare yet"
     bullets = [headline(scoped, currency, moves, basis), biggest_action(verdicts, currency), biggest_opportunity(mix)]

@@ -90,9 +90,19 @@ def ads_file(folder: Path) -> Optional[Path]:
 def read_run(folder: Path) -> Optional[Dict[str, Any]]:
     """A run folder's run.json, or None when it is missing or unreadable."""
     try:
-        return json.loads((folder / RUN_FILE).read_text(encoding="utf-8"))
+        info = json.loads((folder / RUN_FILE).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
+    return info if isinstance(info, dict) else None
+
+
+def made_at(info: Dict[str, Any]) -> Optional[dt.datetime]:
+    """When a run was made, from its run.json; None when the time is missing, unreadable or has no time zone."""
+    try:
+        made = dt.datetime.fromisoformat(info["created_at"])
+    except (KeyError, ValueError, TypeError):
+        return None
+    return made if made.tzinfo is not None else None
 
 
 def latest_earlier_run(account_dir: Path, created_at: str) -> Optional[Path]:
@@ -107,8 +117,8 @@ def latest_earlier_run(account_dir: Path, created_at: str) -> Optional[Path]:
     found = []
     for folder in account_dir.iterdir():
         info = read_run(folder) if folder.is_dir() else None
-        if info and info.get("complete") is True and ads_file(folder) and (folder / "verdicts.json").exists():
-            made = dt.datetime.fromisoformat(info["created_at"])
+        made = made_at(info) if info else None
+        if made and info.get("complete") is True and ads_file(folder) and (folder / "verdicts.json").exists():
             if made < before:
                 found.append((made, folder))
     return max(found, key=lambda pair: pair[0])[1] if found else None

@@ -61,7 +61,13 @@ class ErrorTriggerTest(unittest.TestCase):
         self.expect(run(["run", path], self.work), "E-COLUMNS", "ad name")
 
     def test_a_window_with_no_rows_names_the_window_and_the_dates_covered(self):
-        self.expect(run(["run", FIXTURE, "--from", "2031-01-01"], self.work), "E-EMPTY", "2031-01-01", "2026-03-01 to 2026-03-30")
+        self.expect(run(["run", FIXTURE, "--from", "2031-01-01"], self.work), "E-EMPTY", "2031-01-01", "2026-03-01 to 2026-03-30", "date range")
+
+    def test_a_filter_that_keeps_no_ads_blames_the_filter_not_the_dates(self):
+        done = run(["run", FIXTURE, "--where", "format=hologram"], self.work)
+        self.expect(done, "E-EMPTY", "Your filter format=hologram kept no ads", "drop --where")
+        self.assertNotIn("re-export", done.stderr.lower())
+        self.assertNotIn("date range", done.stderr)
 
     def test_no_currency_in_the_header_asks_for_the_flag(self):
         path = self.work / "nocurrency.csv"

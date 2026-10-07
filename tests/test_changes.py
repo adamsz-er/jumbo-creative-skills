@@ -79,6 +79,14 @@ class CompareTest(unittest.TestCase):
         self.assertIsNone(changes.latest_earlier_run(self.root, "2026-03-01T09:00:00+10:00"))
         self.assertIsNone(changes.latest_earlier_run(self.root / "none", "2026-03-05T00:00:00+10:00"))
 
+    def test_a_malformed_run_record_is_skipped_not_a_crash(self):
+        keep = make_run(self.root, "keep", [row("1")], [], created="2026-03-02T09:00:00+10:00")
+        for name, text in (("list", "[1]"), ("empty", "{}"), ("naive", json.dumps({"created_at": "2026-03-03T09:00:00", "complete": True})),
+                           ("junk", "not json"), ("number", json.dumps({"created_at": 5, "complete": True}))):
+            folder = make_run(self.root, name, [row("1")], [])
+            (folder / "run.json").write_text(text)
+        self.assertEqual(changes.latest_earlier_run(self.root, "2026-03-05T00:00:00+10:00"), keep)
+
     def test_order_comes_from_created_at_not_from_the_folder_name(self):
         make_run(self.root, "2026-10-02_20261008-090000", [row("1")], [], created="2026-10-08T09:00:00+10:00")
         newer = make_run(self.root, "2026-10-01_20261008-150000", [row("1")], [], created="2026-10-08T15:00:00+10:00")

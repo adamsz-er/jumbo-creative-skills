@@ -132,7 +132,7 @@ class Ctx:
         """What the prior period is called: the last review's date when a run compared itself with it, else "prior period"."""
         info = self.changes or {}
         made = str(info.get("previous_at") or "")
-        return "last review (%s)" % made[:10] if made and info.get("account") is not None else "prior period"
+        return "last review (%s)" % made[:10] if made and info.get("prior_is_previous_run") else "prior period"
 
     def colour(self, fmt: str) -> str:
         """The one colour a format has everywhere on the page; an unknown format is always the muted tone."""

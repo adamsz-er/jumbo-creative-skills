@@ -134,12 +134,42 @@ class ReviewRunTest(unittest.TestCase):
         other = json.loads((run_folders(self.work)[-1] / "changes.json").read_text())
         self.assertIn("different window or filter", other["not_compared"])
 
-    def test_an_explicit_prior_file_still_wins_the_caption(self):
-        run(["run", FIXTURE], self.work)
-        done = run(["run", FIXTURE, "--prior", FIXTURE], self.work)
-        tiles = (run_folders(self.work)[-1] / "report.html").read_text().split('id="panel-kpis"')[1].split("</section>")[0]
+    def test_an_explicit_prior_file_is_labelled_prior_period_in_the_tiles_while_the_panel_says_last_review(self):
+        run(["run", FIXTURE, "--from", "2026-03-15"], self.work)
+        half = write_variant(self.work / "half.csv", keep_ids={"120000000001", "120000000002", "120000000021"})
+        done = run(["run", FIXTURE, "--from", "2026-03-15", "--prior", half], self.work)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        folder = run_folders(self.work)[-1]
+        found = json.loads((folder / "changes.json").read_text())
+        self.assertFalse(found["prior_is_previous_run"])
+        page = (folder / "report.html").read_text()
+        tiles = page.split('id="panel-kpis"')[1].split("</section>")[0]
+        panel = page.split('id="panel-changes"')[1].split("</section>")[0]
+        self.assertIn("vs prior period", tiles)
+        self.assertNotIn("vs last review", tiles)
+        self.assertIn("Compared with the review run", panel)
         self.assertIn("against the prior-period file", done.stdout)
-        self.assertIn("vs last review (", tiles)
+        self.assertNotIn("different", done.stdout.splitlines()[2])
+
+    def test_a_filter_on_a_key_mapped_field_from_the_profile_still_compares_with_the_last_run(self):
+        profile = self.work / "creative-profile.md"
+        profile.write_text("# Creative profile: Acme\n\n- Name: Acme\n\n## Script settings\n- key-map: PX=angle,FM=kind\n")
+
+        def keyed(row):
+            row["Ad name"] = "PX:%s | FM:video | ID:%s" % ("alpha" if int(row["Ad ID"]) % 2 else "beta", row["Ad ID"][-3:])
+
+        data = write_variant(self.work / "keyed.csv", change=keyed)
+        args = ["run", data, "--profile", profile, "--where", "angle=alpha"]
+        first = run(args, self.work)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        run(args, self.work)
+        found = json.loads((run_folders(self.work)[-1] / "changes.json").read_text())
+        self.assertIsNone(found["not_compared"], found)
+
+    def test_the_summary_names_why_it_did_not_compare(self):
+        run(["run", "--demo"], self.work)
+        done = run(["run", "--demo", "--from", "2026-03-15"], self.work)
+        self.assertIn("(not compared with the last review: different window or filter)", done.stdout)
 
     def test_the_changes_panel_sits_at_the_top_of_overview_and_the_report_still_checks(self):
         run(["run", "--demo"], self.work)

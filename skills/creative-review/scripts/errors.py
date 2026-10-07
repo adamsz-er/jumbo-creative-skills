@@ -20,8 +20,7 @@ TABLE: Dict[str, Tuple[int, str, str]] = {
                  "(Ads tab, add the columns, Breakdown > By time > Day, Export as CSV), then pass the file."),
     "E-COLUMNS": (11, "{path} is missing {count} column{plural} the review needs: {columns}.",
                   "{steps} Re-export with those columns, or pass the file again once they are in."),
-    "E-EMPTY": (12, "There are no ad rows to review in {window}. The file covers {covers}.",
-                "Re-export with a date range that overlaps your window ({recipe_step}), or drop the --where filter if you added one."),
+    "E-EMPTY": (12, "{what}", "{how}"),
     "E-RECONCILE": (13, "The pull is incomplete: {problems}.",
                     "Re-run the pull with pagination so every ad is fetched (including archived ads that delivered in the "
                     "window); see " + INPUTS + " steps 3 to 7. Then run the pull again."),
@@ -64,6 +63,16 @@ class ReviewError(Exception):
 
     def render(self) -> str:
         return "%s %s\nHow to fix it: %s" % (self.code, self.message, self.fix)
+
+
+def empty_window_error(window: str, covers: str) -> ReviewError:
+    return ReviewError("E-EMPTY", what="There are no ad rows to review in %s. The file covers %s." % (window, covers),
+                       how="Re-export with a date range that overlaps your window (step 1 of %s), or drop --from and --to." % RECIPE)
+
+
+def empty_filter_error(where: Any) -> ReviewError:
+    return ReviewError("E-EMPTY", what="Your filter %s kept no ads." % ", ".join(where or []),
+                       how="Check the field and value against your data, or drop --where.")
 
 
 def nodata_error(path: Any = None) -> ReviewError:
