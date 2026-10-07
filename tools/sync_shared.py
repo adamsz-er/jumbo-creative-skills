@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Copy shared/creative_metrics.py into each skill that carries its own copy.
+"""Copy the shared modules into each skill that carries its own copy.
 
-Every skill must run on its own after install, so the module is duplicated into
-skills/<name>/scripts/. A skill gets a copy if it already has one, and
-creative-context always does. `--check` copies nothing and exits 1 on drift.
+Every skill must run on its own after install, so shared/creative_metrics.py and
+shared/from_mcp.py are duplicated into skills/<name>/scripts/. A skill gets the
+copies if it already has creative_metrics.py, and creative-context always does.
+`--check` copies nothing and exits 1 on drift.
 """
 from __future__ import annotations
 
@@ -13,24 +14,24 @@ import sys
 from pathlib import Path
 
 MODULE = "creative_metrics.py"
+MODULES = (MODULE, "from_mcp.py")
 ALWAYS = ("creative-context",)
 
 
 def targets(root):
     root = Path(root)
-    found = {root / "skills" / name / "scripts" / MODULE for name in ALWAYS}
-    found.update((root / "skills").glob("*/scripts/" + MODULE))
-    return sorted(found)
+    scripts = {root / "skills" / name / "scripts" for name in ALWAYS}
+    scripts.update(p.parent for p in (root / "skills").glob("*/scripts/" + MODULE))
+    return sorted(folder / module for folder in scripts for module in MODULES)
 
 
 def sync(root, check=False):
     """Return the copies that differ from shared/; write them unless check is set."""
     root = Path(root)
-    source = root / "shared" / MODULE
-    canonical = source.read_bytes()
     drifted = []
     for target in targets(root):
-        if not target.exists() or target.read_bytes() != canonical:
+        source = root / "shared" / target.name
+        if not target.exists() or target.read_bytes() != source.read_bytes():
             drifted.append(target)
             if not check:
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -51,7 +52,7 @@ def main(argv=None):
         print("run: python3 tools/sync_shared.py")
         return 1
     if not drifted:
-        print("OK: all copies match shared/%s" % MODULE)
+        print("OK: all copies match shared/ (%s)" % ", ".join(MODULES))
     return 0
 
 

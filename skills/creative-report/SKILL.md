@@ -17,7 +17,7 @@ If there is no `creative-profile.md` yet, suggest running `creative-context` fir
 
 Follow `creative-context/references/data-inputs.md`.
 
-1. **Meta ads connector.** Pull a daily, ad-level report as the analyse skills describe, save the rows unchanged to a JSON file, and use that file wherever a CSV is named below.
+1. **Meta ads connector.** Call read-only tools only: never one that activates, updates or changes anything. Pull a daily, ad-level report as the analyse skills describe. Follow the numbered steps in `creative-context/references/data-inputs.md`: field catalogue first, every response saved to a JSON file, then `python3 scripts/from_mcp.py responses.json -o ads.csv --expect-spend <account total> --expect-impressions <account total>` and use `ads.csv` wherever a CSV is named below. A `WARNING` line or exit 3 means the pull does not reconcile: re-fetch or drop duplicates the missing ads and run it again before you analyse. 3-second plays are derived per ad and shown as "(derived)"; say so when you quote a hook rate.
 2. **CSV export.** An Ads Manager export (`creative-context/references/export-recipe.md`), daily rows if possible.
 3. **No data.** There is nothing to report. Say so and offer the export recipe. Do not make a report from guesses.
 

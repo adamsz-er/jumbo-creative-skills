@@ -17,6 +17,7 @@ class SyncSharedTest(unittest.TestCase):
         self.root = Path(self._tmp.name)
         (self.root / "shared").mkdir()
         (self.root / "shared" / "creative_metrics.py").write_text("VERSION = 1\n")
+        (self.root / "shared" / "from_mcp.py").write_text("VERSION = 1\n")
         other = self.root / "skills" / "other-skill" / "scripts"
         other.mkdir(parents=True)
         (other / "creative_metrics.py").write_text("VERSION = 1\n")
@@ -24,7 +25,9 @@ class SyncSharedTest(unittest.TestCase):
 
     def test_check_reports_missing_creative_context_copy(self):
         drifted = sync_shared.sync(self.root, check=True)
-        self.assertEqual([p.parts[-3] for p in drifted], ["creative-context"])
+        self.assertEqual(sorted((p.parts[-3], p.name) for p in drifted),
+                         [("creative-context", "creative_metrics.py"), ("creative-context", "from_mcp.py"),
+                          ("other-skill", "from_mcp.py")])
 
     def test_sync_writes_copies_then_check_is_clean(self):
         sync_shared.sync(self.root)

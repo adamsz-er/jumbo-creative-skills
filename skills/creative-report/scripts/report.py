@@ -26,7 +26,9 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-import creative_metrics as cm
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import creative_metrics as cm  # noqa: E402
 
 TEMPLATE = Path(__file__).resolve().parent.parent / "assets" / "report-template.html"
 MISSING = re.compile(r"n/a \(missing [^)]*\)")
@@ -207,7 +209,7 @@ def grade_from_rows(rows: Sequence[Dict[str, Any]], group_by: Sequence[str] = ("
         entries.append({"ad": ad.get("ad_id") or ad.get("ad_name"), "name": ad.get("ad_name"),
                         "format": ad.get("format"), "group": cm.group_key(ad, group_by), "graded": graded,
                         "impressions": ad.get("impressions"), "grades": grades, "diagnosis": diagnosis,
-                        "spend": ad.get("spend")})
+                        "spend": ad.get("spend"), "hook_source": ad.get("video_views_3s_source")})
     start, end = cm.data_window(rows)
     sources = sorted({ad.get("conversions_source") for ad in ads if ad.get("conversions_source")})
     basis = "\n".join([
@@ -396,6 +398,9 @@ def funnel_section(grade, rows) -> str:
     note = ('<p class="muted">Read the funnel in order and fix the first broken step. "low" is the bottom quartile and '
             '"top" the top quartile of this account\'s own ads in the same group; costs are inverted. n/a means a missing or '
             'zero operand and is never read as 0.</p>')
+    if any((a.get("hook_source") or "").startswith("derived") for a in ads):
+        note += ('<p class="muted">Hook rate (derived): 3-second plays are derived as spend / cost per 3-second view, '
+                 'not reported. Hold rate uses ThruPlays.</p>')
     return section("Funnel", "Funnel diagnosis", chart + plot + grid + note)
 
 

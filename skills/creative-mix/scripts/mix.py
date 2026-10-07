@@ -15,12 +15,15 @@ import argparse
 import json
 import statistics
 import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
-import creative_metrics as cm
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import creative_metrics as cm  # noqa: E402
 
 TYPES = ("bau", "promo", "launch", "hype", "partnership", "retention")
-OVER_RELIANCE = 50.0  # percent of spend; arbitrary default, set from your own account
+OVER_RELIANCE = 60.0  # percent of spend; arbitrary default, set from your own account
 # Fewer concepts or formats than this are not ranked against each other. An arbitrary
 # default, not a statistical rule: set your own from how many concepts you run.
 MIN_FOR_QUARTILES = 5

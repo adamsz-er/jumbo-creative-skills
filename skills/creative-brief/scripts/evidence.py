@@ -16,9 +16,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
-import creative_metrics as cm
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import creative_metrics as cm  # noqa: E402
 
 NONE_AVAILABLE = "Evidence: none available"
 PAYBACK = ("cpa", "roas")
@@ -98,6 +101,7 @@ def build_evidence(rows: Sequence[Dict[str, Any]], window: int = 6, min_change: 
         "top_quartile": top, "fatiguing": fatiguing, "never_worked": never,
         "top_concepts": top_concepts, "top_formats": top_formats,
         "gaps": gaps[:max_gaps], "gaps_total": len(gaps), "too_young": young,
+        "hook_derived": any((r.get("video_views_3s_source") or "").startswith("derived") for r in rows),
     }
 
 
@@ -127,6 +131,8 @@ def render(result: Dict[str, Any]) -> str:
         "min-change=%g%%, min-impressions=%d. Ad types used to seed gaps: %s." % (
             s["window"], s["min_change"], s["min_impressions"], ", ".join(s["include_types"])),
         "Hook wording is not in an ad export: take the opening line from the ad itself.",
+    ] + (["Hook rate (derived): 3-second plays are derived as spend / cost per 3-second view, not reported."]
+         if result.get("hook_derived") else []) + [
         "", "Top-quartile ads (top quartile when all available payback metrics (cpa, roas) are top quartile "
         "for the ad's format; fields from the ad name, confirm them before relying on them):"]
     out += [_ad_line(a) for a in result["top_quartile"]] or ["  none"]

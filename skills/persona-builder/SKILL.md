@@ -56,4 +56,4 @@ After the personas, give a table: persona, stage, concept angles to test (from `
 - No invented statistics about audience size, share of buyers or behaviour. No benchmarks.
 - No promise that a persona will convert.
 - Regulated categories (health, finance, alcohol, weight loss and similar): do not build personas around a sensitive personal condition, and flag the category. Tell the user to check the platform's ad policies and local advertising law, including limits on targeting by sensitive traits.
-- Read only. Do not touch the ad account.
+- Read only: only read data, and never call a tool that changes ads, budgets or status. Do not touch the ad account.

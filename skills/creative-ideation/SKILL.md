@@ -59,4 +59,4 @@ Change one choice at a time when you want to learn something.
 - Product claims in an ad must be ones the brand can substantiate. Where the profile lists claims that need approval, mark those ideas "needs sign-off".
 - Regulated categories (health, finance, alcohol, weight loss and similar): flag the idea and tell the user to check the platform's ad policies and local advertising law before making it.
 - Promo concepts need the offer and dates from the user. Never invent a discount or a deadline.
-- Read only. Do not touch the ad account.
+- Read only: only read data, and never call a tool that changes ads, budgets or status. Do not touch the ad account.

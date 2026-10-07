@@ -2,7 +2,7 @@
 
 Menu names and column labels change from time to time. Where this page names one, check in your Ads Manager and pick the closest match.
 
-1. Open Ads Manager and go to the **Ads** tab, not Campaigns or Ad sets. Set the date range to the last 30 days, or the ad's lifetime if it is shorter.
+1. Open Ads Manager and go to the **Ads** tab, not Campaigns or Ad sets. Set the date range to the window you analyse (several weeks is a sensible start), or the ad's lifetime if it is shorter.
 2. Open **Columns** then **Customize columns** and add:
    - Ad name, Ad ID if offered, Delivery
    - Amount spent, Impressions, Reach, Frequency, CPM

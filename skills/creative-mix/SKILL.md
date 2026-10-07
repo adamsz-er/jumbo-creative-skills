@@ -17,14 +17,14 @@ If there is no `creative-profile.md` yet, suggest running `creative-context` fir
 
 Follow `creative-context/references/data-inputs.md`.
 
-1. **Meta ads connector.** List its tools, then pull an ad-level report over the last 30 to 90 days: ad name, ad id, date, spend, impressions, link clicks, purchases and purchase value. Daily rows are fine; the script sums them. Write the rows, unchanged, to a JSON file (a list of row objects, or `{"data": [...]}`) and pass it to the script.
+1. **Meta ads connector.** Call read-only tools only: never one that activates, updates or changes anything. Pull an ad-level report over the window you analyse (several weeks or more); daily rows are fine, the script sums them. Follow the numbered steps in `creative-context/references/data-inputs.md`: field catalogue first, every response saved to a JSON file, then `python3 scripts/from_mcp.py responses.json -o ads.csv --expect-spend <account total> --expect-impressions <account total>` and use `ads.csv` wherever a CSV is named below. A `WARNING` line or exit 3 means the pull does not reconcile: re-fetch or drop duplicates the missing ads and run it again before you analyse. 3-second plays are derived per ad and shown as "(derived)"; say so when you quote a hook rate.
 2. **CSV or screenshots.** Ask for an Ads Manager export (`creative-context/references/export-recipe.md`). With screenshots, tally ads by format and concept by hand and say so.
 3. **No data.** Ask the user to list their live ads by concept and format; build the grid from that and label everything "no performance data". Offer the export recipe.
 
 ## Run it
 
 ```
-python3 scripts/mix.py ads.csv                # or ads.json from the connector
+python3 scripts/mix.py ads.csv                # ads.csv from the connector: see step 1
 python3 scripts/mix.py ads.csv --no-family
 python3 scripts/mix.py ads.csv --pattern concept,format,creator,ad_type,product,tone,funnel_stage
 ```
@@ -48,5 +48,5 @@ Names that do not match the convention go to an `unclassified` bucket that is co
 
 - Relative reading only: "top quartile" means top quartile of this account's own BAU concepts or formats on pooled ROAS. No benchmarks, no "ideal split".
 - A gap is a place with no evidence, not a place that will win. Say "worth testing".
-- The 50% over-reliance line and the minimum of 5 concepts or formats before ranking are arbitrary defaults, not statistical rules. Ask the user what concentration is normal for their account.
+- The 60% over-reliance line and the minimum of 5 concepts or formats before ranking are arbitrary defaults, not statistical rules. Ask the user what concentration is normal for their account.
 - Read only. Do not change anything in the ad account.

@@ -312,5 +312,32 @@ class FixtureAndCliTest(unittest.TestCase):
         self.assertEqual(len(json.loads(done.stdout)), 30)
 
 
+class ConnectorFieldsTest(unittest.TestCase):
+    def test_derivation_needs_a_positive_cost_per_view(self):
+        zero = cm.load_rows([{"ad_name": "a", "spend": 10, "cost_per_action_type:video_view": 0}])[0]
+        self.assertIsNone(zero.get("video_views_3s"))
+        self.assertIsNone(cm.compute_metrics(zero)["hook_rate"])
+
+    def test_aggregation_sums_derived_plays_across_days(self):
+        rows = cm.load_rows([
+            {"ad_name": "a", "date_start": "2026-03-01", "spend": 10, "impressions": 1000,
+             "cost_per_action_type:video_view": {"value": "0.05", "unit": "USD"}},
+            {"ad_name": "a", "date_start": "2026-03-02", "spend": 20, "impressions": 1000,
+             "cost_per_action_type:video_view": {"value": "0.04", "unit": "USD"}}])
+        ad = cm.aggregate_by_ad(rows)[0]
+        self.assertAlmostEqual(ad["video_views_3s"], 10 / 0.05 + 20 / 0.04)
+        self.assertTrue(ad["video_views_3s_source"].startswith("derived"))
+
+    def test_csv_columns_still_read_as_before(self):
+        row = cm.load_rows([{"Ad name": "a", "Amount spent (USD)": "1,200.50", "Purchases": "3", "Results": "9"}])[0]
+        self.assertEqual((row["spend"], row["conversions"], row["conversions_source"]), (1200.5, 3.0, "Purchases"))
+
+    def test_rows_key_is_read_from_a_json_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "r.json"
+            path.write_text('{"rows": [{"ad_name": "a", "spend": 4}]}')
+            self.assertEqual(cm.load_rows(str(path))[0]["spend"], 4.0)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -17,14 +17,14 @@ If there is no `creative-profile.md` yet, suggest running `creative-context` fir
 
 Follow `creative-context/references/data-inputs.md`.
 
-1. **Meta ads connector.** List its tools, then pull an ad-level report with a **daily** breakdown (one row per ad per day) over the last 30 days. Fetch: ad name, ad id, date, spend, impressions, reach, link clicks, 3-second video plays (the `video_view` action), ThruPlays, purchases and purchase value, adds to cart. Check which fields actually came back; a missing one means that metric is unavailable. Write the returned rows, unchanged, to a JSON file (a list of row objects, or the API's `{"data": [...]}`), then pass that file to the script.
+1. **Meta ads connector.** Call read-only tools only: never one that activates, updates or changes anything. Pull an ad-level report with a **daily** breakdown (one row per ad per day) over the window you analyse. Follow the numbered steps in `creative-context/references/data-inputs.md`: field catalogue first, every response saved to a JSON file, then `python3 scripts/from_mcp.py responses.json -o ads.csv --expect-spend <account total> --expect-impressions <account total>` and use `ads.csv` wherever a CSV is named below. A `WARNING` line or exit 3 means the pull does not reconcile: re-fetch or drop duplicates the missing ads and run it again before you analyse. 3-second plays are derived per ad and shown as "(derived)"; say so when you quote a hook rate.
 2. **CSV or screenshots.** Ask for an Ads Manager export using `creative-context/references/export-recipe.md`. With screenshots and no code, read the numbers off the image, compute by hand from `creative-context/references/metrics.md`, and say they may contain transcription errors.
 3. **No data.** Say what is needed and offer the export recipe. You may talk about what to look for, but label everything "no performance data" and grade nothing.
 
 ## Run it
 
 ```
-python3 scripts/grade.py ads.csv                 # or ads.json from the connector
+python3 scripts/grade.py ads.csv                 # ads.csv from the connector: see step 1
 python3 scripts/grade.py ads.csv --group-by format,ad_type --min-impressions 2000
 python3 scripts/grade.py ads.csv --json
 ```

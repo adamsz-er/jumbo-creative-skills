@@ -14,9 +14,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
-import creative_metrics as cm
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import creative_metrics as cm  # noqa: E402
 
 CHECK = ("rule out tracking, site or audience problems first; "
          "only fatigue and never-worked are creative decisions")
@@ -86,6 +89,7 @@ def judge_ads(rows: Sequence[Dict[str, Any]], young_days: int = 5, window: int =
         entry: Dict[str, Any] = {
             "ad": key, "ad_id": ad.get("ad_id"), "ad_name": ad.get("ad_name"),
             "format": ad.get("format"), "spend": ad.get("spend"), "age_days": age,
+            "age_basis": ad.get("age_basis"),
             "active_days": ad.get("active_days"), "learning": learning, "check": None,
         }
         if learning:
@@ -181,8 +185,14 @@ def render(results: Sequence[Dict[str, Any]], args: argparse.Namespace, rows: Se
         "min-impressions=%d, top-n=%d, min-change=%g%% (a materiality size for ctr, frequency and hook movement, "
         "not a fatigue benchmark: set it from your own week-to-week noise)." % (
             args.young_days, args.window, args.min_impressions, args.top_n, args.min_change),
-        "", "Summary:",
     ]
+    bases = sorted({e["age_basis"] for e in results if e.get("age_basis")})
+    out.append("Age basis: %s." % ("; ".join(bases) or "n/a (no dates in the data)"))
+    derived = sorted({r["video_views_3s_source"] for r in rows
+                      if (r.get("video_views_3s_source") or "").startswith("derived")})
+    if derived:
+        out.append("Hook rate (used in the fatigue trend): 3-second plays are %s." % derived[0])
+    out += ["", "Summary:"]
     for verdict in ORDER:
         if verdict in summary["counts"]:
             out.append("  %-56s %d" % (verdict, summary["counts"][verdict]))

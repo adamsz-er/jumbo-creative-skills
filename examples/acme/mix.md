@@ -92,7 +92,7 @@ Read-outs
     staff-picks in carousel: 1 ad (top concept and top format)
     trail-diary in partnership: 1 ad (top concept and top format)
     ... 51 more (see --json)
-  Over-reliance: no concept family or format holds more than 50% of spend.
+  Over-reliance: no concept family or format holds more than 60% of spend.
   Near-duplicates counted as one concept (override with --no-family):
     new-drop: new-drop, new-drop-four, new-drop-three, new-drop-two (ads 120000000007, 120000000013, 120000000025, 120000000030)
     social-proof: social-proof, social-proof-reviews (ads 120000000003, 120000000026)

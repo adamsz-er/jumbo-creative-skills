@@ -6,6 +6,7 @@ Generated, not hand-written: `python3 skills/keep-or-kill/scripts/verdicts.py ex
 Basis: each ad graded against this account's own ads (same format group), never a benchmark.
 Window: 2026-03-01 to 2026-03-30. Fatigue compares each ad's first and last 6 delivery days.
 Settings used (arbitrary defaults, set them from your own account): young-days=5, window=6, min-impressions=1000, top-n=3, min-change=8% (a materiality size for ctr, frequency and hook movement, not a fatigue benchmark: set it from your own week-to-week noise).
+Age basis: first delivery in window (older ads may be understated).
 
 Summary:
   scale: raise budget in steps                             6
