@@ -472,6 +472,39 @@ class LabelTest(unittest.TestCase):
     def test_fields_that_did_not_parse_are_skipped(self):
         self.assertEqual(panels.readable_label({"concept": "c", "format": "static"}, "x | y", 1), "c · static")
 
+    def twins(self, name_of):
+        rows = [ad_row(str(100 + n), name_of(n), 10, 30) for n in range(1, 4)]
+        return panels.Ctx(rows=rows, currency="USD")
+
+    def test_three_ads_with_the_same_concept_format_and_type_get_three_different_card_labels(self):
+        ctx = self.twins(lambda n: "x | video | bau | boot | warm | v%d" % n)
+        html, _ = panels.all_ads(ctx)
+        titles = re.findall(r'<div class="ad-body"><h4>(.*?)</h4>', html)
+        self.assertEqual(len(titles), 3)
+        self.assertEqual(len(set(titles)), 3, titles)
+
+    def test_the_other_lists_use_the_same_distinct_labels(self):
+        ctx = self.twins(lambda n: "x | video | bau | boot | warm | v%d" % n)
+        html = panels.compact_list(ctx, [{"ad": r["id"], "ad_name": r["name"]} for r in ctx.records], "ads", cap=None)
+        names = re.findall(r'<td class="adname">(.*?)<small>', html)
+        self.assertEqual(sorted(names), sorted(r["label"] for r in ctx.records))
+        self.assertEqual(len(set(names)), 3)
+
+    def test_the_raw_ad_name_shows_in_the_open_view_and_the_card_title_attribute(self):
+        ctx = self.twins(lambda n: "x | video | bau | boot | warm | 2026-03-0%d" % n)
+        card = panels.ad_card(ctx, {"ad": "101", "ad_name": "x | video | bau | boot | warm | 2026-03-01"})
+        self.assertRegex(card, r'<article class="ad-card"[^>]* title="x \| video \| bau \| boot \| warm \| 2026-03-01"')
+        body = re.search(r'<div class="open-body"[^>]*>(.*)</div></details>', card, re.S).group(1)
+        self.assertIn("x | video | bau | boot | warm | 2026-03-01", body)
+
+    def test_a_script_in_an_ad_name_is_escaped_in_the_title_attribute_and_the_open_view(self):
+        hostile = '"><script>alert(1)</script> | video | bau'
+        ctx = panels.Ctx(rows=[ad_row("7", hostile, 10, 30)], currency="USD")
+        card = panels.ad_card(ctx, {"ad": "7", "ad_name": hostile})
+        self.assertNotIn("<script>", card)
+        self.assertNotIn('"><script', card)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", card)
+
     def test_card_text_from_the_data_is_escaped(self):
         ctx = panels.Ctx()
         html = panels.ad_card(ctx, {"ad": "<b>1</b>", "ad_name": "<script>alert(1)</script>", "sentence": "<i>hi</i>", "verdict_id": "scale",

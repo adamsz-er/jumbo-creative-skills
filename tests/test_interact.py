@@ -39,6 +39,57 @@ def record(ad_id, spend, **extra):
     return base
 
 
+class UniqueLabelsTest(unittest.TestCase):
+    def labels(self, *recs):
+        return interact.unique_labels(list(recs))
+
+    def test_ads_that_share_a_label_are_told_apart_by_the_next_parsed_fields_in_order(self):
+        recs = [record(1, 10, label="video · BAU", collection="spring", product="boot"),
+                record(2, 10, label="video · BAU", collection="spring", product="tent"),
+                record(3, 10, label="video · BAU", collection="autumn", product="boot")]
+        got = self.labels(*recs)
+        self.assertEqual(len(set(got.values())), 3)
+        self.assertEqual(got["1"], "video · BAU · spring · boot")
+        self.assertEqual(got["3"], "video · BAU · autumn")
+
+    def test_a_field_that_is_the_same_across_the_group_is_not_appended(self):
+        recs = [record(1, 10, label="video · BAU", collection="spring", tone="warm"),
+                record(2, 10, label="video · BAU", collection="spring", tone="cool")]
+        got = self.labels(*recs)
+        self.assertEqual(got, {"1": "video · BAU · warm", "2": "video · BAU · cool"})
+
+    def test_segment_fields_come_after_the_named_ones_in_position_order(self):
+        recs = [record(1, 10, label="static", segment_9="b", segment_2="a"),
+                record(2, 10, label="static", segment_9="c", segment_2="a")]
+        self.assertEqual(self.labels(*recs), {"1": "static · b", "2": "static · c"})
+
+    def test_a_launch_date_is_written_as_it_was(self):
+        recs = [record(1, 10, label="static", launch_date="2026-03-01"), record(2, 10, label="static", launch_date="2026-04-01")]
+        self.assertEqual(self.labels(*recs)["1"], "static · 2026-03-01")
+
+    def test_ads_with_nothing_left_to_tell_them_apart_get_the_last_four_digits_of_the_id(self):
+        recs = [record(120000000001, 10, label="video · BAU"), record(120000000002, 10, label="video · BAU"),
+                record(120000000003, 10, label="video · BAU")]
+        got = self.labels(*recs)
+        self.assertEqual(got["120000000001"], "video · BAU · …0001")
+        self.assertEqual(len(set(got.values())), 3)
+
+    def test_ids_that_even_share_their_last_four_digits_still_end_up_distinct(self):
+        got = self.labels(record(11110001, 10, label="x"), record(22220001, 10, label="x"))
+        self.assertEqual(len(set(got.values())), 2)
+
+    def test_a_label_that_is_already_unique_is_left_alone(self):
+        got = self.labels(record(1, 10, label="a", collection="c"), record(2, 10, label="b", collection="c"))
+        self.assertEqual(got, {"1": "a", "2": "b"})
+
+    def test_the_records_the_dashboard_builds_carry_the_distinct_labels(self):
+        rows = [{"ad_id": str(100 + n), "ad_name": "x | video | bau | boot | warm | 2026-03-0%d" % n, "date": "2026-03-01", "spend": 10.0}
+                for n in range(1, 4)]
+        ads = cm.aggregate_by_ad(rows)
+        labels = [r["label"] for r in interact.ad_records(ads, None, None)]
+        self.assertEqual(len(set(labels)), 3, labels)
+
+
 PARTIAL_ROWS = [{"ad_id": i, "ad_name": "ad %s | static | c | bau | p | t | 2026-03-01" % i, "date": "2026-03-01", "spend": float(sp),
                  "impressions": 10000.0, "conversion_value": float(v), "conversions": float(c)}
                 for i, sp, v, c in (("a", 100, 500, 5), ("b", 80, 300, 4), ("c", 60, 100, 2), ("d", 40, 60, 1))]
@@ -479,7 +530,7 @@ class StructureTest(Fixture):
 
     def test_every_card_has_an_open_this_ad_details_with_the_full_picture(self):
         html, _ = panels.verdict_board(self.ctx)
-        cards = re.findall(r'<article class="ad-card" data-ad="[^"]+">.*?</article>', html, re.S)
+        cards = re.findall(r'<article class="ad-card" data-ad="[^"]+"[^>]*>.*?</article>', html, re.S)
         self.assertTrue(cards)
         for card in cards:
             self.assertEqual(card.count('<details class="open-ad">'), 1)

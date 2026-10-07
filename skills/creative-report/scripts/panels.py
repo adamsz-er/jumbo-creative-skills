@@ -134,6 +134,11 @@ class Ctx:
         made = str(info.get("previous_at") or "")
         return "last review (%s)" % made[:10] if made and info.get("prior_is_previous_run") else "prior period"
 
+    def label(self, key: Any, fields: Optional[Dict[str, Any]] = None, name: Optional[str] = None) -> str:
+        """The label an ad has everywhere on the page: the record's own, which is unique among the ads here."""
+        rec = self.record_index.get(str(key))
+        return rec["label"] if rec else readable_label(fields or {}, name, key)
+
     def colour(self, fmt: str) -> str:
         """The one colour a format has everywhere on the page; an unknown format is always the muted tone."""
         return self.colours.get(fmt, charts.OTHER_COLOUR)
@@ -231,7 +236,7 @@ def _table_of(rows: Sequence[Sequence[str]], header: Sequence[Tuple[str, bool]])
     return table(header, body, stack=True)
 
 
-def ad_detail(ctx: Ctx, key: str, label: str, fmt: str, full: Dict[str, Any], base: Dict[str, Any]) -> str:
+def ad_detail(ctx: Ctx, key: str, label: str, fmt: str, full: Dict[str, Any], base: Dict[str, Any], name: Any = None) -> str:
     """The "Open this ad" view: the plain answer first (preview, verdict, confidence, how to improve), then the numbers, then the technical reasons."""
     grade = ctx.grade_index.get(key)
     judged = "verdict_id" in full
@@ -265,12 +270,13 @@ def ad_detail(ctx: Ctx, key: str, label: str, fmt: str, full: Dict[str, Any], ba
                   'hook-writer and creative-brief skills.</p><pre class="prompt">%s</pre>'
                   '<button type="button" class="btn" data-action="copy-prompt">Make the next version</button></div>'
                   % esc(interact.next_version_prompt(ctx.record_index.get(key) or {"label": label, "format": fmt}, grade)))
-    return ('<details class="open-ad"><summary>Open this ad</summary><div class="open-body"><div class="ob-top"><div class="ob-media">%s</div>'
+    raw = '<p class="raw-name muted">Ad name: %s</p>' % esc(name) if name else ""
+    return ('<details class="open-ad"><summary>Open this ad</summary><div class="open-body">%s<div class="ob-top"><div class="ob-media">%s</div>'
             '<div class="ob-main"><p class="chips">%s</p><p class="sentence">%s</p><h5>Confidence</h5><p>%s</p>'
             '<h5>How to improve</h5><div class="improve">%s</div>%s</div></div>'
             '<h5>Graded metrics</h5>%s<h5>Funnel for this ad</h5>%s<h5>Age</h5><p>%s</p>'
             '<details class="tech"><summary>Technical detail: why this verdict</summary>%s</details></div></details>'
-            % (_image(ctx, key, label, fmt, big=True), chip, sentence, esc(conf), "".join(lines), prompt,
+            % (raw, _image(ctx, key, label, fmt, big=True), chip, sentence, esc(conf), "".join(lines), prompt,
                metrics, funnel_table, esc(age_text), why))
 
 
@@ -280,7 +286,7 @@ def ad_card(ctx: Ctx, entry: Dict[str, Any], driver: str = "", next_step: bool =
     ad_id = entry.get("ad") or base.get("ad_id")
     key = str(ad_id)
     name = entry.get("ad_name") or entry.get("name") or base.get("ad_name")
-    label = readable_label(base, name, ad_id)
+    label = ctx.label(key, base, name)
     fmt = str(base.get("format") or "")
     spend = (ctx.ad_index.get(key) or {}).get("spend", entry.get("spend"))
     judged = "verdict_id" in entry
@@ -305,10 +311,11 @@ def ad_card(ctx: Ctx, entry: Dict[str, Any], driver: str = "", next_step: bool =
     action = ('<p class="card-actions"><button type="button" class="btn" data-action="copy-prompt">Make the next version</button></p>'
               if full_cls in PROMPT_CLASSES else "")
     badge = interact.format_label(fmt) + (" %s" % clock(ctx.video_lengths[key]) if key in ctx.video_lengths else "")
-    return ('<article class="ad-card" data-ad="%s"><div class="ad-img"><span class="fmt-badge">%s</span>%s</div><div class="ad-body"><h4>%s</h4>'
+    title = ' title="%s"' % esc(name) if name else ""
+    return ('<article class="ad-card" data-ad="%s"%s><div class="ad-img"><span class="fmt-badge">%s</span>%s</div><div class="ad-body"><h4>%s</h4>'
             '<p class="adid">Ad ID %s</p><p class="ad-spend"><b>%s</b> spend</p>%s<p class="chips">%s%s</p>%s%s%s%s%s</div></article>'
-            % (esc(key), esc(badge), _image(ctx, ad_id, label, fmt), esc(label), esc(ad_id if ad_id is not None else "n/a"),
-               esc(ctx.money(spend)), drive, chip, conf, sentence, step, check, action, ad_detail(ctx, key, label, fmt, full, base)))
+            % (esc(key), title, esc(badge), _image(ctx, ad_id, label, fmt), esc(label), esc(ad_id if ad_id is not None else "n/a"),
+               esc(ctx.money(spend)), drive, chip, conf, sentence, step, check, action, ad_detail(ctx, key, label, fmt, full, base, name)))
 
 
 def card_grid(cards: Sequence[str]) -> str:
@@ -327,7 +334,7 @@ def compact_list(ctx: Ctx, entries: Sequence[Dict[str, Any]], what: str, cap: Op
         spend = (ctx.ad_index.get(str(ad_id)) or {}).get("spend", e.get("spend"))
         cls = entry_class(e) if "verdict_id" in e else None
         body.append('<tr data-ad="%s"><td class="adname">%s<small>Ad ID %s</small></td><td class="num" data-label="Spend">%s</td><td>%s</td></tr>'
-                    % (esc(ad_id), esc(readable_label(base, e.get("ad_name") or e.get("name") or base.get("ad_name"), ad_id)),
+                    % (esc(ad_id), esc(ctx.label(ad_id, base, e.get("ad_name") or e.get("name") or base.get("ad_name"))),
                        esc(ad_id), esc(ctx.money(spend)), esc(VERDICT_LABEL[cls]) if cls else ""))
     more = "" if cap is None or len(entries) <= cap else '<p class="muted">Showing the %d largest of %d; %d more are not listed.</p>' % (
         cap, len(entries), len(entries) - cap)
@@ -860,7 +867,7 @@ def verdict_board(ctx: Ctx) -> Tuple[str, str]:
 
 def fatigue(ctx: Ctx) -> Tuple[str, str]:
     ads = (ctx.verdicts or {}).get("ads") or []
-    points = [(e["age_days"], e["fatigue"]["ctr_change"], readable_label(_fields_for(ctx, e), e.get("ad_name"), e.get("ad")))
+    points = [(e["age_days"], e["fatigue"]["ctr_change"], ctx.label(e.get("ad"), _fields_for(ctx, e), e.get("ad_name")))
               for e in ads if e.get("age_days") is not None and (e.get("fatigue") or {}).get("ctr_change") is not None]
     top = sorted(ctx.ads, key=lambda a: -(a.get("spend") or 0))[:ctx.top_n]
     if not ctx.rows and not points:
@@ -874,7 +881,7 @@ def fatigue(ctx: Ctx) -> Tuple[str, str]:
         if len(series) < 2:
             continue
         labels = [d for d, _ in series]
-        label = readable_label(ad, ad.get("ad_name"), key)
+        label = ctx.label(key, ad, ad.get("ad_name"))
         ctr = charts.combo_chart(labels, None, [m["ctr"] for _, m in series], "", "CTR (%)", "CTR by day: %s" % label, width=300, height=190,
                                   line_fmt=charts.axis_format("pct"))
         freq = charts.combo_chart(labels, None, [m["frequency"] for _, m in series], "", "Frequency (x)", "Frequency by day: %s" % label, width=300, height=190,
@@ -1427,7 +1434,7 @@ def video_hook_hold(ctx: Ctx) -> Tuple[str, str]:
             continue
         hook, hold, was_derived = _video_rates(ctx, ad)
         if hook is not None and hold is not None:
-            points.append((hook, hold, ad["spend"], readable_label(ad, ad.get("ad_name"), ad.get("ad_id")), ad))
+            points.append((hook, hold, ad["spend"], ctx.label(_ad_key(ad), ad, ad.get("ad_name")), ad))
             derived += was_derived
     if len(points) < 2:
         return empty_state("Fewer than two video ads have both a hook rate and a hold rate, so there is nothing to compare.",
@@ -1482,7 +1489,7 @@ def video_retention(ctx: Ctx) -> Tuple[str, str]:
                                "Pull 3-second video plays as a reported column (Ads Manager export) instead of deriving them.")
         return empty_state("The quartile columns are in the data, but no video ad has a count in all five.",
                            "Check that the export has values in the Video plays at 25% to 100% columns for video ads.")
-    labels = [readable_label(ad, ad.get("ad_name"), ad.get("ad_id")) for ad, _ in chosen]
+    labels = [ctx.label(_ad_key(ad), ad, ad.get("ad_name")) for ad, _ in chosen]
     labels = [l if labels.count(l) == 1 else "%s (%s)" % (l, _ad_key(ad)) for l, (ad, _) in zip(labels, chosen)]
     chart = charts.retention_chart(list(zip(labels, [c for _, c in chosen])), ["3-second plays"] + [s for _, s, _, _ in RETENTION_STEPS],
                                    "People still watching (count)", "Video retention: people still watching, top video ads by spend")

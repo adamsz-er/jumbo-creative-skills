@@ -158,6 +158,50 @@ def readable_label(fields: Dict[str, Any], name: Optional[str], ad_id: Any = Non
     return label or "Ad %s" % (ad_id if ad_id is not None else "(no id)")
 
 
+LABEL_EXTENSIONS = ("collection", "product", "tone", "version", "launch_date")
+_SEGMENT_KEY = re.compile(r"segment_(\d+)$")
+
+
+def _extension_text(field: str, value: Any) -> str:
+    return str(value) if field == "launch_date" else humanise(value)
+
+
+def unique_labels(records: Sequence[Dict[str, Any]], fields: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, str]:
+    """{ad id: label} where no two ads share a label.
+
+    Each record's own `label` is the start. Ads that still share one are extended with the next parsed name fields
+    (collection, product, tone, version, launch date, then segment_N in position order); a field is added only when it
+    differs inside the group it would split. Whatever is still shared ends with "· …" and the last 4 characters of the
+    ad id, and the full id when even those collide. `fields` maps an id to its parsed name fields; without it the record
+    itself is read.
+    """
+    labels = {str(r["id"]): str(r["label"]) for r in records}
+    parsed = {key: (fields or {}).get(key, rec) for key, rec in zip(labels, records)}
+
+    def shared() -> Dict[str, List[str]]:
+        groups: Dict[str, List[str]] = {}
+        for key, label in labels.items():
+            groups.setdefault(label, []).append(key)
+        return {label: keys for label, keys in groups.items() if len(keys) > 1}
+
+    segments = sorted({k for f in parsed.values() for k in f if _SEGMENT_KEY.match(str(k))}, key=lambda k: int(_SEGMENT_KEY.match(k).group(1)))
+    for field in LABEL_EXTENSIONS + tuple(segments):
+        for keys in shared().values():
+            values = {k: parsed[k].get(field) for k in keys}
+            if len({str(v) for v in values.values()}) < 2:
+                continue
+            for key, value in values.items():
+                if value not in (None, ""):
+                    labels[key] += " · " + _extension_text(field, value)
+    for keys in shared().values():
+        for key in keys:
+            labels[key] += " · …" + key[-4:]
+    for keys in shared().values():
+        for key in keys:
+            labels[key] += " · " + key
+    return labels
+
+
 def metric_label(metric: str) -> str:
     return LABELS.get(metric, metric.replace("_", " "))
 
@@ -188,11 +232,16 @@ def _count(value: Any) -> Any:
     return int(value) if isinstance(value, float) and value.is_integer() else value
 
 
+def _fields_of(base: Dict[str, Any], verdict: Dict[str, Any], grade: Dict[str, Any]) -> Dict[str, Any]:
+    name = base.get("ad_name") or verdict.get("ad_name") or verdict.get("name") or grade.get("name")
+    return dict(base) if base else dict(cm.parse_name(name) if name else {})
+
+
 def _record(key: str, base: Dict[str, Any], verdict: Optional[Dict[str, Any]], grade: Optional[Dict[str, Any]],
             label_of: Callable[..., str]) -> Dict[str, Any]:
     verdict, grade = verdict or {}, grade or {}
     name = base.get("ad_name") or verdict.get("ad_name") or verdict.get("name") or grade.get("name")
-    fields = dict(base) if base else dict(cm.parse_name(name) if name else {})
+    fields = _fields_of(base, verdict, grade)
     fmt = fields.get("format") or verdict.get("format") or grade.get("format")
     fields["format"] = fmt
     cls = entry_class(verdict) if verdict else None
@@ -225,15 +274,20 @@ def ad_records(ads: Sequence[Dict[str, Any]], verdict_entries: Optional[Sequence
     """One record per ad: every ad in the rows, plus any the verdicts or grades name that the rows lack."""
     verdicts = {str(e.get("ad")): e for e in verdict_entries or []}
     grades = {str(e.get("ad")): e for e in grade_entries or []}
-    out, seen = [], set()
+    out, seen, parsed = [], set(), {}
     for ad in ads:
         key = str(ad.get("ad_id") or ad.get("ad_name"))
         out.append(_record(key, ad, verdicts.get(key), grades.get(key), label_of))
+        parsed[key] = _fields_of(ad, verdicts.get(key) or {}, grades.get(key) or {})
         seen.add(key)
     for key in list(verdicts) + list(grades):
         if key not in seen:
             seen.add(key)
             out.append(_record(key, {}, verdicts.get(key), grades.get(key), label_of))
+            parsed[key] = _fields_of({}, verdicts.get(key) or {}, grades.get(key) or {})
+    labels = unique_labels(out, parsed)
+    for rec in out:
+        rec["label"] = labels[rec["id"]]
     return out
 
 
