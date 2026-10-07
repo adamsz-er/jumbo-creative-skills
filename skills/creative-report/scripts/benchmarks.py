@@ -1,7 +1,7 @@
 """Public industry figures by creative format, shown as context beside an account's own numbers.
 
-A figure is only ever drawn when a cited public source gives it for that format and its definition matches ours (or the
-mismatch is stated). Nothing here feeds a verdict, a grade or "Do these first": the account is graded against its own ads.
+A figure is only ever drawn when a cited public source gives it for that format. Each entry says how its definition compares
+with ours: "matches", "not_stated" (the source does not say; the band is drawn with its caveat printed) or "differs" (no band). Nothing here feeds a verdict, a grade or "Do these first": the account is graded against its own ads.
 Standard library only.
 """
 from __future__ import annotations
@@ -55,6 +55,8 @@ def lookup(metric: str, fmt: Any, currency: Optional[str], entries: Optional[Seq
     entry = entry_for(metric, entries)
     if entry is None:
         return None, NO_SOURCE
+    if entry["definition"] == "differs":
+        return None, "the source's definition differs from ours, so there is no band"
     needs = entry.get("currency")
     if needs and (currency or "").upper() != needs.upper():
         who = "%s accounts" % currency.upper() if currency else "an account whose currency is not stated"

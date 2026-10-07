@@ -24,7 +24,8 @@
         "value": 1.49
       }
     },
-    "caveat": "The source does not say whether clicks are link clicks or all clicks."
+    "caveat": "The source does not say whether clicks are link clicks or all clicks.",
+    "definition": "not_stated"
   },
   {
     "source": "Lebesgue, Facebook Ads Creatives Benchmarks",
@@ -52,7 +53,8 @@
         "value": 6.0
       }
     },
-    "caveat": "Figures are approximate and in US dollars."
+    "caveat": "Figures are approximate and in US dollars.",
+    "definition": "matches"
   },
   {
     "source": "Lebesgue, Facebook Ads Creatives Benchmarks",
@@ -79,7 +81,8 @@
         "value": 1.6
       }
     },
-    "caveat": "The source does not say what the rate is measured against."
+    "caveat": "The source does not say what the rate is measured against.",
+    "definition": "not_stated"
   },
   {
     "source": "Lebesgue, Facebook Ads Creatives Benchmarks",
@@ -106,7 +109,8 @@
         "value": 3.05
       }
     },
-    "caveat": "Attribution window and sales mix are not stated."
+    "caveat": "Attribution window and sales mix are not stated.",
+    "definition": "matches"
   },
   {
     "source": "Billo, Hook to Hold",
@@ -122,6 +126,7 @@
         "high": 29
       }
     },
-    "caveat": "The source gives one figure for all video, with no split by format."
+    "caveat": "The source gives one figure for all video, with no split by format.",
+    "definition": "matches"
   }
 ]

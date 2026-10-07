@@ -31,12 +31,13 @@
   --flat-bg: hsl(220 13% 91%);
   --flat-fg: hsl(220 9% 46%);
   --series-1: #6366f1;
-  --series-2: #10b981;
+  --series-2: #16a34a;
   --series-3: #f59e0b;
-  --series-4: #8b5cf6;
+  --series-4: #f43f5e;
   --series-5: #06b6d4;
-  --series-6: #f43f5e;
+  --series-6: #d946ef;
   --series-neutral: #64748b;
+  --series-other: #b4bcc8;
   --shadow: 0 1px 2px rgb(0 0 0 / .05);
   --hover-border: hsl(251 97% 60% / .4);
   --hover-shadow: 0 4px 12px hsl(251 97% 60% / .08);
@@ -289,8 +290,6 @@ svg.ph .ph-format { font: 800 22px/1 var(--font-head); fill: var(--heading); }
 svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 .kpi-note { margin: 2px 0 0; font-size: 11.5px; color: var(--accent-text); }
 .kpi.partial { border-color: var(--warning); }
-.notice { border: 1px solid var(--warning); border-radius: 10px; padding: 10px 14px; margin: 0 0 14px; font-size: 13.5px; }
-.notice ul { margin: 6px 0 0 18px; padding: 0; }
 .conf.group.thin { border-color: var(--warning); }
 .ad-body { padding: 12px 14px 14px; }
 .ad-body h4 { margin: 0; font: 700 15px/1.3 var(--font-head); color: var(--heading); overflow-wrap: anywhere; }
@@ -312,10 +311,18 @@ p.check { border-left: 3px solid var(--error); padding-left: 8px; }
 .col .ad-img svg.pv, .col .ad-img svg.ph { max-height: 220px; }
 .badge.cant, .badge.early { background: var(--ink-500); }
 /* charts: shared legend chips, metric switcher, tooltip, series states */
-.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; }
-.chip { display: inline-flex; align-items: center; gap: 6px; font: 600 12px/1 var(--font-head); padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--heading); cursor: pointer; }
-.chip[aria-pressed="false"] { opacity: 0.5; }
-.chip .sw { width: 10px; height: 10px; border-radius: 3px; }
+.legend-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; }
+.legend-chip { display: inline-flex; align-items: center; gap: 6px; font: 600 12px/1 var(--font-head); padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--heading); cursor: pointer; }
+.legend-chip[aria-pressed="false"] { color: var(--text-muted); }
+.legend-chip .sw { width: 10px; height: 10px; border-radius: 3px; }
+.legend-chip[aria-pressed="false"] .sw { background: transparent !important; box-shadow: inset 0 0 0 1.5px var(--text-muted); }
+.chart-key { margin: 0 0 6px; font-size: 12px; color: var(--text-muted); }
+figure.chart.wide.fit svg { min-width: 0; }
+svg .ind { font-size: 10.5px; }
+svg g.thin { opacity: 0.4; }
+svg .line.daily { stroke-width: 1.4; opacity: 0.4; }
+svg .pt.daily { fill-opacity: 0.55; }
+svg .dot-label { font-size: 11px; font-weight: 600; fill: var(--heading); }
 .seg { flex-wrap: wrap; gap: 2px; padding: 3px; border-radius: 999px; background: var(--surface-muted); margin: 0 0 8px; }
 .seg { display: none; }
 .switch.on .seg { display: inline-flex; }
@@ -532,7 +539,7 @@ section.panel > h4 { margin-top: 18px; }
 }
 @media print {
   .js .switch.on .pick-title { display: block; }
-  .seg, .chips { display: none; }
+  .seg, .legend-chips { display: none; }
   :root, :root[data-theme="dark"], :root:not([data-theme="light"]) {
     color-scheme: light;
     --bg: #ffffff;
@@ -1173,12 +1180,12 @@ section.panel > h4 { margin-top: 18px; }
   });
   document.addEventListener("keydown", function (event) { if (event.key === "Escape") { hideTip(); } });
   function pressed(btn) { return btn.getAttribute("aria-pressed") === "true"; }
-  $all(".chip").forEach(function (chip) {
+  $all(".legend-chip").forEach(function (chip) {
     chip.addEventListener("click", function () {
       var scope = chip.closest("[data-scope]");
       if (!scope) { return; }
       var turningOff = pressed(chip);
-      if (turningOff && $all(".chip", scope).filter(pressed).length <= 1) { return; }
+      if (turningOff && $all(".legend-chip", scope).filter(pressed).length <= 1) { return; }
       chip.setAttribute("aria-pressed", turningOff ? "false" : "true");
       $all("g[data-series]", scope).forEach(function (g) {
         if (g.getAttribute("data-series") === chip.getAttribute("data-series")) { g.classList.toggle("is-off", turningOff); }

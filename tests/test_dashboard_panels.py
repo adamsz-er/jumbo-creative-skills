@@ -191,7 +191,7 @@ class AxisUnitTest(unittest.TestCase):
         left, right = axis_labels(self.roas_view())
         self.assertEqual(left.count("0x"), 1)
         self.assertNotIn("0", right)
-        self.assertEqual(len(right), 2)
+        self.assertGreaterEqual(len(right), 2)
 
     def test_a_line_only_chart_keeps_its_own_zero_in_its_unit(self):
         import charts
@@ -235,7 +235,7 @@ class LegendTest(unittest.TestCase):
     def test_the_time_chart_has_a_chip_per_series_and_single_series_charts_do_not(self):
         html, _ = panels.over_time(panels.Ctx(rows=cm.load_rows(str(FIXTURE)), currency="USD"))
         roas = re.search(r'data-view="roas">.*?</figure>', html, re.S).group(0)
-        self.assertEqual(re.findall(r'<button type="button" class="chip" data-series="([^"]*)"', roas), ["Spend", "Daily", "7-day average"])
+        self.assertEqual(re.findall(r'<button type="button" class="legend-chip" data-series="([^"]*)"', roas), ["Spend", "Daily", "7-day average"])
         import charts
         single = charts.combo_chart(["2026-03-01", "2026-03-02"], None, [1.0, 2.0], "", "CTR (%)", "x", width=300, height=190)
         self.assertNotIn("legend", single)
@@ -860,7 +860,7 @@ class ShellTest(unittest.TestCase):
         root = self.block(":root {")
         self.assertIn('--font-body: "DM Sans", "Inter", system-ui', root)
         self.assertIn('--font-mono: "Roboto Mono"', root)
-        for n, color in enumerate(("#6366f1", "#10b981", "#f59e0b", "#8b5cf6", "#06b6d4", "#f43f5e"), 1):
+        for n, color in enumerate(("#6366f1", "#16a34a", "#f59e0b", "#f43f5e", "#06b6d4", "#d946ef"), 1):
             self.assertIn("--series-%d: %s" % (n, color), root)
         self.assertIn("--series-neutral: #64748b", root)
         self.assertIn("--radius: 10px", root)

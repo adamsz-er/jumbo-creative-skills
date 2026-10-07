@@ -56,7 +56,7 @@ class PlumbingTest(unittest.TestCase):
         spend = {"a": 10.0, "b": 70.0, "c": 50.0, "d": 40.0, "e": 30.0, "f": 20.0, "g": 5.0, "h": 1.0}
         colours = charts.format_colours(spend)
         self.assertEqual([colours[k] for k in "bcdefa"], ["var(--series-%d)" % n for n in range(1, 7)])
-        self.assertEqual({colours["g"], colours["h"]}, {"var(--text-muted)"})
+        self.assertEqual({colours["g"], colours["h"]}, {"var(--series-other)"})
 
     def test_equal_spend_breaks_a_tie_by_name_so_the_colours_are_stable(self):
         self.assertEqual(charts.format_colours({"b": 5.0, "a": 5.0}), {"a": "var(--series-1)", "b": "var(--series-2)"})
@@ -104,7 +104,7 @@ class PlumbingTest(unittest.TestCase):
 
     def test_chips_are_buttons_that_start_pressed_and_carry_the_series_name(self):
         html = charts.chips([("Static", "var(--series-1)"), ("A & B", "var(--series-2)")])
-        self.assertEqual(re.findall(r'<button type="button" class="chip" data-series="([^"]*)" aria-pressed="true"', html), ["Static", "A &amp; B"])
+        self.assertEqual(re.findall(r'<button type="button" class="legend-chip" data-series="([^"]*)" aria-pressed="true"', html), ["Static", "A &amp; B"])
 
     def test_a_switcher_with_scripts_off_shows_every_view_stacked_under_its_heading(self):
         html = charts.switcher("x", [("a", "First", "<p>one</p>"), ("b", "Second", "<p>two</p>")])
@@ -199,7 +199,7 @@ class OverTimeTest(unittest.TestCase):
         rows = [row("a", name_of("static"), d) for d in ("2026-03-01", "2026-03-02", "2026-03-04", "2026-03-05")]
         html, _ = panels.over_time(panels.Ctx(rows=rows, currency="USD"))
         chart = view(html, "spend")
-        self.assertEqual(len(re.findall(r'class="line line" style="[^"]*" d="([^"]*)"', chart)[0].split("M")) - 1, 2)
+        self.assertEqual(len(re.findall(r'class="line daily" style="[^"]*" d="([^"]*)"', chart)[0].split("M")) - 1, 2)
         self.assertFalse([t for t in tips(chart) if t.startswith("Daily, 3 Mar")])
         self.assertTrue(any(t.startswith("Daily, 4 Mar") for t in tips(chart)))
 
@@ -364,7 +364,7 @@ class FormatsOverTimeTest(unittest.TestCase):
         self.assertIn("Static, 9 Mar: %.2f%%" % expected, tips(ctr))
 
     def test_part_weeks_are_labelled_and_weeks_start_on_monday(self):
-        self.assertIn("23 Feb (part)", self.html)
+        self.assertIn("1 Mar (part)", self.html)
         self.assertIn("30 Mar (part)", self.html)
         start = panels.week_axis(__import__("datetime").date(2026, 3, 1), __import__("datetime").date(2026, 3, 30))
         self.assertTrue(all(d.weekday() == 0 for d, _ in start))
@@ -387,7 +387,7 @@ class FormatsOverTimeTest(unittest.TestCase):
         self.assertIn("less than two calendar weeks", html)
 
     def test_one_row_of_chips_toggles_all_four_charts_and_the_charts_hold_no_chips_of_their_own(self):
-        self.assertEqual(self.html.count('class="chips"'), 1)
+        self.assertEqual(self.html.count('class="legend-chips"'), 1)
         self.assertIn('class="multiples-wrap" data-scope="1"', self.html)
 
     def test_a_small_chart_has_no_rotated_title_to_collide_with_its_ticks(self):
@@ -395,7 +395,7 @@ class FormatsOverTimeTest(unittest.TestCase):
 
     def test_the_account_line_is_neutral_and_formats_keep_their_page_colours(self):
         ctr = self.html.split("<h4>CTR</h4>")[1].split("</figure>")[0]
-        self.assertIn('style="stroke:var(--text-muted)"', group(ctr, panels.ALL_FORMATS))
+        self.assertIn('style="stroke:var(--heading)"', group(ctr, panels.ALL_FORMATS))
         self.assertIn('style="stroke:%s"' % self.ctx.colour("static"), group(ctr, "Static"))
 
 
@@ -439,7 +439,7 @@ class AdAgeTest(unittest.TestCase):
         roas = view(self.html, "roas")
         self.assertEqual(re.findall(r'<text class="tk" x="[\d.]+" y="\d+" text-anchor="middle">([^<]*)</text>', roas),
                          ["0-6 days", "7-15 days", "16-32 days", "33-65 days", "66+ days"])
-        counts = [int(n) for n in re.findall(r'class="count"[^>]*>(\d+) ads?<', roas)]
+        counts = [int(n) for n in re.findall(r'class="count"[^>]*>(\d+) ads?[:<]', roas)]
         self.assertEqual(sum(counts), len(self.ctx.ads))
 
     def test_spend_shares_add_to_a_hundred(self):
@@ -547,8 +547,8 @@ class EveryChartTest(unittest.TestCase):
     def test_marks_carry_hover_text_and_points_are_keyboard_reachable_in_small_charts(self):
         for html in (panels.over_time(self.ctx)[0], panels.format_benchmarks(self.ctx)[0], panels.ad_age(self.ctx)[0]):
             self.assertTrue(tips(html))
-            self.assertIn('class="pt"', html)
-            self.assertRegex(html, r'<circle class="pt"[^>]*tabindex="0"')
+            self.assertRegex(html, r'<circle class="pt[ "]')
+            self.assertRegex(html, r'<circle class="pt[^"]*"[^>]*tabindex="0"')
 
     def test_a_chart_with_many_points_is_hover_only(self):
         days = ["2027-01-%02d" % d for d in range(1, 29)] + ["2027-02-%02d" % d for d in range(1, 29)] + ["2027-03-%02d" % d for d in range(1, 10)]
@@ -568,7 +568,201 @@ class EveryChartTest(unittest.TestCase):
 
     def test_the_footer_names_the_chart_settings_that_are_arbitrary(self):
         self.assertIn("rolling averages cover 7 days and need 5 days with data", self.page)
-        self.assertIn("ad-age buckets end at 7, 16, 33, 66 days", self.page)
+        self.assertIn("new ad-age buckets start at 7, 16, 33 and 66 days", self.page)
+
+
+def day_rows(n, **fields):
+    """n daily rows for one ad from 1 Mar, each with the given fields (a field of None is absent that day)."""
+    out = []
+    for i in range(n):
+        base = {"ad_id": "a", "ad_name": name_of("static"), "date": "2026-03-%02d" % (i + 1)}
+        base.update({k: (v(i) if callable(v) else v) for k, v in fields.items()})
+        out.append(base)
+    return out
+
+
+class RollingAverageTest(unittest.TestCase):
+    def roll(self, rows, key):
+        return panels.rolling_values(panels.calendar(rows), key)
+
+    def test_a_count_measure_averages_per_day_it_never_sums_the_window(self):
+        out = self.roll(day_rows(8, spend=10.0, impressions=1000.0), "impressions")
+        self.assertAlmostEqual(out[7], 1000.0)
+        self.assertAlmostEqual(self.roll(day_rows(8, spend=10.0, impressions=1000.0), "spend")[7], 10.0)
+
+    def test_a_ratio_counts_and_sums_only_days_that_carry_both_operands(self):
+        rows = day_rows(8, spend=10.0, impressions=1000.0, conversion_value=lambda i: None if i < 3 else 50.0)
+        out = self.roll(rows, "roas")
+        self.assertIsNone(out[6])
+        self.assertAlmostEqual(out[7], 5.0)
+
+    def test_a_day_with_rows_but_no_spend_is_not_a_zero_in_the_average(self):
+        rows = day_rows(7, impressions=1000.0, spend=lambda i: None if i == 2 else 10.0)
+        self.assertAlmostEqual(self.roll(rows, "spend")[6], 10.0)
+
+
+class BenchmarkDefinitionRuleTest(unittest.TestCase):
+    ENTRY = {"source": "S", "url": "https://x.example/", "published": "2026-01-01", "sample": "s", "metric": "ctr", "metric_definition": "d",
+             "unit": "pct", "caveat": "the caveat", "formats": {"video": {"value": 1.0}}}
+
+    def lookup(self, definition):
+        return benchmarks.lookup("ctr", "video", "USD", [dict(self.ENTRY, definition=definition)])
+
+    def test_a_definition_that_differs_from_ours_gets_no_band(self):
+        band, why = self.lookup("differs")
+        self.assertIsNone(band)
+        self.assertIn("differs from ours", why)
+
+    def test_a_definition_the_source_does_not_state_gets_a_band_with_its_caveat(self):
+        band, _ = self.lookup("not_stated")
+        self.assertEqual(band["value"], 1.0)
+        self.assertIn("the caveat", benchmarks.citation(band))
+
+    def test_a_matching_definition_gets_a_band(self):
+        self.assertEqual(self.lookup("matches")[0]["value"], 1.0)
+
+    def test_every_entry_says_which_of_the_three_cases_it_is(self):
+        found = {e["metric"]: e["definition"] for e in benchmarks.load()}
+        self.assertEqual(found, {"ctr": "not_stated", "cpm": "matches", "cvr": "not_stated", "roas": "matches", "hook_rate": "matches"})
+
+    def test_the_panel_and_the_docs_state_the_two_case_rule(self):
+        html, _ = panels.format_benchmarks(acme())
+        self.assertIn("differs from ours", html)
+        self.assertIn("does not state", html)
+        skill = (ROOT / "skills" / "creative-report" / "SKILL.md").read_text()
+        design = (ROOT / "skills" / "creative-report" / "references" / "report-design.md").read_text()
+        for text in (skill, design):
+            self.assertIn("not_stated", text)
+            self.assertIn("differs", text)
+
+
+class ReviewCodeFixesTest(unittest.TestCase):
+    def test_axis_labels_and_counts_sit_outside_every_series_group(self):
+        ctx = acme()
+        for html in (panels.ad_age(ctx)[0], panels.launches(ctx)[0], panels.formats_over_time(ctx)[0], panels.format_benchmarks(ctx)[0], panels.over_time(ctx)[0]):
+            for body in re.findall(r'<g data-series="[^"]*"[^>]*>(.*?)</g>', html, re.S):
+                self.assertNotIn('class="tk', body)
+                self.assertNotIn('class="count"', body)
+
+    def test_the_dead_notice_leftovers_are_gone(self):
+        self.assertFalse(hasattr(panels, "NEEDS_ACCOUNT"))
+        self.assertNotIn(".notice", TEMPLATE.read_text())
+        self.assertIn("banner", (ROOT / "skills" / "creative-report" / "references" / "report-design.md").read_text().split("## Panels and states")[1])
+
+    def test_buckets_are_described_by_where_they_start(self):
+        html, _ = panels.ad_age(acme())
+        self.assertIn("new buckets start at 7, 16, 33 and 66 days", html)
+        page = report.build_html(rows=cm.load_rows(str(FIXTURE)), currency="USD")
+        self.assertIn("new ad-age buckets start at 7, 16, 33 and 66 days", page)
+
+    def test_benchmarks_never_change_the_verdict_do_first_or_grade_sections_of_the_whole_report(self):
+        verdicts = json.loads(subprocess.run([sys.executable, str(ROOT / "skills" / "keep-or-kill" / "scripts" / "verdicts.py"), str(FIXTURE), "--json"],
+                                             capture_output=True, text=True, check=True).stdout)
+        grade = json.loads(subprocess.run([sys.executable, str(ROOT / "skills" / "creative-grader" / "scripts" / "grade.py"), str(FIXTURE), "--json"],
+                                          capture_output=True, text=True, check=True).stdout)
+
+        def sections(page):
+            return [re.search(r'<section class="card panel" id="panel-%s".*?</section>' % pid, page, re.S).group(0) for pid in ("board", "do-first", "improve", "all-ads")]
+
+        with_ = report.build_html(rows=cm.load_rows(str(FIXTURE)), verdicts=verdicts, grade=grade, currency="USD")
+        with tempfile.TemporaryDirectory() as tmp:
+            empty = Path(tmp) / "none.json"
+            empty.write_text("[]")
+            original = benchmarks.DATA
+            benchmarks.DATA = empty
+            try:
+                without = report.build_html(rows=cm.load_rows(str(FIXTURE)), verdicts=verdicts, grade=grade, currency="USD")
+            finally:
+                benchmarks.DATA = original
+        self.assertIn("Lebesgue", with_)
+        self.assertNotIn("Lebesgue", without)
+        self.assertEqual(sections(with_), sections(without))
+
+
+class NiceTicksTest(unittest.TestCase):
+    def test_a_domain_is_rounded_out_to_a_step_of_one_two_two_and_a_half_or_five(self):
+        for low, high in ((0, 5044), (0, 1.56), (0, 100), (3.0, 6.0), (0, 91), (0.9, 1.9), (0, 6.33)):
+            lo, hi, ticks = charts.nice_scale(low, high)
+            self.assertLessEqual(lo, low)
+            self.assertGreaterEqual(hi, high)
+            self.assertTrue(3 <= len(ticks) <= 5, (low, high, ticks))
+            step = ticks[1] - ticks[0]
+            mantissa = step / 10 ** __import__("math").floor(__import__("math").log10(step))
+            self.assertTrue(any(abs(mantissa - m) < 1e-9 for m in (1, 2, 2.5, 5)), (low, high, step))
+
+    def test_known_domains(self):
+        self.assertEqual(charts.nice_scale(0, 100)[2], [0, 25, 50, 75, 100])
+        self.assertEqual(charts.nice_scale(0, 1.56)[2], [0, 0.5, 1.0, 1.5, 2.0])
+        self.assertEqual(charts.nice_scale(0, 5044)[2], [0, 2000, 4000, 6000])
+
+    def test_the_time_chart_axis_uses_them(self):
+        days = ["2026-03-%02d" % d for d in range(1, 9)]
+        svg = charts.line_chart(days, [{"name": "a", "values": [0.0, 5044.0] + [100.0] * 6}], "t", charts.axis_format("money", "USD"), "u")
+        left = re.findall(r'<text x="[\d.]+" y="[\d.]+" text-anchor="end">([^<]*)</text>', svg)
+        self.assertEqual(left, ["0", "2,000", "4,000", "6,000"])
+
+
+class ReviewVisualFixesTest(unittest.TestCase):
+    def test_the_benchmark_chart_fits_a_phone_and_its_scale_covers_every_dot(self):
+        rows = [{"name": n, "value": v, "colour": "var(--series-1)", "band": None} for n, v in (("A", 1.30), ("B", 1.56), ("C", 1.47))]
+        svg = charts.benchmark_rows(rows, 1.47, charts.axis_format("pct"), "t", "CTR (%)", tip_fmt=lambda v: "%.2f%%" % v)
+        self.assertLessEqual(int(re.search(r'viewBox="0 0 (\d+)', svg).group(1)), 480)
+        self.assertIn("wide fit", svg)
+        ticks = [float(t.rstrip("%")) for t in re.findall(r'text-anchor="middle">([\d.]+%)</text>', svg)]
+        self.assertGreaterEqual(max(ticks), 1.56)
+
+    def test_the_first_six_series_hues_are_at_least_thirty_degrees_apart(self):
+        import colorsys
+        css = TEMPLATE.read_text()
+        hues = []
+        for n in range(1, 7):
+            hexed = re.search(r"--series-%d: #([0-9a-fA-F]{6})" % n, css).group(1)
+            r, g, b = (int(hexed[i:i + 2], 16) / 255 for i in (0, 2, 4))
+            hues.append(colorsys.rgb_to_hsv(r, g, b)[0] * 360)
+        for i in range(6):
+            for j in range(i + 1, 6):
+                gap = abs(hues[i] - hues[j])
+                self.assertGreaterEqual(min(gap, 360 - gap), 30, (i + 1, j + 1, hues))
+
+    def test_legend_chips_are_neutral_and_do_not_share_the_filter_chip_class(self):
+        html = charts.chips([("A", "var(--series-1)")])
+        self.assertIn('class="legend-chip"', html)
+        self.assertNotIn('class="chip"', html)
+        css = TEMPLATE.read_text()
+        self.assertRegex(css, r"\.legend-chip \{[^}]*background: var\(--surface\)")
+        self.assertRegex(css, r'\.legend-chip\[aria-pressed="false"\] \{[^}]*color: var\(--text-muted\)')
+        self.assertRegex(css, r'\.legend-chip\[aria-pressed="false"\] \.sw \{[^}]*background: transparent')
+
+    def test_the_industry_mark_is_labelled_and_the_chart_has_a_key_and_two_decimals(self):
+        html = panels.format_benchmarks(acme())[0]
+        ctr = html.split('<div class="pick" data-view="ctr">')[1].split('<div class="pick"')[0]
+        self.assertIn("industry 0.91%", ctr)
+        self.assertIn("1.30%", ctr)
+        self.assertIn("Dot = your value", ctr)
+        self.assertNotIn(">1.3%<", ctr)
+
+    def test_a_part_week_is_labelled_by_its_first_day_with_data(self):
+        html = panels.formats_over_time(acme())[0]
+        self.assertIn("1 Mar (part)", html)
+        self.assertNotIn("23 Feb", html)
+        self.assertIn("fewer than 1,000 impressions", html)
+
+    def test_age_dots_are_labelled_and_a_thin_bucket_says_so(self):
+        html = panels.ad_age(acme())[0]
+        self.assertRegex(html, r'class="dot-label"[^>]*>[\d.]+x<')
+        self.assertIn("1 ad: too few to read", html)
+        self.assertIn('class="thin"', html)
+
+    def test_the_daily_line_is_a_light_tint_and_the_average_is_the_solid_line(self):
+        chart = panels.over_time(acme())[0].split('<div class="pick" data-view="roas">')[1]
+        self.assertIn('class="line daily"', chart)
+        self.assertRegex(TEMPLATE.read_text(), r"svg \.line\.daily \{[^}]*opacity")
+
+    def test_all_formats_the_unknown_format_and_the_seventh_format_have_three_different_greys(self):
+        self.assertEqual(charts.OTHER_COLOUR, "var(--series-other)")
+        self.assertEqual(panels.ALL_FORMATS_COLOUR, "var(--heading)")
+        self.assertEqual(len({charts.OTHER_COLOUR, panels.ALL_FORMATS_COLOUR, "var(--series-neutral)"}), 3)
+        self.assertIn("--series-other:", TEMPLATE.read_text())
 
 
 HARNESS = r"""
@@ -599,14 +793,14 @@ Node.prototype.querySelector = function (sel) { return this.all(function (n) { r
 function el(tag, cls, attrs, parent) { var n = new Node(tag, attrs); n.cls = cls; parent.add(n); return n; }
 var root = new Node("root");
 var fig = el("figure", "", { "data-scope": "1" }, root);
-var chips = ["A", "B"].map(function (s) { return el("button", "chip", { "data-series": s, "aria-pressed": "true" }, fig); });
+var chips = ["A", "B"].map(function (s) { return el("button", "legend-chip", { "data-series": s, "aria-pressed": "true" }, fig); });
 var groups = ["A", "B"].map(function (s) { return el("g", "", { "data-series": s }, fig); });
 var sw = el("div", "switch", {}, root);
 var bar = el("div", "seg", {}, sw);
 var btns = ["x", "y"].map(function (k, i) { return el("button", "", { "data-pick": k, "aria-pressed": i ? "false" : "true" }, bar); });
 var views = ["x", "y"].map(function (k) { return el("div", "pick", { "data-view": k }, sw); });
 function matches(n, sel) {
-  if (sel === ".chip") { return n.cls === "chip"; }
+  if (sel === ".legend-chip") { return n.cls === "legend-chip"; }
   if (sel === ".switch") { return n.cls === "switch"; }
   if (sel === ".pick") { return n.cls === "pick"; }
   if (sel === "g[data-series]") { return n.tag === "g" && n.getAttribute("data-series") !== null; }

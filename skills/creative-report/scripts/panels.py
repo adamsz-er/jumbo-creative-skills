@@ -39,7 +39,6 @@ KPI_ORDER = (
     ("conversions", "Purchases", "int"), ("cpa", "CPA", "money2"), ("conversion_value", "Purchase value", "money0"),
     ("roas", "ROAS", "x2"), ("hook_rate", "Hook rate", "pct"), ("hold_rate", "Hold rate", "pct"),
 )
-NEEDS_ACCOUNT = "n/a (needs account-level reach)"
 # field -> how to get it, for the banner that names metrics no ad in the pull can show
 HOW_TO_GET = {
     "video_views_3s": "an Ads Manager export with the 3-second video plays column (the connector has no exact per-ad count)",
@@ -564,7 +563,10 @@ def calendar(rows: Sequence[Dict[str, Any]]) -> List[Tuple[str, List[Dict[str, A
 
 
 def _measure_rows(rows: Sequence[Dict[str, Any]], key: str) -> List[Dict[str, Any]]:
-    return video_rows(rows, key) if key in VIDEO_KPIS else list(rows)
+    """Rows that carry every operand the measure needs: a day or ad missing one is not a zero and does not dilute the rest."""
+    if key in cm.NUMERIC_FIELDS:
+        return [r for r in rows if r.get(key) is not None]
+    return [r for r in rows if cm.describe_missing(r, key) is None]
 
 
 def day_values(cal: Sequence[Tuple[str, List[Dict[str, Any]]]], key: str) -> List[Optional[float]]:
@@ -578,15 +580,18 @@ def day_values(cal: Sequence[Tuple[str, List[Dict[str, Any]]]], key: str) -> Lis
 
 def rolling_values(cal: Sequence[Tuple[str, List[Dict[str, Any]]]], key: str, window: int = charts.SPARK_AVERAGE_DAYS,
                    need: int = charts.ROLLING_MIN_VALUES) -> List[Optional[float]]:
-    """A rolling average over `window` days: spend is the mean per day, a ratio is the ratio of the window's sums. Needs `need` days with data."""
+    """A rolling average over `window` days: a count (spend, impressions, ...) is its mean per day, a ratio is the ratio of the window's sums.
+
+    Only days with rows that carry the measure count, and only those rows are summed; fewer than `need` such days is a gap.
+    """
     out: List[Optional[float]] = []
     for i in range(len(cal)):
         days = [_measure_rows(rows, key) for _, rows in cal[max(0, i - window + 1):i + 1]]
         days = [d for d in days if d]
         if len(days) < need:
             out.append(None)
-        elif key == "spend":
-            out.append(sum(totals(d)["spend"] or 0 for d in days) / len(days))
+        elif key in cm.NUMERIC_FIELDS:
+            out.append(sum(totals(d)[key] or 0 for d in days) / len(days))
         else:
             out.append(_kpi_value(totals([r for d in days for r in d]), key))
     return out
@@ -598,7 +603,7 @@ def _time_view(ctx: Ctx, cal, key: str, name: str, kind: str, spend_bars: Sequen
         return ""
     axis, hover = _kind_formats(ctx, kind)
     labels = [d for d, _ in cal]
-    lines = [{"name": "Daily", "values": values, "colour": charts.SERIES_VARS[0], "kind": "line"},
+    lines = [{"name": "Daily", "values": values, "colour": charts.SERIES_VARS[0], "kind": "daily"},
              {"name": "7-day average", "values": rolling_values(cal, key), "colour": charts.SERIES_VARS[0], "kind": "avg"}]
     bars = None if key == "spend" else spend_bars
     return charts.line_chart(labels, lines, "%s by day with a 7-day average" % name, axis, _unit_of(ctx, name, kind), bars=bars,
@@ -1193,6 +1198,7 @@ def format_scorecard(ctx: Ctx) -> Tuple[str, str]:
 BENCH_METRICS = (("ctr", "CTR", "pct"), ("cpm", "CPM", "money"), ("roas", "ROAS", "x"), ("cvr", "CR", "pct"), ("hook_rate", "Hook rate", "pct"))
 WEEK_TIME_METRICS = (("ctr", "CTR", "pct"), ("cpm", "CPM", "money"), ("roas", "ROAS", "x"), ("hook_rate", "Hook rate", "pct"))
 ALL_FORMATS = "All formats"
+ALL_FORMATS_COLOUR = "var(--heading)"
 NO_FORMATS = ("No format could be read from the ad names, so there is nothing to compare.",
               "Name ads with the convention in creative-context, or tell the creative-mix skill the naming pattern your ads use.")
 
@@ -1234,8 +1240,9 @@ def format_benchmarks(ctx: Ctx) -> Tuple[str, str]:
     if not views:
         return empty_state("None of the benchmark measures could be worked out from the data.", "Include impressions, clicks, spend and purchase columns in the export.")
     lead = ('<p class="muted">The dot is your value for each format. The shaded band or tick is a public industry figure, drawn only where a cited source '
-            'gives one for that format and measures it the same way. It is context, never a grade: your verdicts compare your ads with your own ads. '
-            '%s</p>' % esc(benchmarks.NO_BAND_METRICS["hold_rate"]))
+            'gives one for that format. Where the source does not state exactly how it measures (for example link clicks or all clicks) the band is drawn '
+            'with that caveat printed under it; where its measure differs from ours there is no band. It is context, never a grade: your verdicts compare '
+            'your ads with your own ads. %s</p>' % esc(benchmarks.NO_BAND_METRICS["hold_rate"]))
     skip = '<p class="muted">Not shown, no data for it: %s.</p>' % esc(", ".join(skipped)) if skipped else ""
     return lead + charts.switcher("format-benchmarks", views) + skip, "data"
 
@@ -1246,7 +1253,7 @@ def week_axis(first: dt.date, last: dt.date) -> List[Tuple[dt.date, str]]:
     out = []
     while start <= last:
         part = (start < first) or (start + dt.timedelta(days=6) > last)
-        out.append((start, charts.day_label(start.isoformat()) + (" (part)" if part else "")))
+        out.append((start, charts.day_label(max(start, first).isoformat()) + (" (part)" if part else "")))
         start += dt.timedelta(days=7)
     return out
 
@@ -1293,15 +1300,15 @@ def formats_over_time(ctx: Ctx) -> Tuple[str, str]:
         everything = weekly(ctx.rows, key)
         if not lines and not any(v is not None for v in everything):
             continue
-        lines.append({"name": ALL_FORMATS, "values": everything, "colour": charts.OTHER_COLOUR, "kind": "dashed"})
+        lines.append({"name": ALL_FORMATS, "values": everything, "colour": ALL_FORMATS_COLOUR, "kind": "dashed"})
         chart = charts.line_chart(labels, lines, "%s by week and format" % name, axis, _unit_of(ctx, name, kind), x_text=lambda t: t, width=380, height=240,
                                   legend=False, caption="%s by week" % name, tip_fmt=hover)
         cells.append('<div class="multiple"><h4>%s</h4>%s</div>' % (esc(name), chart))
     if not cells:
         return empty_state("No format has enough impressions in any week to draw a line.", "Pull the data over a longer window or for more spend.")
-    key_chips = charts.chips([(ctx.format_name(f), ctx.colour(f)) for f in named] + [(ALL_FORMATS, charts.OTHER_COLOUR)])
-    note = ('<p class="muted">Weeks are ISO calendar weeks; a part week is marked. A format-week with fewer than %d impressions is left off its line '
-            '(an arbitrary floor, set it from your own account). The dashed line is every format together. Hook rate counts video ads only.</p>' % charts.MIN_WEEK_IMPRESSIONS)
+    key_chips = charts.chips([(ctx.format_name(f), ctx.colour(f)) for f in named] + [(ALL_FORMATS, ALL_FORMATS_COLOUR)])
+    note = ('<p class="muted">Weeks are ISO calendar weeks; a part week is marked. A format-week with fewer than {:,} impressions is left off its line '
+            '(an arbitrary floor, set it from your own account). The dashed line is every format together. Hook rate counts video ads only.</p>'.format(charts.MIN_WEEK_IMPRESSIONS))
     return '<div class="multiples-wrap" data-scope="1">%s<div class="multiples">%s</div></div>%s' % (key_chips, "".join(cells), note), "data"
 
 
@@ -1332,7 +1339,11 @@ def spend_vs_return(ctx: Ctx) -> Tuple[str, str]:
 
 # ---------- Keep / kill: ad age and launch pace ----------
 
-AGE_EDGES = (7, 16, 33, 66)  # arbitrary default: where one age bucket ends and the next begins, in days; set it from your own account
+AGE_EDGES = (7, 16, 33, 66)  # arbitrary default: the age in days at which each new bucket starts; set it from your own account
+
+
+def age_starts_text() -> str:
+    return "%s and %d days" % (", ".join(str(e) for e in AGE_EDGES[:-1]), AGE_EDGES[-1])
 
 
 def age_labels() -> List[str]:
@@ -1357,15 +1368,15 @@ def ad_age(ctx: Ctx) -> Tuple[str, str]:
     for key, name, kind, values in metrics:
         if any(v is not None for v in values):
             views.append((key, name, charts.bars_with_dots(labels, shares, counts, values, _kind_formats(ctx, kind)[0], name,
-                                                          "Spend share and %s by ad age" % name)))
+                                                          "Spend share and %s by ad age" % name, dot_tip_fmt=_kind_formats(ctx, kind)[1])))
     if not views:
         views = [("roas", "ROAS", charts.bars_with_dots(labels, shares, counts, [None] * len(labels), charts.axis_format("x"), "ROAS", "Spend share by ad age"))]
     bases = {a.get("age_basis") for a in ads}
     basis = ("from each ad's creation date" if bases == {cm.AGE_FROM_CREATED} else
              "from each ad's first day of delivery in this window, so an ad that started before the window reads younger than it is" if bases == {cm.AGE_FROM_DELIVERY} else
              "from the creation date where the export has one, otherwise from the first day of delivery in this window")
-    note = ('<p class="muted">Age is counted to the last day of the data, %s. Buckets (in days, arbitrary defaults) end at %s. '
-            'ROAS and CTR are ratios of summed counts for the ads in a bucket.</p>' % (basis, ", ".join(str(e) for e in AGE_EDGES)))
+    note = ('<p class="muted">Age is counted to the last day of the data, %s. Arbitrary defaults: new buckets start at %s. '
+            'ROAS and CTR are ratios of summed counts for the ads in a bucket; a bucket with fewer than %d ads is dimmed.</p>' % (basis, age_starts_text(), charts.MIN_BUCKET_ADS))
     return charts.switcher("ad-age", views) + note, "data"
 
 

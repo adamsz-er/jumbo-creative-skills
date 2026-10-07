@@ -310,6 +310,8 @@ def bubble_chart(points: Sequence[Tuple[float, float, float, str, bool]], xlabel
         return low - pad, high + pad
 
     (x0, x1), (y0, y1) = span(xs), span(ys)
+    x0, x1, xticks = nice_scale(x0, x1)
+    y0, y1, yticks = nice_scale(y0, y1)
     biggest = max(p[2] for p in points) or 1.0
 
     def px(x):
@@ -321,10 +323,10 @@ def bubble_chart(points: Sequence[Tuple[float, float, float, str, bool]], xlabel
     parts = ['<figure class="chart wide"><svg viewBox="0 0 %d %d" role="img" aria-label="%s">' % (width, height, esc(label))]
     parts.append('<line class="axis" x1="%d" y1="%d" x2="%d" y2="%d"/>' % (left, height - bottom, width - right, height - bottom))
     parts.append('<line class="axis" x1="%d" y1="%d" x2="%d" y2="%d"/>' % (left, top, left, height - bottom))
-    for value in _ticks(x0, x1):
-        parts.append('<text x="%.1f" y="%d" text-anchor="middle">%.1f</text>' % (px(value), height - bottom + 16, value))
-    for value in _ticks(y0, y1):
-        parts.append('<text x="%d" y="%.1f" text-anchor="end">%.1f</text>' % (left - 8, py(value) + 4, value))
+    for value in xticks:
+        parts.append('<text x="%.1f" y="%d" text-anchor="middle">%s</text>' % (px(value), height - bottom + 16, _trim(value)))
+    for value in yticks:
+        parts.append('<text x="%d" y="%.1f" text-anchor="end">%s</text>' % (left - 8, py(value) + 4, _trim(value)))
     if x_median is not None:
         parts.append('<line class="guide" x1="%.1f" y1="%d" x2="%.1f" y2="%d"/>' % (px(x_median), top, px(x_median), height - bottom))
     parts.append('<line class="guide" x1="%d" y1="%.1f" x2="%d" y2="%.1f"/>' % (left, py(y_median), width - right, py(y_median)))
@@ -447,7 +449,7 @@ def heatmap(row_labels: Sequence[str], col_labels: Sequence[str], cells: Sequenc
 # ---------- shared plumbing for the format and time charts ----------
 
 SERIES_VARS = tuple("var(--series-%d)" % n for n in range(1, 7))
-OTHER_COLOUR = "var(--text-muted)"
+OTHER_COLOUR = "var(--series-other)"
 TICKS_WIDE = 8  # arbitrary default: the most x labels a time axis writes
 TICKS_NARROW = 5  # arbitrary default: the most x labels under 480px, picked from the wide set so they never collide
 POINT_FOCUS_MAX = 60  # arbitrary: charts with more points than this get hover tips only, not a tab stop per point
@@ -483,10 +485,26 @@ def x_ticks(count: int, plot_w: float = 10 ** 6) -> Tuple[List[int], List[int]]:
     return wide, narrow
 
 
+def nice_scale(low: float, high: float, intervals: int = 4) -> Tuple[float, float, List[float]]:
+    """A domain rounded out to a step of 1, 2, 2.5 or 5 times a power of ten, with at most `intervals` steps: (low, high, ticks)."""
+    if high <= low:
+        high = low + 1.0
+    raw = (high - low) / intervals
+    exp = math.floor(math.log10(raw))
+    for power in range(exp - 1, exp + 3):
+        for mantissa in (1, 2, 2.5, 5):
+            step = mantissa * 10.0 ** power
+            lo, hi = math.floor(low / step + 1e-9) * step, math.ceil(high / step - 1e-9) * step
+            count = round((hi - lo) / step)
+            if count <= intervals:
+                return round(lo, 10), round(hi, 10), [round(lo + i * step, 10) for i in range(count + 1)]
+    return low, high, [low, high]
+
+
 def chips(names: Sequence[Tuple[str, str]]) -> str:
     """Legend chips: (series name, colour). Each is a button that toggles that series; with scripts off the row is a plain key."""
-    return '<div class="chips">%s</div>' % "".join(
-        '<button type="button" class="chip" data-series="%s" aria-pressed="true"><span class="sw" style="background:%s"></span>%s</button>'
+    return '<div class="legend-chips">%s</div>' % "".join(
+        '<button type="button" class="legend-chip" data-series="%s" aria-pressed="true"><span class="sw" style="background:%s"></span>%s</button>'
         % (esc(name), colour, esc(name)) for name, colour in names)
 
 
@@ -499,10 +517,10 @@ def switcher(uid: str, options: Sequence[Tuple[str, str, str]], default: Optiona
     return '<div class="switch" data-switch="%s"><div class="seg" role="group" aria-label="Choose a measure">%s</div>%s</div>' % (esc(uid), bar, views)
 
 
-def _figure(svg: str, caption: str, legend_html: str = "", wide: bool = True) -> str:
-    """A figure around one svg; a figure with legend chips is the scope those chips toggle within."""
-    return '<figure class="chart%s"%s>%s%s<figcaption>%s</figcaption></figure>' % (
-        " wide" if wide else "", ' data-scope="1"' if legend_html else "", legend_html, svg, caption)
+def _figure(svg: str, caption: str, legend_html: str = "", wide: bool = True, fit: bool = False, key_html: str = "") -> str:
+    """A figure around one svg; a figure with legend chips is the scope those chips toggle within. `fit` never scrolls sideways."""
+    return '<figure class="chart%s%s"%s>%s%s%s<figcaption>%s</figcaption></figure>' % (
+        " wide" if wide else "", " fit" if fit else "", ' data-scope="1"' if legend_html else "", legend_html, key_html, svg, caption)
 
 
 def _points(values: Sequence[Optional[float]], px: Callable[[int], float], py: Callable[[float], float]) -> str:
@@ -522,8 +540,9 @@ def line_chart(labels: Sequence[str], lines: Sequence[Dict[str, Any]], label: st
                x_text: Callable[[str], str] = day_label, width: int = 640, height: int = 280, legend: bool = True, caption: str = "") -> str:
     """Time lines over shared x labels, with optional faint background bars on a second (right) axis.
 
-    Each line is {"name", "values", "colour", "kind"}; kind is "line" (dots with tips), "avg" (thick, no dots) or "dashed"
-    (an account-wide reference). A None value is a gap, never a zero. Every series sits in its own <g data-series>.
+    Each line is {"name", "values", "colour", "kind"}; kind is "line" or "daily" (dots with tips; daily is a light tint), "avg"
+    (thick, no dots) or "dashed" (an account-wide reference). A None value is a gap, never a zero. Every series sits in its own
+    <g data-series>. Both axes use rounded steps (nice_scale).
     """
     count = len(labels)
     real = [v for ln in lines for v in ln["values"] if v is not None]
@@ -531,7 +550,7 @@ def line_chart(labels: Sequence[str], lines: Sequence[Dict[str, Any]], label: st
         return ""
     left, right, top, bottom = 52, 52 if bars else 14, 14, 40
     plot_w, plot_h = width - left - right, height - top - bottom
-    high = max(real) or 1.0
+    _, high, ticks = nice_scale(0, max(real))
     slot = plot_w / count
 
     def px(i: int) -> float:
@@ -541,32 +560,32 @@ def line_chart(labels: Sequence[str], lines: Sequence[Dict[str, Any]], label: st
         return height - bottom - v / high * plot_h
 
     parts = ['<svg viewBox="0 0 %d %d" role="img" aria-label="%s">' % (width, height, esc(label))]
-    for frac in (0.0, 0.5, 1.0):
-        y = height - bottom - frac * plot_h
-        parts.append('<line class="grid" x1="%d" y1="%.1f" x2="%d" y2="%.1f"/>' % (left, y, width - right, y))
-        parts.append('<text x="%d" y="%.1f" text-anchor="end">%s</text>' % (left - 6, y + 4, esc(fmt(high * frac))))
+    for t in ticks:
+        parts.append('<line class="grid" x1="%d" y1="%.1f" x2="%d" y2="%.1f"/>' % (left, py(t), width - right, py(t)))
+        parts.append('<text x="%d" y="%.1f" text-anchor="end">%s</text>' % (left - 6, py(t) + 4, esc(fmt(t))))
     if bars and any(v is not None for v in bars):
-        peak = max(v for v in bars if v is not None) or 1.0
+        _, bhigh, bticks = nice_scale(0, max(v for v in bars if v is not None))
         rects = []
         for i, v in enumerate(bars):
             if v is None:
                 continue
-            h = max(plot_h * v / peak, 1)
+            h = max(plot_h * v / bhigh, 1)
             rects.append('<rect class="bar-bg" x="%.1f" y="%.1f" width="%.1f" height="%.1f"%s/>'
                          % (left + i * slot + slot * 0.18, height - bottom - h, slot * 0.64, h, tip("%s: %s %s" % (x_text(labels[i]), (bar_tip_fmt or bar_fmt or fmt)(v), bar_name))))
         parts.append('<g data-series="%s">%s</g>' % (esc(bar_name), "".join(rects)))
-        for frac in (0.5, 1.0):
-            parts.append('<text x="%d" y="%.1f">%s</text>' % (width - right + 6, height - bottom - frac * plot_h + 4, esc((bar_fmt or fmt)(peak * frac))))
+        for t in bticks[1:]:
+            parts.append('<text x="%d" y="%.1f">%s</text>' % (width - right + 6, height - bottom - t / bhigh * plot_h + 4, esc((bar_fmt or fmt)(t))))
     parts.append('<line class="axis" x1="%d" y1="%d" x2="%d" y2="%d"/>' % (left, height - bottom, width - right, height - bottom))
     focus = count <= POINT_FOCUS_MAX
     for ln in lines:
         kind, colour = ln.get("kind", "line"), ln.get("colour", SERIES_VARS[0])
         inner = '<path class="line %s" style="stroke:%s" d="%s"/>' % (kind, colour, _points(ln["values"], px, py))
-        if kind == "line":
+        if kind in ("line", "daily"):
             for i, v in enumerate(ln["values"]):
                 if v is not None:
-                    inner += ('<circle class="pt" style="fill:%s" cx="%.1f" cy="%.1f" r="3"%s%s/>'
-                              % (colour, px(i), py(v), ' tabindex="0"' if focus else "", tip("%s, %s: %s" % (ln["name"], x_text(labels[i]), (tip_fmt or fmt)(v)))))
+                    inner += ('<circle class="pt%s" style="fill:%s" cx="%.1f" cy="%.1f" r="3"%s%s/>'
+                              % (" daily" if kind == "daily" else "", colour, px(i), py(v), ' tabindex="0"' if focus else "",
+                                 tip("%s, %s: %s" % (ln["name"], x_text(labels[i]), (tip_fmt or fmt)(v)))))
         parts.append('<g data-series="%s">%s</g>' % (esc(ln["name"]), inner))
     wide, narrow = x_ticks(count, plot_w)
     for i in wide:
@@ -629,12 +648,12 @@ def stacked_bars(labels: Sequence[str], series: Sequence[Tuple[str, Sequence[flo
     left, right, top, bottom = 52, 14, 14, 40
     plot_w, plot_h = width - left - right, height - top - bottom
     slot = plot_w / count
-    peak = max(totals) or 1.0
+    _, peak, ticks = nice_scale(0, max(totals))
     parts = ['<svg viewBox="0 0 %d %d" role="img" aria-label="%s">' % (width, height, esc(label))]
-    for frac in (0.0, 0.5, 1.0):
-        y = height - bottom - frac * plot_h
+    for t in ticks:
+        y = height - bottom - t / peak * plot_h
         parts.append('<line class="grid" x1="%d" y1="%.1f" x2="%d" y2="%.1f"/>' % (left, y, width - right, y))
-        parts.append('<text x="%d" y="%.1f" text-anchor="end">%s</text>' % (left - 6, y + 4, "{:,.0f}".format(peak * frac)))
+        parts.append('<text x="%d" y="%.1f" text-anchor="end">%s</text>' % (left - 6, y + 4, "{:,.0f}".format(t)))
     bases = [0.0] * count
     for name, counts, colour in series:
         rects = []
@@ -656,36 +675,36 @@ def stacked_bars(labels: Sequence[str], series: Sequence[Tuple[str, Sequence[flo
 
 
 def benchmark_rows(rows: Sequence[Dict[str, Any]], median: Optional[float], fmt: Callable[[float], str], label: str, unit: str,
-                   width: int = 640, tip_fmt: Optional[Callable[[float], str]] = None) -> str:
+                   width: int = 440, tip_fmt: Optional[Callable[[float], str]] = None) -> str:
     """One row per format: a dot for the account's value, a shaded band or tick for a cited public figure, a line for the account median.
 
-    rows are {"name", "value" (None = no value), "colour", "band" (benchmarks.lookup result or None)}.
+    rows are {"name", "value" (None = no value), "colour", "band" (benchmarks.lookup result or None)}. The chart is narrow enough
+    to fit a phone without scrolling; its scale covers every value and band, rounded out (nice_scale).
     """
     shown = list(rows)
     say = tip_fmt or fmt
     if not any(r["value"] is not None for r in shown):
         return ""
-    left, right, top, row = 150, 70, 14, 34
-    height = top + row * len(shown) + 38
+    left, right, top, row = 112, 56, 24, 44
+    height = top + row * len(shown) + 40
     plot_w = width - left - right
     nums = [r["value"] for r in shown if r["value"] is not None] + [b for r in shown if r.get("band") for b in (r["band"]["low"], r["band"]["high"])]
     nums += [median] if median is not None else []
-    high = max(nums) * 1.08 or 1.0
+    _, high, ticks = nice_scale(0, max(nums))
 
     def px(v: float) -> float:
         return left + v / high * plot_w
 
     parts = ['<svg viewBox="0 0 %d %d" role="img" aria-label="%s">' % (width, height, esc(label))]
-    for frac in (0.0, 0.5, 1.0):
-        x = left + frac * plot_w
-        parts.append('<line class="grid" x1="%.1f" y1="%d" x2="%.1f" y2="%d"/>' % (x, top, x, height - 38))
-        parts.append('<text x="%.1f" y="%d" text-anchor="middle">%s</text>' % (x, height - 22, esc(fmt(high * frac))))
+    for t in ticks:
+        parts.append('<line class="grid" x1="%.1f" y1="%d" x2="%.1f" y2="%d"/>' % (px(t), top, px(t), height - 38))
+        parts.append('<text x="%.1f" y="%d" text-anchor="middle">%s</text>' % (px(t), height - 24, esc(fmt(t))))
     if median is not None:
         parts.append('<line class="guide" x1="%.1f" y1="%d" x2="%.1f" y2="%d"%s/>' % (px(median), top, px(median), height - 38, tip("Median across your formats: %s" % say(median))))
-        parts.append('<text x="%.1f" y="%d" text-anchor="middle">Median across your formats %s</text>' % (min(max(px(median), left + 80), width - right - 80), height - 6, esc(fmt(median))))
+        parts.append('<text x="%.1f" y="%d" text-anchor="middle">Your median %s</text>' % (min(max(px(median), left + 50), width - 60), height - 6, esc(say(median))))
     for i, r in enumerate(shown):
-        y = top + i * row + row / 2
-        inner = '<text class="lbl" x="%d" y="%.1f" text-anchor="end">%s</text>' % (left - 10, y + 4, esc(_short(r["name"], 22)))
+        y = top + i * row + row / 2 + 6
+        inner = '<text class="lbl" x="%d" y="%.1f" text-anchor="end">%s</text>' % (left - 10, y + 4, esc(_short(r["name"], 14)))
         band = r.get("band")
         if band:
             lo, hi = px(band["low"]), px(band["high"])
@@ -694,49 +713,63 @@ def benchmark_rows(rows: Sequence[Dict[str, Any]], median: Optional[float], fmt:
             if hi - lo >= 3:
                 inner += '<rect class="band" x="%.1f" y="%.1f" width="%.1f" height="16" rx="4"%s/>' % (lo, y - 8, hi - lo, tip(words))
             inner += '<line class="band-tick" x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f"%s/>' % (px(band["value"]), y - 11, px(band["value"]), y + 11, tip(words))
+            inner += '<text class="ind" x="%.1f" y="%.1f" text-anchor="middle">industry %s</text>' % (min(max(px(band["value"]), left + 30), width - 36), y - 15, esc(say(band["value"])))
         if r["value"] is None:
             inner += '<text x="%d" y="%.1f">n/a</text>' % (left + 8, y + 4)
         else:
             inner += ('<circle class="pt" style="fill:%s" cx="%.1f" cy="%.1f" r="6" tabindex="0"%s/><text x="%.1f" y="%.1f">%s</text>'
-                      % (r["colour"], px(r["value"]), y, tip("%s: %s" % (r["name"], say(r["value"]))), min(px(r["value"]) + 12, width - right + 4), y + 4, esc(fmt(r["value"]))))
+                      % (r["colour"], px(r["value"]), y, tip("%s: %s" % (r["name"], say(r["value"]))), min(px(r["value"]) + 11, width - right + 4), y + 4, esc(say(r["value"]))))
         parts.append('<g data-series="%s">%s</g>' % (esc(r["name"]), inner))
     parts.append('<line class="axis" x1="%d" y1="%d" x2="%d" y2="%d"/>' % (left, top, left, height - 38))
-    return _figure("".join(parts) + "</svg>", esc(label), chips([(r["name"], r["colour"]) for r in shown]))
+    key = '<p class="chart-key">Dot = your value &middot; bar or band = industry figure &middot; dashed line = your median</p>'
+    return _figure("".join(parts) + "</svg>", esc(label), chips([(r["name"], r["colour"]) for r in shown]), fit=True, key_html=key)
+
+
+MIN_BUCKET_ADS = 3  # arbitrary default: a bucket with fewer ads than this is dimmed and marked too few to read
 
 
 def bars_with_dots(labels: Sequence[str], shares: Sequence[Optional[float]], counts: Sequence[int], dots: Sequence[Optional[float]],
-                   dot_fmt: Callable[[float], str], dot_name: str, label: str, caption: str = "", width: int = 640, height: int = 280) -> str:
-    """Bars of spend share per bucket (ad count written on each bar) with a dot per bucket on a second, right-hand axis."""
+                   dot_fmt: Callable[[float], str], dot_name: str, label: str, caption: str = "", width: int = 640, height: int = 280,
+                   dot_tip_fmt: Optional[Callable[[float], str]] = None) -> str:
+    """Bars of spend share per bucket with a dot per bucket on a second, right-hand axis, its value written above it.
+
+    The ad count is written above each bar; a bucket with fewer than MIN_BUCKET_ADS ads is dimmed and says it has too few to read.
+    Axis labels and counts sit outside the series groups, so switching a series off never hides them.
+    """
     count = len(labels)
     if not count or not any(v for v in shares):
         return ""
-    left, right, top, bottom = 52, 56, 22, 40
+    say = dot_tip_fmt or dot_fmt
+    left, right, top, bottom = 52, 56, 26, 40
     plot_w, plot_h = width - left - right, height - top - bottom
     slot = plot_w / count
-    peak = max(v for v in shares if v is not None) or 1.0
+    _, phigh, pticks = nice_scale(0, max(v for v in shares if v is not None))
     real = [d for d in dots if d is not None]
-    dhigh = (max(real) if real else 1.0) * 1.12 or 1.0  # headroom so a top dot clears the count written above its bar
+    _, dhigh, dticks = nice_scale(0, max(real) if real else 1.0)
     parts = ['<svg viewBox="0 0 %d %d" role="img" aria-label="%s">' % (width, height, esc(label))]
-    for frac in (0.0, 0.5, 1.0):
-        y = height - bottom - frac * plot_h
-        parts.append('<line class="grid" x1="%d" y1="%.1f" x2="%d" y2="%.1f"/>' % (left, y, width - right, y))
-        parts.append('<text x="%d" y="%.1f" text-anchor="end">%.0f%%</text>' % (left - 6, y + 4, peak * frac))
-        parts.append('<text x="%d" y="%.1f">%s</text>' % (width - right + 6, y + 4, esc(dot_fmt(dhigh * frac))))
-    bar_group, dot_group = [], []
+    for t in pticks:
+        parts.append('<line class="grid" x1="%d" y1="%.1f" x2="%d" y2="%.1f"/>' % (left, height - bottom - t / phigh * plot_h, width - right, height - bottom - t / phigh * plot_h))
+        parts.append('<text x="%d" y="%.1f" text-anchor="end">%s%%</text>' % (left - 6, height - bottom - t / phigh * plot_h + 4, _trim(t)))
+    for t in dticks:
+        parts.append('<text x="%d" y="%.1f">%s</text>' % (width - right + 6, height - bottom - t / dhigh * plot_h + 4, esc(dot_fmt(t))))
+    bar_group, dot_group, outside = [], [], []
     for i in range(count):
         cx = left + i * slot + slot / 2
+        thin = 0 < counts[i] < MIN_BUCKET_ADS
+        top_y = height - bottom - (max(plot_h * shares[i] / phigh, 1) if shares[i] else 0)
         if shares[i]:
-            h = max(plot_h * shares[i] / peak, 1)
-            bar_group.append('<rect class="bar-bg solid" x="%.1f" y="%.1f" width="%.1f" height="%.1f"%s/>' % (cx - slot * 0.3, height - bottom - h, slot * 0.6, h,
-                                                                                                          tip("%s: %.1f%% of spend, %d ads" % (labels[i], shares[i], counts[i]))))
-        bar_group.append('<text class="count" x="%.1f" y="%.1f" text-anchor="middle">%d ad%s</text>'
-                         % (cx, (height - bottom - max(plot_h * (shares[i] or 0) / peak, 1)) - 5, counts[i], "" if counts[i] == 1 else "s"))
+            bar = '<rect class="bar-bg solid" x="%.1f" y="%.1f" width="%.1f" height="%.1f"%s/>' % (
+                cx - slot * 0.3, top_y, slot * 0.6, height - bottom - top_y, tip("%s: %.1f%% of spend, %d ads" % (labels[i], shares[i], counts[i])))
+            bar_group.append('<g class="thin">%s</g>' % bar if thin else bar)
+        words = "%d ad%s" % (counts[i], "" if counts[i] == 1 else "s") + (": too few to read" if thin else "")
+        outside.append('<text class="count" x="%.1f" y="%.1f" text-anchor="middle">%s</text>' % (cx, top_y - 5, words))
+        outside.append('<text class="tk" x="%.1f" y="%d" text-anchor="middle">%s</text>' % (cx, height - bottom + 16, esc(labels[i])))
         if dots[i] is not None:
-            dot_group.append('<circle class="pt" style="fill:var(--series-2)" cx="%.1f" cy="%.1f" r="6" tabindex="0"%s/>'
-                             % (cx, height - bottom - dots[i] / dhigh * plot_h, tip("%s, %s: %s" % (labels[i], dot_name, dot_fmt(dots[i])))))
-        parts_label = '<text class="tk" x="%.1f" y="%d" text-anchor="middle">%s</text>' % (cx, height - bottom + 16, esc(labels[i]))
-        bar_group.append(parts_label)
-    parts.append('<g data-series="Spend share">%s</g><g data-series="%s">%s</g>' % ("".join(bar_group), esc(dot_name), "".join(dot_group)))
+            cy = height - bottom - dots[i] / dhigh * plot_h
+            mark = ('<circle class="pt" style="fill:var(--series-2)" cx="%.1f" cy="%.1f" r="6" tabindex="0"%s/><text class="dot-label" x="%.1f" y="%.1f" text-anchor="middle">%s</text>'
+                    % (cx, cy, tip("%s, %s: %s" % (labels[i], dot_name, say(dots[i]))), cx, cy - 10, esc(say(dots[i]))))
+            dot_group.append('<g class="thin">%s</g>' % mark if thin else mark)
+    parts.append('<g data-series="Spend share">%s</g><g data-series="%s">%s</g><g class="axis-labels">%s</g>' % ("".join(bar_group), esc(dot_name), "".join(dot_group), "".join(outside)))
     parts.append('<line class="axis" x1="%d" y1="%d" x2="%d" y2="%d"/>' % (left, height - bottom, width - right, height - bottom))
     parts.append('<text transform="rotate(-90 12 %.1f)" x="12" y="%.1f" text-anchor="middle">Share of spend (%%)</text>' % (top + plot_h / 2, top + plot_h / 2))
     parts.append('<text transform="rotate(90 %d %.1f)" x="%d" y="%.1f" text-anchor="middle">%s</text>' % (width - 8, top + plot_h / 2, width - 8, top + plot_h / 2, esc(dot_name)))

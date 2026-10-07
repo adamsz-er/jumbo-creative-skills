@@ -103,7 +103,7 @@ Same header, tabs and panels in the same order every run. A panel with no data i
 
 - Never edit a number, label or formula by hand in the HTML. Metric ids and formulas come from `creative-context/references/metrics.md`; if something reads wrong, fix the inputs and rebuild.
 - Surface every `n/a (missing ...)` and never show it as 0 or as healthy.
-- Do not add targets, and do not add an industry figure unless it is in `references/benchmarks.json` with its source, URL, year and sample. A figure is context, never a grade: it must not change a verdict, a grade or the order of "Do these first". Money figures show only when the report currency matches the source's; a metric whose public definition differs from ours gets no band.
+- Do not add targets, and do not add an industry figure unless it is in `references/benchmarks.json` with its source, URL, year and sample. A figure is context, never a grade: it must not change a verdict, a grade or the order of "Do these first". Money figures show only when the report currency matches the source's. Each entry says how its definition compares with ours: `matches` (band drawn), `not_stated` (the source does not say, for example link or all clicks: band drawn with that caveat printed under it) or `differs` (no band, as for hold rate).
 - Anything the report prints from the inputs (ad names, notes) is escaped; keep it that way if you extend the script.
 - Never write a URL into the page for an image, and never commit or publish a dashboard built from a real account.
 - Read only. Do not touch the ad account.
