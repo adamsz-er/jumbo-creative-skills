@@ -865,6 +865,18 @@ def preview_strip(ctx: Ctx, ads: Sequence[Dict[str, Any]], limit: int = STRIP_AD
 
 # ----- Format -----
 
+DERIVED_NOTE = "3-second plays (derived): spend divided by cost per 3-second view, not reported."
+UNKNOWN_FORMAT = "unknown"
+
+
+def _is_derived(rows: Sequence[Dict[str, Any]]) -> bool:
+    return any(str(r.get("video_views_3s_source") or "").startswith("derived") for r in rows)
+
+
+def _ad_rows(ctx: Ctx, ads: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [r for a in ads for r in ctx.rows_by_ad.get(_ad_key(a), [])]
+
+
 def _grade_across(values: Dict[str, float], lower_better: bool) -> Dict[str, str]:
     """Plain-word band per format by rank among the formats; equal values share a band and a tie is marked."""
     if len(values) < MIN_FORMATS:
@@ -908,6 +920,8 @@ def format_scorecard(ctx: Ctx) -> Tuple[str, str]:
     for ad in ctx.ads:
         groups.setdefault(ad.get("format") or "unknown", []).append(ad)
     cells: Dict[str, Dict[str, Tuple[Optional[float], str]]] = {}
+    derived_seen: set = set()
+    derived_formats: set = set()
     for row in formats:
         ads, line = groups.get(row["format"], []), {}
         for key, _ in FORMAT_COLUMNS:
@@ -917,13 +931,16 @@ def format_scorecard(ctx: Ctx) -> Tuple[str, str]:
             elif not ads:
                 value, reason = None, _na("the data file is needed")
             elif key in VIDEO_KPIS:
-                used = [a for a in ads if all(a.get(f) is not None for f in VIDEO_KPIS[key])]
+                used = video_rows(_ad_rows(ctx, ads), key)
                 if not used:
                     value, reason = None, _na("not video")
                 else:
                     total = totals(used)
                     value = cm.compute_metrics(total)[key]
                     reason = _why_missing(total, key)
+                    if value is not None and key == "hook_rate" and _is_derived(used):
+                        derived_seen.add(key)
+                        derived_formats.add(row["format"])
             else:
                 total = totals(ads)
                 value = cm.compute_metrics(total)[key]
@@ -932,8 +949,10 @@ def format_scorecard(ctx: Ctx) -> Tuple[str, str]:
         cells[row["format"]] = line
     bands = {}
     for key, _ in FORMAT_COLUMNS:
-        values = {name: line[key][0] for name, line in cells.items() if line[key][0] is not None}
+        values = {name: line[key][0] for name, line in cells.items() if line[key][0] is not None and name != UNKNOWN_FORMAT}
         bands[key] = _grade_across(values, key in LOWER_BETTER)
+        if UNKNOWN_FORMAT in cells and cells[UNKNOWN_FORMAT][key][0] is not None:
+            bands[key][UNKNOWN_FORMAT] = "not graded: format not known"
     body = []
     for row in formats:
         name, line, ads = row["format"], cells[row["format"]], groups.get(row["format"], [])
@@ -942,6 +961,8 @@ def format_scorecard(ctx: Ctx) -> Tuple[str, str]:
         for key, head in FORMAT_COLUMNS:
             value, reason = line[key]
             grade = ' <span class="grade">%s</span>' % esc(bands[key][name]) if value is not None and name in bands[key] else ""
+            if value is not None and key == "hook_rate" and name in derived_formats:
+                grade = ' <span class="grade">(derived)</span>' + grade
             tds += '<td class="num" data-label="%s">%s%s</td>' % (esc(head), esc(reason if value is None else _format_value(ctx, key, value)), grade)
         body.append('<tr><td class="fmt-name">%s</td><td class="num" data-label="Ads">%d</td><td class="num" data-label="Spend share">%s</td>%s</tr>'
                     % (esc(_group_name(name, "Format not known")), row["ads"], esc(share), tds))
@@ -950,25 +971,33 @@ def format_scorecard(ctx: Ctx) -> Tuple[str, str]:
     note = ('<p class="muted">Each format is graded only against your other formats, by rank: equal values share a band and a tie is marked (tied). '
             'It needs %d or more formats with a value, else it reads "not graded". CPM and CPA grade the other way round (lowest is best). '
             'Hook and hold rate count video ads only. ROAS and CPA come from creative-mix; the other rates are ratios of summed counts. '
-            'The strips show each format\'s top %d ads by spend (N=%d).</p>' % (MIN_FORMATS, STRIP_ADS, STRIP_ADS))
+            'Hook and hold rate use only the days that carry 3-second plays. The strips show each format\'s top %d ads by spend (N=%d). An ad with no format in its name is '
+            'listed but never graded.</p>' % (MIN_FORMATS, STRIP_ADS, STRIP_ADS))
+    if derived_seen:
+        note += '<p class="muted">%s</p>' % esc(DERIVED_NOTE)
     return table(header, body, stack=True) + note, "data"
 
 
-def _rate(ctx: Ctx, ad: Dict[str, Any], metric: str) -> Optional[float]:
-    value = (((ctx.grade_index.get(_ad_key(ad)) or {}).get("grades") or {}).get(metric) or {}).get("value")
-    return value if value is not None else ad.get(metric)
+def _video_rates(ctx: Ctx, ad: Dict[str, Any]) -> Tuple[Optional[float], Optional[float], bool]:
+    """Hook and hold rate of one ad from its days that carry the plays, and whether those plays were derived."""
+    rows = ctx.rows_by_ad.get(_ad_key(ad), [])
+    hook_rows, hold_rows = video_rows(rows, "hook_rate"), video_rows(rows, "hold_rate")
+    hook = cm.compute_metrics(totals(hook_rows))["hook_rate"] if hook_rows else None
+    hold = cm.compute_metrics(totals(hold_rows))["hold_rate"] if hold_rows else None
+    return hook, hold, _is_derived(hook_rows)
 
 
 def video_hook_hold(ctx: Ctx) -> Tuple[str, str]:
     if not ctx.ads:
         return empty_state(*NO_ROWS)
-    points = []
+    points, derived = [], 0
     for ad in ctx.ads:
-        if ad.get("video_views_3s") is None or ad.get("video_thruplay") is None or not ad.get("spend"):
+        if not ad.get("spend"):
             continue
-        hook, hold = _rate(ctx, ad, "hook_rate"), _rate(ctx, ad, "hold_rate")
+        hook, hold, was_derived = _video_rates(ctx, ad)
         if hook is not None and hold is not None:
             points.append((hook, hold, ad["spend"], readable_label(ad, ad.get("ad_name"), ad.get("ad_id")), ad))
+            derived += was_derived
     if len(points) < 2:
         return empty_state("Fewer than two video ads have both a hook rate and a hold rate, so there is nothing to compare.",
                            "Include the 3-second video plays and ThruPlays columns in the export or connector pull.")
@@ -984,6 +1013,8 @@ def video_hook_hold(ctx: Ctx) -> Tuple[str, str]:
     note = ('<p class="muted">The dashed lines are your own median hook rate (%.2f%%) and hold rate (%.2f%%) across these %d video ads; '
             'an ad on a line counts as high. The %d biggest spenders are named where there is room (N=%d, set it with <code>--top-n</code>); hover any bubble for its name.</p>'
             % (hook_med, hold_med, len(points), min(ctx.top_n, len(points)), ctx.top_n))
+    if derived:
+        note += '<p class="muted">%s It applies to %d of these ads.</p>' % (esc(DERIVED_NOTE), derived)
     return chart + legend + note, "data"
 
 
@@ -1001,20 +1032,23 @@ def video_retention(ctx: Ctx) -> Tuple[str, str]:
         return empty_state("No column was found for: %s." % ", ".join(missing),
                            "In Ads Manager add the video quartile columns (plays at 25, 50, 75, 95 and 100 percent), and Video average play time if you can, then export again.")
     chosen: List[Tuple[Dict[str, Any], List[float]]] = []
+    left_out = 0
     for ad in _by_spend(ctx.ads):
-        if ad.get("video_views_3s") is None:
+        full = [r for r in ctx.rows_by_ad.get(_ad_key(ad), [])
+                if r.get("video_views_3s") is not None and all(cm._list_value(r.get(headers[step])) is not None for step, _, _, _ in RETENTION_STEPS)]
+        if not full:
             continue
-        counts: List[float] = [ad["video_views_3s"]]
-        for step, _, _, _ in RETENTION_STEPS:
-            seen = [v for v in (cm._list_value(r.get(headers[step])) for r in ctx.rows_by_ad.get(_ad_key(ad), [])) if v is not None]
-            if not seen:
-                break
-            counts.append(sum(seen))
-        else:
-            chosen.append((ad, counts))
+        if _is_derived(full):
+            left_out += 1
+            continue
+        counts = [sum(r["video_views_3s"] for r in full)] + [sum(cm._list_value(r.get(headers[step])) for r in full) for step, _, _, _ in RETENTION_STEPS]
+        chosen.append((ad, counts))
         if len(chosen) == RETENTION_ADS:
             break
     if not chosen:
+        if left_out:
+            return empty_state("Every video ad with quartile counts has derived 3-second plays (spend divided by cost per 3-second view), and this chart shows raw counts only.",
+                               "Pull 3-second video plays as a reported column (Ads Manager export) instead of deriving them.")
         return empty_state("The quartile columns are in the data, but no video ad has a count in all five.",
                            "Check that the export has values in the Video plays at 25% to 100% columns for video ads.")
     labels = [readable_label(ad, ad.get("ad_name"), ad.get("ad_id")) for ad, _ in chosen]
@@ -1031,8 +1065,12 @@ def video_retention(ctx: Ctx) -> Tuple[str, str]:
             weighted = [(t, w) for t, w in pairs if t is not None and w]
             watch = ("%.1f s" % (sum(t * w for t, w in weighted) / sum(w for _, w in weighted))) if weighted else _na("no values")
         rows_html.append((label, watch, _clock_or_na(ctx.video_lengths.get(_ad_key(ad)))))
-    note = ('<p class="muted">The lines are raw counts of people (plays at each point), so they start at 3-second plays and can only fall. Average watch '
-            'time is weighted by 3-second plays across days. The top %d video ads by spend with all five counts are shown (N=%d).</p>' % (RETENTION_ADS, RETENTION_ADS))
+    rises = any(later > earlier for _, c in chosen for earlier, later in zip(c, c[1:]))
+    note = ('<p class="muted">The lines are raw counts of people (plays at each point), summed over the days that carry all five counts. Average watch '
+            'time is weighted by 3-second plays across days. The top %d video ads by spend with all five counts are shown (N=%d).%s%s</p>'
+            % (RETENTION_ADS, RETENTION_ADS,
+               " On short videos the 25% point comes before the 3-second mark, so the line can rise." if rises else "",
+               " %d ad%s with derived 3-second plays left out." % (left_out, "" if left_out == 1 else "s") if left_out else ""))
     return chart + _table_of(rows_html, [("Ad", False), ("Average watch time", True), ("Video length", True)]) + note, "data"
 
 

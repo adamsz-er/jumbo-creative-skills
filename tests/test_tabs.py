@@ -51,6 +51,18 @@ def synthetic_rows():
     return rows
 
 
+def video_day(ad, fmt, day, impressions, plays=None, thru=None, link_clicks=None, source=None, quartiles=False, first_quartile=None):
+    row = {"ad_id": ad, "ad_name": "c%s | %s | house | bau | p | lofi | 2026-03-01" % (ad, fmt), "date": day, "spend": 100.0, "impressions": impressions}
+    if link_clicks is not None:
+        row["link_clicks"] = link_clicks
+    if plays is not None:
+        row.update(video_views_3s=plays, video_thruplay=thru, video_views_3s_source=source or "reported")
+    if quartiles:
+        for n, name in enumerate(("25%", "50%", "75%", "95%", "100%")):
+            row["Video plays at " + name] = first_quartile if (n == 0 and first_quartile is not None) else plays * (0.8 - 0.1 * n)
+    return row
+
+
 class Fixture(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -170,11 +182,76 @@ class FormatTest(Fixture):
             self.assertTrue(1 <= len(found) <= 3)
             self.assertTrue(set(found) <= ids)
 
-    def test_ratios_use_summed_counts_not_an_average_of_ads(self):
-        rows = [{"ad_id": str(i), "ad_name": "c%d | static | house | bau | p | lofi | 2026-03-01" % i, "date": "2026-03-01",
-                 "spend": 100.0, "impressions": imp, "link_clicks": clk} for i, (imp, clk) in enumerate(((1000.0, 10.0), (9000.0, 900.0)))]
-        total = panels.totals(rows)
-        self.assertAlmostEqual(cm.compute_metrics(total)["ctr"], 9.1, places=6)
+    def test_the_rendered_scorecard_ctr_is_the_ratio_of_sums_across_unequal_ads(self):
+        rows = [video_day("1", "static", "2026-03-01", 1000.0, link_clicks=10.0), video_day("2", "static", "2026-03-01", 9000.0, link_clicks=900.0)]
+        html, _ = panels.format_scorecard(panels.Ctx(rows=rows, mix=analyse_mix(rows), currency="USD"))
+        self.assertIn("9.10%", html)
+        self.assertNotIn("5.50%", html)
+
+    def test_hook_and_hold_ignore_the_days_a_video_ad_has_no_plays_for(self):
+        rows = [video_day("1", "ugc-video", "2026-03-01", 1000.0, plays=500.0, thru=100.0),
+                video_day("1", "ugc-video", "2026-03-02", 9000.0)]
+        html, _ = panels.format_scorecard(panels.Ctx(rows=rows, mix=analyse_mix(rows), currency="USD"))
+        self.assertIn("50.00%", html)
+        self.assertNotIn("5.00%", html)
+
+    def test_the_bubble_chart_reads_the_same_video_days(self):
+        rows = [video_day("1", "ugc-video", "2026-03-01", 1000.0, plays=500.0, thru=100.0), video_day("1", "ugc-video", "2026-03-02", 9000.0),
+                video_day("2", "ugc-video", "2026-03-01", 1000.0, plays=200.0, thru=100.0)]
+        html, state = panels.video_hook_hold(panels.Ctx(rows=rows, mix=analyse_mix(rows), currency="USD"))
+        self.assertEqual(state, "data")
+        self.assertIn("Hook rate (%) 50.00", html)
+        self.assertNotIn("Hook rate (%) 5.00", html)
+
+    def test_derived_three_second_plays_are_labelled_in_the_scorecard_and_the_bubble_note(self):
+        rows = [video_day(str(i), "ugc-video", "2026-03-01", 1000.0, plays=100.0 * i, thru=50.0, source="derived: spend / cost per 3-second view")
+                for i in (1, 2, 3)]
+        ctx = panels.Ctx(rows=rows, mix=analyse_mix(rows), currency="USD")
+        card = panels.format_scorecard(ctx)[0]
+        self.assertIn("(derived)", card)
+        self.assertIn("derived", panels.video_hook_hold(ctx)[0].lower())
+
+    def test_retention_leaves_derived_ads_out_and_says_why(self):
+        rows = [video_day("1", "ugc-video", "2026-03-01", 1000.0, plays=500.0, thru=100.0, quartiles=True),
+                video_day("2", "ugc-video", "2026-03-01", 1000.0, plays=400.0, thru=100.0, quartiles=True, source="derived: spend / cost per 3-second view")]
+        html, state = panels.video_retention(panels.Ctx(rows=rows, mix=analyse_mix(rows), currency="USD"))
+        self.assertEqual(state, "data")
+        self.assertEqual(html.count('<path class="line s'), 1)
+        self.assertIn("derived", html)
+        only_derived = [rows[1]]
+        html, state = panels.video_retention(panels.Ctx(rows=only_derived, mix=analyse_mix(only_derived), currency="USD"))
+        self.assertEqual(state, "empty")
+        self.assertIn("derived", html)
+
+    def test_retention_first_point_sums_only_the_days_that_carry_all_five_counts(self):
+        rows = [video_day("1", "ugc-video", "2026-03-01", 1000.0, plays=500.0, thru=100.0, quartiles=True),
+                video_day("1", "ugc-video", "2026-03-02", 1000.0, plays=700.0, thru=100.0)]
+        html, _ = panels.video_retention(panels.Ctx(rows=rows, mix=analyse_mix(rows), currency="USD"))
+        self.assertIn("3-second plays: 500 people", html)
+        self.assertNotIn("1,200", html)
+
+    def test_an_unknown_format_is_not_graded_and_does_not_count_toward_three(self):
+        rows = [video_day("1", "static", "2026-03-01", 1000.0, link_clicks=10.0), video_day("2", "carousel", "2026-03-01", 1000.0, link_clicks=20.0)]
+        rows.append({"ad_id": "3", "ad_name": "mystery", "date": "2026-03-01", "spend": 50.0, "impressions": 1000.0, "link_clicks": 30.0})
+        mix = analyse_mix(rows)
+        mix["by_format"] = mix["by_format"] + [{"format": "unknown", "ads": 1, "spend": 50.0, "share": 10.0, "roas": None, "cpa": None}]
+        html, _ = panels.format_scorecard(panels.Ctx(rows=rows, mix=mix, currency="USD"))
+        self.assertIn("not graded: fewer than 3 formats", html)
+        self.assertIn("not graded: format not known", html)
+        self.assertNotIn("best of your formats", html)
+
+    def test_the_retention_note_does_not_claim_the_lines_only_fall_and_explains_a_rise(self):
+        html, _ = panels.video_retention(self.ctx)
+        self.assertNotIn("can only fall", html)
+        rows = [video_day("1", "ugc-video", "2026-03-01", 1000.0, plays=100.0, thru=50.0, quartiles=True, first_quartile=300.0)]
+        html, _ = panels.video_retention(panels.Ctx(rows=rows, mix=analyse_mix(rows), currency="USD"))
+        self.assertIn("On short videos the 25% point comes before the 3-second mark", html)
+
+    def test_a_non_finite_number_in_the_data_is_missing_not_a_value(self):
+        for text in ("nan", "inf", "-inf", "NaN"):
+            self.assertIsNone(cm._num(text), text)
+        self.assertIsNone(cm._num(float("nan")))
+        self.assertEqual(cm._num("1,234.5"), 1234.5)
 
     def test_bubble_chart_has_four_plain_word_quadrants_and_labels_the_top_ads(self):
         html, _ = panels.video_hook_hold(self.ctx_with(top_n=2))
