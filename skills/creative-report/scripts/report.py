@@ -130,8 +130,9 @@ def tabs_html(ctx: Ctx) -> str:
             content, state = fn(ctx)
             inner.append('<section class="card panel" id="panel-%s" data-state="%s"><p class="eyebrow">%s</p><h3>%s</h3>%s</section>'
                          % (panel_id, state, esc(eyebrow), esc(heading), content))
-        out.append('<section class="tab" id="tab-%s" aria-labelledby="h-%s"><h2 class="tab-title" id="h-%s">%s</h2>%s</section>'
-                   % (tab_id, tab_id, tab_id, esc(title), "".join(inner)))
+        banner = panels.overview_banner(ctx) if tab_id == "overview" else ""
+        out.append('<section class="tab" id="tab-%s" aria-labelledby="h-%s"><h2 class="tab-title" id="h-%s">%s</h2>%s%s</section>'
+                   % (tab_id, tab_id, tab_id, esc(title), banner, "".join(inner)))
     return "".join(out)
 
 

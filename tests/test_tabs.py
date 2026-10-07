@@ -118,7 +118,7 @@ class NewPanelStateTest(Fixture):
         seg = PANELS["segments"](self.ctx)
         self.assertEqual(seg[1], "empty")
         self.assertIn("Meta&#x27;s connector returns no age, gender or placement breakdowns: export one from Ads Manager "
-                      "(recipe in creative-context) and pass it with --breakdowns", seg[0])
+                      "(recipe in creative-context) and add it when you rebuild this report", seg[0])
         copy_html, copy_state = PANELS["copy"](self.ctx)
         self.assertEqual(copy_state, "empty")
         self.assertIn("Copy comes back only for classic creatives; flexible and dynamic creatives return none. "
@@ -514,7 +514,7 @@ class BriefingTest(Fixture):
     def test_no_briefs_file_and_nothing_to_build_from_is_an_empty_state(self):
         html, state = panels.ready_briefs(panels.Ctx(rows=self.rows))
         self.assertEqual(state, "empty")
-        self.assertIn("--briefs", html)
+        self.assertIn("add them when you rebuild this report", html)
 
     def test_the_copy_panel_lists_cta_types_and_the_opening_line_of_top_ads_with_a_verdict_chip(self):
         verdict_rows = [{"ad": r["ad_id"], "ad_name": r["ad_name"], "verdict_id": "keep", "spend": r["spend"]} for r in self.syn_rows]

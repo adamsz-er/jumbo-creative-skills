@@ -36,7 +36,6 @@ KPI_ORDER = (
     ("conversions", "Purchases", "int"), ("cpa", "CPA", "money2"), ("conversion_value", "Purchase value", "money0"),
     ("roas", "ROAS", "x2"), ("hook_rate", "Hook rate", "pct"), ("hold_rate", "Hold rate", "pct"),
 )
-NEEDS_ACCOUNT = "n/a (needs account-level reach)"
 FUNNEL_COLUMNS = {
     "landing_page_views": ("landingpageviews", "landingpageview", "omnilandingpageview", "websitelandingpageviews"),
     "checkouts": ("checkoutsinitiated", "initiatedcheckout", "omniinitiatedcheckout", "websitecheckoutsinitiated", "checkouts"),
@@ -208,7 +207,7 @@ def ad_detail(ctx: Ctx, key: str, label: str, fmt: str, full: Dict[str, Any], ba
     conf = ("%s (%s)" % (full["confidence"], full.get("confidence_reason") or "no reason given")) if full.get("confidence") else "n/a (no verdict supplied)"
     bands = interact.band_rows(grade, ctx.money, fmt)
     metrics = (_table_of([(b["label"], b["value"], b["band"]) for b in bands], [("Metric", False), ("Value", True), ("Against your own ads", False)])
-               if bands else '<p class="muted">not graded: no grade data for this ad. Run creative-grader with --json and pass --grade.</p>')
+               if bands else '<p class="muted">not graded: no grade data for this ad. Run the creative-grader skill and add its grades when you rebuild this report.</p>')
     funnel_rows = interact.ad_funnel(ctx.ad_index.get(key), fmt)
     funnel_table = _table_of([(f["step"], f["count"], f["share"]) for f in funnel_rows], [("Step", False), ("Count", True), ("Share of impressions", True)])
     age = full.get("age_days") if full.get("age_days") is not None else base.get("age_days")
@@ -377,6 +376,48 @@ def video_ads(ads: Sequence[Dict[str, Any]], key: str) -> int:
     return sum(1 for a in ads if all(a.get(f) is not None for f in VIDEO_KPIS[key]))
 
 
+NEUTRAL_KPIS = ("spend", "impressions", "reach", "frequency")
+LOWER_IS_BETTER = ("cpm", "cpa")
+ACCOUNT_KPIS = ("reach", "frequency")
+
+
+def missing_everywhere(ctx: Ctx) -> List[str]:
+    """Overview metrics no ad can give, in tile order: video rates when no ad has the plays, reach and frequency without an account-level figure."""
+    if not ctx.ads:
+        return []
+    gone = [key for key in VIDEO_KPIS if not video_ads(ctx.ads, key)]
+    return gone + ([] if ctx.account else list(ACCOUNT_KPIS))
+
+
+def overview_banner(ctx: Ctx) -> str:
+    """One banner for every metric that is missing for all ads, so the tiles can read a plain n/a; "" when nothing is missing everywhere."""
+    gone = missing_everywhere(ctx)
+    lines = []
+    if "hook_rate" in gone:
+        lines.append("Hook and hold rate are unavailable in this pull: no ad reports 3-second video plays. "
+                     "Add the 3-second plays and ThruPlays columns to the export, or pull them through the connector.")
+    elif "hold_rate" in gone:
+        lines.append("Hold rate is unavailable in this pull: no ad reports ThruPlays. Add the ThruPlays column to the export, or pull it through the connector.")
+    if "reach" in gone:
+        lines.append("Reach and frequency don't add up across ads, so they need an account-level figure for this window; none was supplied. "
+                     "Pull account-level reach and frequency for the same window and add them when you rebuild this report.")
+    if not lines:
+        return ""
+    return '<div class="banner" role="note">%s</div>' % "".join("<p>%s</p>" % esc(line) for line in lines)
+
+
+def _tile_value(text: str) -> Tuple[str, str]:
+    """A tile's big value and, for an n/a, the plain reason that goes on its own muted line."""
+    found = re.fullmatch(r"n/a \((.*)\)", text)
+    return ("n/a", found.group(1)) if found else (text, "")
+
+
+def _delta_pill(key: str, change: float) -> str:
+    good = change < 0 if key in LOWER_IS_BETTER else change > 0
+    tone = "flat" if key in NEUTRAL_KPIS or change == 0 else "up" if good else "down"
+    return '<span class="pill %s">%+.1f%%</span> vs prior period' % (tone, change)
+
+
 def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
     if not ctx.rows:
         return empty_state("There are no ads, so no totals can be added up.",
@@ -386,6 +427,7 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
     series = daily(ctx.rows)
     ctr_basis = cm.metric_basis(total, "ctr")["numerator"]
     derived = total.get("video_views_3s_source") == "derived"
+    gone = missing_everywhere(ctx)
     tiles = []
     needs = {"spend": ("spend",), "impressions": ("impressions",), "conversions": ("conversions",), "conversion_value": ("conversion_value",),
              "cpm": ("spend", "impressions"), "ctr": (ctr_basis or "link_clicks", "impressions"), "cpa": ("spend", "conversions"),
@@ -396,11 +438,11 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
             vrows = video_rows(ctx.rows, key)
             tot, sser = totals(vrows), daily(vrows)
             ptot = totals(video_rows(ctx.prior, key)) if ctx.prior else None
-            video_note = "video ads only (%d of %d ads)" % (video_ads(ctx.ads, key), len(ctx.ads))
+            video_note = "" if key in gone else "video ads only (%d of %d ads)" % (video_ads(ctx.ads, key), len(ctx.ads))
         if key == "reach":
-            text = "{:,.0f}".format(ctx.account["reach"]) if ctx.account else NEEDS_ACCOUNT
+            text = "{:,.0f}".format(ctx.account["reach"]) if ctx.account else "n/a"
         elif key == "frequency":
-            text = "%.2f" % ctx.account["frequency"] if ctx.account else NEEDS_ACCOUNT
+            text = "%.2f" % ctx.account["frequency"] if ctx.account else "n/a"
         else:
             text = _kpi_text(ctx, tot, key, kind)
         label = name
@@ -408,28 +450,24 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
             label = "CTR (all clicks)"
         if key == "hook_rate" and derived:
             label += " (derived)"
-        if key in ("reach", "frequency") or prior_total is None:
-            delta = "no prior period" if prior_total is None else "n/a (reach is account-level only)"
+        value, reason = ("n/a", "") if key in gone else _tile_value(text)
+        if key in ACCOUNT_KPIS or prior_total is None:
+            delta = '<span class="muted">%s</span>' % esc("no prior period" if prior_total is None else "n/a (reach is account-level only)")
         else:
             change = _pct_change(_kpi_value(tot, key), _kpi_value(ptot, key)) if ptot is not None else None
-            delta = "n/a (prior value missing or zero)" if change is None else "%+.1f%% vs prior period" % change
+            delta = '<span class="muted">n/a (prior value missing or zero)</span>' if change is None else _delta_pill(key, change)
         spark = ""
-        if key not in ("reach", "frequency"):
+        if key not in ACCOUNT_KPIS:
             spark = charts.sparkline([_kpi_value(day_total, key) for _, day_total in sser], "%s by day" % name)
-        spark_note = spark or ('<span class="muted">%s</span>' % ("one day of data" if len(sser) == 1 else
-                                                                   "no sparkline for reach or frequency" if key in ("reach", "frequency") else "no dates in the data"))
+        spark_note = spark or ("" if key in ACCOUNT_KPIS or key in gone else
+                               '<span class="muted">%s</span>' % ("one day of data" if len(sser) == 1 else "no dates in the data"))
         unit = " (%s)" % (ctx.currency or "account currency") if kind.startswith("money") else ""
-        partial = [] if video_note else coverage(ctx.ads, needs.get(key, ()))
-        unknown = " unknown" if text.startswith("n/a") else ""
-        notes = ([video_note] if video_note else []) + partial
+        partial = [] if video_note or key in gone else coverage(ctx.ads, needs.get(key, ()))
+        notes = ([reason] if reason else []) + ([video_note] if video_note else []) + partial
         note_html = '<p class="kpi-note">%s</p>' % esc("; ".join(notes)) if notes else ""
         tiles.append('<div class="kpi%s%s"><p class="kpi-name">%s%s</p><p class="kpi-value">%s</p>%s<p class="kpi-delta">%s</p><div class="kpi-spark">%s</div></div>'
-                     % (unknown, " partial" if partial else "", esc(label), esc(unit), esc(text), note_html, esc(delta), spark_note))
-    note = ""
-    if not ctx.account:
-        note = ('<p class="muted">Reach and frequency do not add up across ads and days, so they come only from an account-level pull. '
-                'Pull account-level reach and frequency for this window, save them as JSON with a "reach" and a "frequency" number and pass the file with <code>--account</code>.</p>')
-    return '<div class="kpis">%s</div>%s' % ("".join(tiles), note), "data"
+                     % (" unknown" if value == "n/a" else "", " partial" if partial else "", esc(label), esc(unit), esc(value), note_html, delta, spark_note))
+    return '<div class="kpis">%s</div>' % "".join(tiles), "data"
 
 
 def over_time(ctx: Ctx) -> Tuple[str, str]:
@@ -459,7 +497,7 @@ def do_first(ctx: Ctx) -> Tuple[str, str]:
     items = [e for e in (((ctx.verdicts or {}).get("summary") or {}).get("do_first") or []) if entry_class(e) != "cant"]
     if not items:
         return empty_state("The keep-or-kill verdicts were not supplied, or no ad needs an action.",
-                           "Run keep-or-kill with --json and pass --verdicts.")
+                           "Run the keep-or-kill skill and add its verdicts when you rebuild this report.")
     cards = [ad_card(ctx, e, driver="Spend at stake: %s" % ctx.money(e.get("spend_at_stake")), next_step=True) for e in items]
     return card_grid(cards), "data"
 
@@ -586,7 +624,7 @@ def pareto(ctx: Ctx) -> Tuple[str, str]:
                                 info["cut"], "Pareto: ads ranked by spend", ctx.currency or "account currency")
     lead = '<p class="lead">%s</p>' % esc(pareto_sentence(ctx, info))
     note = ('<p class="muted">The cut is the fewest top-spend ads whose cumulative %s reaches %.0f%%. That share is a common convention, not a rule: '
-            'change it with <code>--pareto-share</code> to suit your account.</p>' % ("purchase value" if info["has_value"] else "spend", ctx.pareto_share))
+            'you can change it when you rebuild the report, to suit your account.</p>' % ("purchase value" if info["has_value"] else "spend", ctx.pareto_share))
     return lead + chart + note, "data"
 
 
@@ -625,7 +663,7 @@ def verdict_board(ctx: Ctx) -> Tuple[str, str]:
     ads = [dict(e, verdict_id=e.get("verdict_id") or "") for e in (ctx.verdicts or {}).get("ads") or []]
     if not ads:
         return empty_state("The keep-or-kill verdicts were not supplied, so no ad has a call.",
-                           "Run keep-or-kill with --json and pass --verdicts.")
+                           "Run the keep-or-kill skill and add its verdicts when you rebuild this report.")
     columns = {cls: [] for cls, _ in BOARD}
     for entry in ads:
         columns[entry_class(entry)].append(entry)
@@ -643,7 +681,7 @@ def verdict_board(ctx: Ctx) -> Tuple[str, str]:
         cols.append('<div class="col col-%s"><h3><span class="badge %s">%s</span> <span class="count">%d</span></h3>%s%s</div>'
                     % (cls, cls, esc(name), len(ordered), "".join(cards) or '<p class="muted">No ads in this column.</p>',
                        compact_list(ctx, ordered[ctx.top_n:], "%s ads" % name.lower())))
-    lead = '<p class="muted">Each column shows its top %d ads by spend at stake (N=%d, set it with <code>--top-n</code>); the rest are collapsed.</p>' % (ctx.top_n, ctx.top_n)
+    lead = '<p class="muted">Each column shows its top %d ads by spend at stake (N=%d, a default you can change when you rebuild the report); the rest are collapsed.</p>' % (ctx.top_n, ctx.top_n)
     return note + basis + lead + '<div class="board">%s</div>' % "".join(cols), "data"
 
 
@@ -654,7 +692,7 @@ def fatigue(ctx: Ctx) -> Tuple[str, str]:
     top = sorted(ctx.ads, key=lambda a: -(a.get("spend") or 0))[:ctx.top_n]
     if not ctx.rows and not points:
         return empty_state("Neither daily data nor keep-or-kill fatigue readings were supplied.",
-                           "Pass the daily data file, and run keep-or-kill with --json and pass --verdicts.")
+                           "Pass the daily data file, and run the keep-or-kill skill and add its verdicts when you rebuild this report.")
     multiples = []
     for ad in top:
         key = str(ad.get("ad_id") or ad.get("ad_name"))
@@ -675,7 +713,7 @@ def fatigue(ctx: Ctx) -> Tuple[str, str]:
         parts.append("<h3>Age against CTR change</h3>" + plot)
     if not parts:
         return empty_state("No ad has two or more delivery days or a fatigue reading.",
-                           "Pull daily data over a longer window, and run keep-or-kill with --json and pass --verdicts.")
+                           "Pull daily data over a longer window, and run the keep-or-kill skill and add its verdicts when you rebuild this report.")
     return "".join(parts), "data"
 
 
@@ -688,7 +726,7 @@ def default_group(ctx: Ctx) -> str:
 def ways_to_improve(ctx: Ctx) -> Tuple[str, str]:
     if not ctx.grade or not ctx.records:
         return empty_state("The creative-grader results were not supplied, so no ad has a diagnosed weak step.",
-                           "Run creative-grader with --json and pass the file with --grade.")
+                           "Run the creative-grader skill and add its grades when you rebuild this report.")
     groups = interact.weak_groups(ctx.records)
     total = len(ctx.records)
     diagnosed = sum(g["ads"] for g in groups if g["step"] not in (None, "none"))
@@ -732,7 +770,7 @@ def all_ads(ctx: Ctx) -> Tuple[str, str]:
     controls = ('<div class="gallery-controls"><label>Group by <select data-action="group">%s</select></label>'
                 '<label>Sort by <select data-action="sort">%s</select></label>'
                 '<button type="button" class="chip" aria-pressed="false" data-action="previews-only">Previews only</button></div>' % (group_options, sort_options))
-    lead = ('<p class="muted">Every ad, shown %s and sorted by spend at stake until you change it. The top %d of each group show as cards (N=%d, set it with <code>--top-n</code>), the rest as a compact list. '
+    lead = ('<p class="muted">Every ad, shown %s and sorted by spend at stake until you change it. The top %d of each group show as cards (N=%d, a default you can change when you rebuild the report), the rest as a compact list. '
             'Each group header adds up its own spend, with ROAS and CPA as ratios of sums.</p>'
             % ("grouped by verdict" if group == "verdict" else "in one list", ctx.top_n, ctx.top_n))
     return (lead + controls + '<div id="allads-static">%s</div><div id="allads-live" aria-live="polite"></div>' % "".join(sections)), "data"
@@ -787,7 +825,7 @@ COPY_ADS = 8  # arbitrary default: how many top-spend ads show their opening lin
 OPENING_CHARS = 90  # arbitrary: where an opening line is cut, at a word boundary
 NOT_GRADED = "not graded: fewer than %d formats" % MIN_FORMATS
 NO_MIX = ("The creative-mix results were not supplied, so there is no format, concept or ad-type breakdown.",
-          "Run creative-mix with --json and pass the file with --mix.")
+          "Run the creative-mix skill and add its results when you rebuild this report.")
 NO_ROWS = ("There are no ads to read this from.", "Pass an Ads Manager export or the connector pull as the data file.")
 FORMAT_COLUMNS = (("ctr", "CTR"), ("cpm", "CPM"), ("cpa", "CPA"), ("roas", "ROAS"), ("hook_rate", "Hook rate"), ("hold_rate", "Hold rate"))
 LOWER_BETTER = ("cpm", "cpa")
@@ -914,7 +952,7 @@ def format_scorecard(ctx: Ctx) -> Tuple[str, str]:
     formats = ctx.mix.get("by_format") or []
     if not formats:
         return empty_state("creative-mix read no format from the ad names, so there is nothing to compare.",
-                           "Name ads with the convention in creative-context, or tell creative-mix the pattern with --pattern or --key-map.")
+                           "Name ads with the convention in creative-context, or tell the creative-mix skill the naming pattern your ads use.")
     groups: Dict[str, List[Dict[str, Any]]] = {}
     for ad in ctx.ads:
         groups.setdefault(ad.get("format") or "unknown", []).append(ad)
@@ -1010,7 +1048,7 @@ def video_hook_hold(ctx: Ctx) -> Tuple[str, str]:
         counts[QUADRANTS[1] if high_hook and high_hold else QUADRANTS[3] if high_hook else QUADRANTS[0] if high_hold else QUADRANTS[2]] += 1
     legend = '<ul class="quadrant-list">%s</ul>' % "".join("<li><b>%s</b>: %d ad%s</li>" % (esc(n), c, "" if c == 1 else "s") for n, c in counts.items())
     note = ('<p class="muted">The dashed lines are your own median hook rate (%.2f%%) and hold rate (%.2f%%) across these %d video ads; '
-            'an ad on a line counts as high. The %d biggest spenders are named where there is room (N=%d, set it with <code>--top-n</code>); hover any bubble for its name.</p>'
+            'an ad on a line counts as high. The %d biggest spenders are named where there is room (N=%d, a default you can change when you rebuild the report); hover any bubble for its name.</p>'
             % (hook_med, hold_med, len(points), min(ctx.top_n, len(points)), ctx.top_n))
     if derived:
         note += '<p class="muted">%s It applies to %d of these ads.</p>' % (esc(DERIVED_NOTE), derived)
@@ -1129,7 +1167,7 @@ def concept_heatmap(ctx: Ctx) -> Tuple[str, str]:
     families, formats = grid.get("families") or [], grid.get("formats") or []
     if not families or not formats:
         return empty_state("creative-mix read no concept and format from the ad names, so there is no grid.",
-                           "Name ads with the convention in creative-context, or tell creative-mix the pattern with --pattern or --key-map.")
+                           "Name ads with the convention in creative-context, or tell the creative-mix skill the naming pattern your ads use.")
     shown = families[:HEATMAP_CONCEPTS]
     cells = [[(grid["cells"][i][f]["ads"], grid["cells"][i][f]["spend"]) for f in formats] for i in range(len(shown))]
     chart = charts.heatmap([_plain(c) for c in shown], [_group_name(f, "Format not known") for f in formats], cells,
@@ -1234,10 +1272,10 @@ def segments(ctx: Ctx) -> Tuple[str, str]:
             parts.append('<p class="muted">The breakdown file has no age, gender, placement, platform, region or country column.</p>')
     elif markets:
         parts.append('<p class="muted">Meta\'s connector returns no age, gender or placement breakdowns: export one from Ads Manager '
-                     '(recipe in creative-context) and pass it with <code>--breakdowns</code>.</p>')
+                     '(recipe in creative-context) and add it when you rebuild this report.</p>')
     if not markets and not ctx.breakdown_dims:
         return empty_state("The ad names carry no market and no breakdown file was given, so there are no segments to show.",
-                           "Meta's connector returns no age, gender or placement breakdowns: export one from Ads Manager (recipe in creative-context) and pass it with --breakdowns.")
+                           "Meta's connector returns no age, gender or placement breakdowns: export one from Ads Manager (recipe in creative-context) and add it when you rebuild this report.")
     return "".join(parts), "data"
 
 
@@ -1265,7 +1303,7 @@ def gap_list(ctx: Ctx) -> Tuple[str, str]:
         return empty_state(*NO_MIX)
     if not ctx.gaps:
         return empty_state("creative-mix found no gap worth testing: no empty or single-ad cell sits beside a proven top-quarter concept or format.",
-                           "Widen the window, lower creative-mix --min-proven-spend, or add more concepts and formats to compare.")
+                           "Widen the window, lower the minimum proven spend in creative-mix, or add more concepts and formats to compare.")
 
     def item(number: int, gap: Dict[str, Any]) -> str:
         return ('<li class="gap" data-gap="%d"><b>#%d %s</b><p>%s</p></li>'
@@ -1278,7 +1316,7 @@ def gap_list(ctx: Ctx) -> Tuple[str, str]:
     lead = ('<p class="lead">%d gap%s worth testing, strongest first. A hypothesis to test, not a result.</p>' % (len(items), "" if len(items) == 1 else "s"))
     floor = ctx.mix.get("min_proven_spend")
     note = ('<p class="muted">A gap is an empty or single-ad cell beside a concept or format in the top quarter of your own ROAS, with at least %s of always-on '
-            'spend behind it (an arbitrary default, set it with creative-mix <code>--min-proven-spend</code>). The top %d show here (N=%d); the numbers match the outlines on the heatmap.</p>'
+            'spend behind it (an arbitrary default, set in creative-mix). The top %d show here (N=%d); the numbers match the outlines on the heatmap.</p>'
             % (esc(ctx.money(floor)) if floor is not None else "the proven spend", ctx.top_n, ctx.top_n))
     return lead + '<ol class="gaps">%s</ol>%s%s' % ("".join(items[:ctx.top_n]), rest, note), "data"
 
@@ -1372,10 +1410,10 @@ def ready_briefs(ctx: Ctx) -> Tuple[str, str]:
     starters = _starters(ctx)
     if not starters:
         return empty_state("No briefs file was given, and there are no coverage gaps or Iterate ads to build starters from.",
-                           "Write briefs with the creative-brief and hook-writer skills and pass them as a JSON list with --briefs, or run creative-mix and keep-or-kill with --json and pass --mix and --verdicts.")
+                           "Write briefs with the creative-brief and hook-writer skills and add them when you rebuild this report, or run the creative-mix and keep-or-kill skills and add their results.")
     note = ('<p class="muted">Brief starters, not finished briefs: the top %d gaps and the top %d Iterate ads by spend at stake (arbitrary defaults). '
             'A starter never invents a hook or a message; the button copies a prompt for the creative-brief and hook-writer skills. '
-            'To show finished briefs here, write them with those skills and pass the JSON list with <code>--briefs</code>.</p>' % (briefing.STARTER_GAPS, briefing.STARTER_ITERATE))
+            'To show finished briefs here, write them with those skills and add them when you rebuild this report.</p>' % (briefing.STARTER_GAPS, briefing.STARTER_ITERATE))
     return note + '<div class="brief-grid">%s</div>' % "".join(_starter_card(ctx, n, s) for n, s in enumerate(starters, 1)), "data"
 
 

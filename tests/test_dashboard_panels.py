@@ -246,7 +246,7 @@ class PartialCoverageTest(unittest.TestCase):
         full, _ = panels.kpi_strip(panels.Ctx(rows=self.ROWS, currency="USD"))
         self.assertNotIn("recorded on", full)
         none, _ = panels.kpi_strip(panels.Ctx(rows=[dict(r, conversion_value=None) for r in self.ROWS], currency="USD"))
-        self.assertIn("n/a (missing purchase value)", none)
+        self.assertRegex(none, r'<p class="kpi-name">ROAS[^<]*</p><p class="kpi-value">n/a</p><p class="kpi-note">missing purchase value</p>')
         self.assertNotIn("recorded on", none)
 
     def test_the_pareto_sentence_states_value_coverage_when_partial(self):
@@ -269,10 +269,10 @@ class KpiTest(unittest.TestCase):
 
     def test_reach_and_frequency_need_the_account_file(self):
         html, _ = panels.kpi_strip(panels.Ctx(rows=self.rows, currency="USD"))
-        self.assertEqual(html.count(panels.NEEDS_ACCOUNT), 2)
-        self.assertIn("--account", html)
+        tiles = dict(re.findall(r'<p class="kpi-name">([^<]*)</p><p class="kpi-value">([^<]*)</p>', html))
+        self.assertEqual((tiles["Reach"], tiles["Frequency"]), ("n/a", "n/a"))
         with_account, _ = panels.kpi_strip(panels.Ctx(rows=self.rows, currency="USD", account={"reach": 123456.0, "frequency": 1.75}))
-        self.assertNotIn(panels.NEEDS_ACCOUNT, with_account)
+        self.assertNotIn('kpi-value">n/a', with_account)
         self.assertIn("123,456", with_account)
         self.assertIn("1.75", with_account)
 
@@ -286,7 +286,7 @@ class KpiTest(unittest.TestCase):
     def test_prior_period_gives_a_signed_change(self):
         prior = [dict(r, spend=(r.get("spend") or 0) / 2) for r in self.rows]
         html, _ = panels.kpi_strip(panels.Ctx(rows=self.rows, currency="USD", prior=prior))
-        self.assertIn("+100.0% vs prior period", html)
+        self.assertIn("+100.0%</span> vs prior period", html)
         self.assertNotIn("no prior period", html.split("Impressions")[0])
 
     def test_hook_rate_is_marked_derived_when_three_second_plays_were_derived(self):
@@ -309,7 +309,7 @@ class KpiTest(unittest.TestCase):
 
     def test_a_missing_operand_reads_n_a_never_zero(self):
         html, _ = panels.kpi_strip(panels.Ctx(rows=[ad_row("1", "a", 100, 300)], currency="USD"))
-        self.assertIn("n/a (missing", html)
+        self.assertRegex(html, r'kpi-value">n/a</p><p class="kpi-note">missing ')
         self.assertNotRegex(html, r'kpi-value">0(\.0+)?%?<')
 
     def test_unknown_currency_is_stated_not_guessed(self):
@@ -357,7 +357,7 @@ class ParetoTest(unittest.TestCase):
         html, state = panels.pareto(panels.Ctx(rows=self.ROWS, currency="USD"))
         self.assertEqual(state, "data")
         self.assertIn("2 ads (33% of ads) drive 80% of purchase value.", html)
-        self.assertIn("--pareto-share", html)
+        self.assertIn("you can change it when you rebuild the report", html)
 
     def test_the_share_is_settable(self):
         html, _ = panels.pareto(panels.Ctx(rows=self.ROWS, currency="USD", pareto_share=90.0))
@@ -622,6 +622,10 @@ class ReaderWordsTest(unittest.TestCase):
         for name, page in self.pages.items():
             self.assertNotRegex(reader_text(page), r"(?i)\brows?\b", name)
 
+    def test_no_reader_visible_text_names_a_command_flag(self):
+        for name, page in self.pages.items():
+            self.assertNotRegex(reader_text(page), r"(?<![\w-])--[a-z]", name)
+
     def test_partial_coverage_is_said_in_ads(self):
         text = reader_text(self.pages["partial"])
         self.assertRegex(text, r"purchases recorded on \d+ of \d+ ads; the rest had none in this window")
@@ -629,3 +633,65 @@ class ReaderWordsTest(unittest.TestCase):
 
     def test_the_method_details_may_still_count_rows(self):
         self.assertIn("rows", self.pages["full"].split('<details class="method"')[1].split("</details>")[0] + " rows")
+
+
+NO_VIDEO = [{k: v for k, v in r.items() if not k.startswith("video")} for r in cm.load_rows(str(FIXTURE))]
+BANNER = 'class="banner"'
+
+
+class OverviewBannerTest(unittest.TestCase):
+    """One banner when a metric is missing for every ad; plain n/a in the tiles; nothing when it is only partly missing."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.rows = cm.load_rows(str(FIXTURE))
+        cls.account = {"reach": 123456.0, "frequency": 1.75}
+
+    def overview(self, **kw):
+        page = report.build_html(currency="USD", title="Acme", **kw)
+        return page.split('id="tab-overview"')[1].split('id="tab-pareto"')[0]
+
+    def test_hook_hold_reach_and_frequency_missing_everywhere_give_one_banner_at_the_top(self):
+        tab = self.overview(rows=NO_VIDEO)
+        self.assertEqual(tab.count(BANNER), 1)
+        self.assertLess(tab.index(BANNER), tab.index('id="panel-kpis"'))
+        text = reader_text(tab)
+        self.assertIn("Hook and hold rate are unavailable in this pull", text)
+        self.assertIn("Reach and frequency don't add up across ads, so they need an account-level figure for this window; none was supplied.", text)
+        tiles = dict(re.findall(r'<p class="kpi-name">([^<]*)</p><p class="kpi-value">([^<]*)</p>', tab))
+        for name in ("Hook rate", "Hold rate", "Reach", "Frequency"):
+            self.assertEqual(tiles[name], "n/a", name)
+        for name in ("Hook rate", "Hold rate", "Reach", "Frequency"):
+            tile = re.search(r'<p class="kpi-name">%s.*?</div></div>' % name, tab, re.S).group(0)
+            self.assertNotIn("kpi-note", tile, name)
+            self.assertNotIn("n/a (", tile, name)
+
+    def test_only_hold_missing_names_only_hold(self):
+        rows = [{k: v for k, v in r.items() if k != "video_thruplay"} for r in self.rows]
+        tab = self.overview(rows=rows, account=self.account)
+        self.assertEqual(tab.count(BANNER), 1)
+        text = reader_text(tab)
+        self.assertIn("Hold rate is unavailable in this pull", text)
+        self.assertNotIn("Hook and hold rate are unavailable", text)
+        self.assertNotIn("Reach and frequency don't add up", text)
+
+    def test_partly_missing_data_shows_no_banner_and_keeps_the_per_tile_note(self):
+        tab = self.overview(rows=self.rows, account=self.account)
+        self.assertEqual(tab.count(BANNER), 0)
+        hook = re.search(r'<p class="kpi-name">Hook rate.*?</div></div>', tab, re.S).group(0)
+        self.assertRegex(hook, r"video ads only \(\d+ of \d+ ads\)")
+
+    def test_the_account_file_removes_the_reach_sentence_only(self):
+        tab = self.overview(rows=NO_VIDEO, account=self.account)
+        self.assertEqual(tab.count(BANNER), 1)
+        self.assertNotIn("Reach and frequency", reader_text(tab.split(BANNER)[1].split("</div>")[0]))
+
+    def test_no_banner_without_data_the_whole_tab_is_an_empty_state(self):
+        self.assertEqual(self.overview(verdicts=acme_verdicts()).count(BANNER), 0)
+
+    def test_the_banner_is_the_only_place_that_says_why_everywhere(self):
+        tab = self.overview(rows=NO_VIDEO)
+        outside = tab.replace(re.search(r'<div class="banner".*?</div>', tab, re.S).group(0), "")
+        self.assertNotIn("unavailable in this pull", reader_text(outside))
+        self.assertNotIn("none was supplied", reader_text(outside))
+
