@@ -14,7 +14,7 @@ sys.path.insert(0, str(SCRIPT))
 import report  # noqa: E402
 
 FIXTURE = ROOT / "examples" / "acme" / "ads_daily.csv"
-HEADINGS = ("What to do first", "Basis", "Keep, kill, iterate, scale", "Funnel diagnosis",
+HEADINGS = ("What to do first", "Basis", "Pause, check, iterate, scale, keep", "Funnel diagnosis",
             "Creative mix", "Notes and missing data")
 BALANCED = ("section", "table", "svg", "div", "ul", "thead", "tbody", "tr", "td", "th")
 
@@ -124,7 +124,7 @@ class ReportTest(unittest.TestCase):
         self.assertIn("Acme", self.html)
 
     def test_verdict_and_mix_content_rendered(self):
-        self.assertIn("kill: never worked", self.html)
+        self.assertIn("Pause: never worked", self.html)
         self.assertIn("ugc-video", self.html)
         self.assertIn("partnership-haul", self.html)
 

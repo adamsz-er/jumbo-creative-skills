@@ -437,8 +437,8 @@ class EndToEndTest(unittest.TestCase):
         code, out, _ = run(grade.main, [str(self.path), "--group-by", "market"])
         self.assertEqual(code, 0)
         self.assertIn("Grouped by: market", out)
-        self.assertIn("US=", out)
-        self.assertIn("UK=", out)
+        self.assertIn("US (sales) n=", out)
+        self.assertIn("UK (sales) n=", out)
 
     def test_grade_groups_by_several_columns(self):
         code, out, _ = run(grade.main, [str(self.path), "--group-by", "format,ad_type,market"])

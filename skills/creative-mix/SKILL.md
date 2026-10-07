@@ -26,10 +26,13 @@ Follow `creative-context/references/data-inputs.md`.
 ```
 python3 scripts/mix.py ads.csv                # ads.csv from the connector: see step 1
 python3 scripts/mix.py ads.csv --no-family
+python3 scripts/mix.py ads.csv --min-proven-spend 900     # set the floor from your own account
 python3 scripts/mix.py ads.csv --pattern concept,format,creator,ad_type,product,tone,funnel_stage
 ```
 
 Names that do not match the convention go to an `unclassified` bucket that is counted and listed, never dropped. Report that count first: a large unclassified share means the grid describes only part of the account, and the right next step is agreeing a naming convention (`creative-context/references/naming-convention.md`).
+
+`--min-proven-spend` is the BAU spend a concept or format needs before it counts as proven for gap ranking (arbitrary default: three times the account's median ad spend; set it from your own account and tell the user what you chose). A concept below it can still be top quartile on ROAS, but it never leads the "worth testing" list, because a result from negligible spend is noise.
 
 `--pattern` is for accounts whose names carry other fields in another order, such as a funnel stage. Confirm the mapping with the user before relying on it.
 
@@ -47,6 +50,6 @@ Names that do not match the convention go to an `unclassified` bucket that is co
 ## Guardrails
 
 - Relative reading only: "top quartile" means top quartile of this account's own BAU concepts or formats on pooled ROAS. No benchmarks, no "ideal split".
-- A gap is a place with no evidence, not a place that will win. Say "worth testing".
+- A gap is a place with no evidence, not a place that will win. Say "worth testing". Only gaps beside a proven concept or format (enough spend) are listed.
 - The 60% over-reliance line and the minimum of 5 concepts or formats before ranking are arbitrary defaults, not statistical rules. Ask the user what concentration is normal for their account.
 - Read only. Do not change anything in the ad account.

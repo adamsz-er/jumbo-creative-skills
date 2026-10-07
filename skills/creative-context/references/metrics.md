@@ -15,12 +15,14 @@ One id, one formula. Use these exactly. All rates are percentages unless stated.
 | `cvr` | conversions / clicks * 100 | |
 | `add_to_cart_rate` | add_to_carts / clicks * 100 | |
 | `cost_per_add_to_cart` | spend / add_to_carts | |
+| `cost_per_lead` | spend / leads | Judges lead-generation campaigns. `leads` is the lead count Meta reports for the ad. |
+| `engagement_rate` | (shares + saves + comments) / impressions * 100 | Needs all three counts; if any is missing the rate is n/a (missing ...). Judges engagement campaigns, beside `cpm`. |
 | `frequency` | impressions / reach | Average times a person saw the ad. With daily rows, an average of daily values is not lifetime frequency. |
 | `mer` | revenue / spend | Revenue is the store's own total revenue, which Ads Manager does not report. Ask for it. |
 
 ## Base fields
 
-`spend`, `impressions`, `reach`, `video_views_3s` (3-second video plays), `video_thruplay`, `link_clicks`, `clicks` (all clicks), `conversions`, `conversion_value`, `add_to_carts`, `revenue`.
+`spend`, `impressions`, `reach`, `video_views_3s` (3-second video plays), `video_thruplay`, `link_clicks`, `clicks` (all clicks), `conversions`, `conversion_value`, `add_to_carts`, `revenue`, `leads`, `shares`, `saves`, `comments`.
 
 - 3-second plays: Meta counts a play at 3 seconds, or at 97% of the video for shorter videos, and excludes replays within one impression. In API terms this is the `video_view` entry in `actions`. The field that counts every video start is a different, larger number: using it inflates hook rate.
 - ThruPlay is a play to 15 seconds, or to the end for shorter videos, or 6 seconds depending on how the ad was set up. Note which one the account used. Check in your Ads Manager.

@@ -92,5 +92,37 @@ class FixtureMixTest(unittest.TestCase):
         self.assertEqual({r["stage"] for r in result["by_stage"]}, {"cold", "warm"})
 
 
+class ProvenSpendTest(unittest.TestCase):
+    def rows(self):
+        rows = []
+        names = [("alpha", "static"), ("bravo", "static"), ("charlie", "static"), ("delta", "static"), ("echo", "static"),
+                 ("foxtrot", "carousel"), ("golf", "carousel"), ("hotel", "carousel"), ("india", "carousel")]
+        for i, (concept, fmt) in enumerate(names):
+            for variant in range(4):
+                name = "%s | %s | house | bau | p%d | polished | 2026-03-01" % (concept, fmt, variant)
+                rows.append(dict(row(name, spend=100.0),
+                                 **{"Purchases": 4, "Purchases conversion value": 100 + 20 * i}))
+        # a concept with negligible spend and the best return in the account
+        rows.append(dict(row("zulu | video | house | bau | p | polished | 2026-03-01", spend=2.0),
+                         **{"Purchases": 1, "Purchases conversion value": 900}))
+        return rows
+
+    def test_negligible_spend_concept_never_leads_the_gap_list(self):
+        result = mix.analyse_mix(cm.load_rows(self.rows()))
+        self.assertIn("zulu", result["top_concepts"])
+        self.assertIn("zulu", result["unproven"]["concepts"])
+        self.assertNotIn("zulu", [g["concept"] for g in result["gaps"]])
+        self.assertTrue(result["gaps"])
+        self.assertEqual(result["gaps"][0]["concept"] != "zulu", True)
+
+    def test_floor_is_three_times_median_ad_spend_and_settable(self):
+        result = mix.analyse_mix(cm.load_rows(self.rows()))
+        self.assertAlmostEqual(result["min_proven_spend"], 300.0)
+        low = mix.analyse_mix(cm.load_rows(self.rows()), min_proven_spend=1.0)
+        self.assertEqual(low["unproven"]["concepts"], [])
+        self.assertIn("zulu", [g["concept"] for g in low["gaps"]])
+        self.assertIn("--min-proven-spend", mix.render(result))
+
+
 if __name__ == "__main__":
     unittest.main()

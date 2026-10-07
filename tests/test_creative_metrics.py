@@ -29,7 +29,7 @@ class ComputeMetricsTest(unittest.TestCase):
         self.assertAlmostEqual(m["video_completion_rate"], 9.0)
         self.assertAlmostEqual(m["ctr"], 1.5)
         self.assertAlmostEqual(m["cpm"], 20.0)
-        self.assertAlmostEqual(m["cpc"], 0.8)
+        self.assertAlmostEqual(m["cpc"], 200.0 / 150.0)  # same click type as ctr: link clicks
         self.assertAlmostEqual(m["cpa"], 20.0)
         self.assertAlmostEqual(m["roas"], 4.0)
         self.assertAlmostEqual(m["cvr"], 4.0)
