@@ -4,7 +4,7 @@
 Usage:
   python3 report.py ads.csv --verdicts verdicts.json [--profile creative-profile.md] \\
       [--source "Meta ads connector"] [--completeness reconciled] \\
-      [--previews DIR] [--thumbs DIR] -o report.html
+      [--previews DIR] [--thumbs DIR] [--breakdowns FILE] [--briefs FILE] -o report.html
 
 Standard library only. The page has the same header, six tabs and panels in the
 same order every run. A panel without its data renders a labelled empty state
@@ -159,6 +159,22 @@ def footer_html(ctx: Ctx, grade, verdicts, mix, brand: Optional[str], completene
         read = ["%s read from column %r" % (k.replace("_", " "), v) if v else "%s: no matching column" % k.replace("_", " ")
                 for k, v in sorted(ctx.funnel_headers.items())]
         lines.append("Funnel columns beyond the standard fields: %s (matched by normalised header)." % interact.plain_ids("; ".join(read)))
+    lines.append("Format, White space and Briefing settings (arbitrary defaults): formats graded against each other only with %d or more; "
+                 "heatmaps show the top %d concepts; %d example ads per format and %d video ads in the retention chart; brief starters use the top %d gaps "
+                 "and top %d Iterate ads; the copy table lists the top %d ads."
+                 % (panels.MIN_FORMATS, panels.HEATMAP_CONCEPTS, panels.STRIP_ADS, panels.RETENTION_ADS, panels.briefing.STARTER_GAPS,
+                    panels.briefing.STARTER_ITERATE, panels.COPY_ADS))
+    if ctx.retention_headers:
+        read = ["%s: %s" % (name, "read from column %r" % found if found else "not found") for name, found in
+                ((shown, ctx.retention_headers.get(step)) for step, _, shown, _ in panels.RETENTION_STEPS)]
+        read.append("average watch time: %s" % ("read from column %r" % ctx.retention_headers["average"] if ctx.retention_headers.get("average")
+                                                else "not found"))
+        lines.append("Video retention columns (matched by normalised header): %s." % "; ".join(read))
+    if ctx.copy_headers:
+        lines.append("Ad copy columns: %s." % "; ".join("%s: %s" % (k, "read from column %r" % v if v else "not found") for k, v in ctx.copy_headers.items()))
+    lines.append("Breakdown file: %s." % ("%d rows; segments read from %s" % (len(ctx.breakdowns), ", ".join("%s (column %r)" % kv for kv in ctx.breakdown_dims.items()) or "no known column")
+                                         if ctx.breakdowns else "not supplied"))
+    lines.append("Briefs: %s." % ("%d from the briefs file" % len(ctx.briefs) if ctx.briefs else "starters built from the gaps and Iterate verdicts, no briefs file"))
     lines.append("Reach and frequency: %s." % ("from the account-level file" if ctx.account else "not shown, they need an account-level pull"))
     lines.append("Prior period: %s." % ("supplied" if ctx.prior else "not supplied"))
     lines.append(ctx.previews.summary())
@@ -177,10 +193,11 @@ def build_html(rows: Optional[Sequence[Dict[str, Any]]] = None, grade: Optional[
                currency: Optional[str] = None, source: str = "Ads Manager export", attribution: Optional[str] = None,
                completeness: Optional[str] = None, account: Optional[Dict[str, float]] = None,
                prior: Optional[Sequence[Dict[str, Any]]] = None, previews: Optional[Previews] = None,
-               top_n: int = panels.TOP_N_CARDS, pareto_share: float = panels.PARETO_SHARE) -> str:
+               top_n: int = panels.TOP_N_CARDS, pareto_share: float = panels.PARETO_SHARE,
+               breakdowns: Optional[Sequence[Dict[str, Any]]] = None, briefs: Optional[Any] = None) -> str:
     """Render the dashboard. `rows` are normalised ad rows (creative_metrics.load_rows)."""
     ctx = Ctx(rows=rows, verdicts=verdicts, grade=grade, mix=mix, currency=currency, top_n=top_n,
-              pareto_share=pareto_share, account=account, prior=prior, previews=previews)
+              pareto_share=pareto_share, account=account, prior=prior, previews=previews, breakdowns=breakdowns, briefs=briefs)
     brand = brand_from_profile(profile)
     heading, page_title = heading_for(brand or title)
     start, end = cm.data_window(ctx.rows)
@@ -248,6 +265,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--prior", help="CSV or JSON of the previous equal window, for change against prior period")
     parser.add_argument("--previews", help="folder of rendered ad previews named <ad_id>.<ext>")
     parser.add_argument("--thumbs", help="folder of small thumbnails or video stills named <ad_id>.<ext>")
+    parser.add_argument("--breakdowns", help="a second Ads Manager export with age, gender, placement or region columns, for the segment tables")
+    parser.add_argument("--briefs", help="a JSON list of briefs written with the creative-brief and hook-writer skills")
     parser.add_argument("--preview-max-kb", type=int, default=DEFAULT_MAX_KB, help="skip an image larger than this (default %(default)s)")
     parser.add_argument("--preview-budget-kb", type=int, default=DEFAULT_BUDGET_KB, help="stop embedding images past this total (default %(default)s)")
     parser.add_argument("--top-n", type=int, default=panels.TOP_N_CARDS, help="ad cards shown per list before the rest collapse (default %(default)s)")
@@ -265,7 +284,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                           source=args.source, attribution=args.attribution, completeness=args.completeness,
                           account=load_account(args.account), prior=cm.load_rows(args.prior) if args.prior else None,
                           previews=Previews(args.previews, args.thumbs, args.preview_max_kb, args.preview_budget_kb),
-                          top_n=args.top_n, pareto_share=args.pareto_share)
+                          top_n=args.top_n, pareto_share=args.pareto_share,
+                          breakdowns=cm.load_rows(args.breakdowns) if args.breakdowns else None, briefs=_load_json(args.briefs))
     except ValueError as error:
         parser.error(str(error))
     Path(args.output).write_text(page, encoding="utf-8")

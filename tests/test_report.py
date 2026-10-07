@@ -159,7 +159,7 @@ class ReportTest(unittest.TestCase):
         for heading in HEADINGS:
             self.assertIn(heading, html)
         self.assertIn("keep-or-kill", html)
-        self.assertEqual(html.count('data-state="empty"'), 6)
+        self.assertEqual(html.count('data-state="empty"'), 13)
         parser = Balance()
         parser.feed(html)
         self.assertEqual((parser.errors, parser.stack), ([], []))

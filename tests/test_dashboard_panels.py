@@ -20,8 +20,8 @@ from previews import Previews  # noqa: E402
 
 FIXTURE = ROOT / "examples" / "acme" / "ads_daily.csv"
 PNG = bytes.fromhex("89504e470d0a1a0a0000000d4948445200000002000000020802000000fdd49a730000001049444154789c63a8b17a0b440c100a002c1e068d70420d590000000049454e44ae426082")
-DATA_PANELS = [(pid, fn) for _, _, tab in panels.TABS for pid, _, _, fn in tab if fn.__name__ != "panel"]
-PLACEHOLDERS = [(pid, fn) for _, _, tab in panels.TABS for pid, _, _, fn in tab if fn.__name__ == "panel"]
+OVERVIEW_TABS = ("overview", "pareto", "keep-kill")
+DATA_PANELS = [(pid, fn) for tab_id, _, tab in panels.TABS if tab_id in OVERVIEW_TABS for pid, _, _, fn in tab]
 TAB_ORDER = ["Overview analysis", "Pareto", "Keep / kill", "Format", "White space", "Briefing"]
 BALANCED = ("section", "table", "svg", "div", "ul", "thead", "tbody", "tr", "td", "th", "article", "details", "nav",
             "header", "footer", "main", "figure")
@@ -74,9 +74,9 @@ class PanelStateTest(unittest.TestCase):
         cls.grade = acme_grade()
         cls.ctx = panels.Ctx(rows=cls.rows, verdicts=cls.verdicts, grade=cls.grade, currency="USD")
 
-    def test_ten_data_panels_and_three_placeholders_exist(self):
+    def test_ten_overview_panels_and_twelve_later_tab_panels_exist(self):
         self.assertEqual(len(DATA_PANELS), 10)
-        self.assertEqual(len(PLACEHOLDERS), 3)
+        self.assertEqual(sum(len(tab) for tab_id, _, tab in panels.TABS if tab_id not in OVERVIEW_TABS), 12)
 
     def test_every_panel_is_data_on_the_acme_inputs(self):
         for pid, fn in DATA_PANELS:
@@ -102,12 +102,6 @@ class PanelStateTest(unittest.TestCase):
         ctx = panels.Ctx(verdicts=self.verdicts)
         for pid in ("kpis", "time", "funnel", "pareto", "head-tail"):
             self.assertEqual(dict(DATA_PANELS)[pid](ctx)[1], "empty", pid)
-
-    def test_tabs_four_to_six_say_not_built_in_this_version(self):
-        for pid, fn in PLACEHOLDERS:
-            html, state = fn(self.ctx)
-            self.assertEqual(state, "empty", pid)
-            self.assertIn("Not built in this version", html)
 
     def test_do_these_first_never_lists_an_ad_that_cannot_be_judged(self):
         cant = {"ad": "999", "ad_name": "ghost | static | house | bau | x | y | 2026-03-01", "verdict": "Can't judge",

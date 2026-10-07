@@ -353,7 +353,8 @@ class StructureTest(Fixture):
     def test_the_gallery_is_the_last_panel_of_keep_kill_and_ways_follows_do_first(self):
         ids = re.findall(r'<section class="card panel" id="panel-([a-z-]+)"', self.html)
         self.assertEqual(ids, ["kpis", "time", "do-first", "improve", "funnel", "pareto", "head-tail", "board", "fatigue", "all-ads",
-                               "format", "white-space", "briefing"])
+                               "format-scorecard", "hook-hold", "retention", "ad-types", "heatmap", "stage-heatmap", "no-creative", "segments",
+                               "gaps", "briefs", "copy", "prompts"])
 
     def test_with_scripts_off_the_default_grouping_is_in_the_page_and_nothing_is_hidden(self):
         gallery = re.search(r'id="panel-all-ads".*?</section>\s*</section>', self.html, re.S).group(0)

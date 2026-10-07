@@ -7,7 +7,8 @@ safe to embed: every string that came from data is escaped.
 from __future__ import annotations
 
 import html
-from typing import Any, List, Optional, Sequence, Tuple
+import math
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 
 def esc(value: Any) -> str:
@@ -227,3 +228,156 @@ def gauge(value: Optional[float], label: str, caption: str) -> str:
             '<text x="0" y="46">0%%</text><text x="300" y="46" text-anchor="end">100%%</text>'
             '<text class="lbl" x="150" y="46" text-anchor="middle">%s</text></svg><figcaption>%s</figcaption></figure>'
             % (esc(label), shown, fill * 3, esc(label), shown, shown, esc(caption)))
+
+
+def _short(name: str, limit: int) -> str:
+    return name if len(name) <= limit else name[:limit - 1] + "..."
+
+
+def bubble_chart(points: Sequence[Tuple[float, float, float, str, bool]], xlabel: str, ylabel: str, label: str,
+                 x_median: float, y_median: float, quadrants: Sequence[str], width: int = 560, height: int = 380) -> str:
+    """Bubbles at (x, y) with area following size, dashed lines at the two medians and the four quadrants named in words.
+
+    points are (x, y, size, name, show_label); quadrants run top-left, top-right, bottom-left, bottom-right.
+    """
+    if not points:
+        return ""
+    left, right, top, bottom, rmax = 54, 16, 16, 46, 18.0
+    xs = [p[0] for p in points] + [x_median]
+    ys = [p[1] for p in points] + [y_median]
+
+    def span(values):
+        low, high = min(values), max(values)
+        pad = (high - low) * 0.12 or 1.0
+        return low - pad, high + pad
+
+    (x0, x1), (y0, y1) = span(xs), span(ys)
+    biggest = max(p[2] for p in points) or 1.0
+
+    def px(x):
+        return left + (x - x0) / (x1 - x0) * (width - left - right)
+
+    def py(y):
+        return height - bottom - (y - y0) / (y1 - y0) * (height - bottom - top)
+
+    parts = ['<figure class="chart wide"><svg viewBox="0 0 %d %d" role="img" aria-label="%s">' % (width, height, esc(label))]
+    parts.append('<line class="axis" x1="%d" y1="%d" x2="%d" y2="%d"/>' % (left, height - bottom, width - right, height - bottom))
+    parts.append('<line class="axis" x1="%d" y1="%d" x2="%d" y2="%d"/>' % (left, top, left, height - bottom))
+    for value in _ticks(x0, x1):
+        parts.append('<text x="%.1f" y="%d" text-anchor="middle">%.1f</text>' % (px(value), height - bottom + 16, value))
+    for value in _ticks(y0, y1):
+        parts.append('<text x="%d" y="%.1f" text-anchor="end">%.1f</text>' % (left - 8, py(value) + 4, value))
+    parts.append('<line class="guide" x1="%.1f" y1="%d" x2="%.1f" y2="%d"/>' % (px(x_median), top, px(x_median), height - bottom))
+    parts.append('<line class="guide" x1="%d" y1="%.1f" x2="%d" y2="%.1f"/>' % (left, py(y_median), width - right, py(y_median)))
+    corners = ((left + 6, top + 14, "start"), (width - right - 6, top + 14, "end"),
+               (left + 6, height - bottom - 8, "start"), (width - right - 6, height - bottom - 8, "end"))
+    for (x, y, anchor), words in zip(corners, quadrants):
+        parts.append('<text class="quad" x="%d" y="%d" text-anchor="%s">%s</text>' % (x, y, anchor, esc(words)))
+    ordered = sorted(points, key=lambda p: -p[2])
+    discs = [(px(x), py(y), max(rmax * math.sqrt(max(size, 0) / biggest), 3.0)) for x, y, size, _, _ in ordered]
+    taken = []
+    for (cx0, cy0, anchor), words in zip(corners, quadrants):
+        w0 = 6.6 * len(words)
+        taken.append((cx0 if anchor == "start" else cx0 - w0, cy0 - 12, cx0 + w0 if anchor == "start" else cx0, cy0 + 3))
+    texts = []
+    for (x, y, size, name, show), (cx, cy, r) in zip(ordered, discs):
+        parts.append('<circle class="bub" cx="%.1f" cy="%.1f" r="%.2f"><title>%s: %s %.2f, %s %.2f, spend %s</title></circle>'
+                     % (cx, cy, r, esc(name), esc(xlabel), x, esc(ylabel), y, _axis_text(size)))
+        if not show:
+            continue
+        short = _short(name.split(" \u00b7 ")[0], 16)
+        w = 6.4 * len(short)
+        spots = [(cx + r + 4, cy + 4, "start", cx + r + 4), (cx - r - 4, cy + 4, "end", cx - r - 4 - w),
+                 (cx, cy - r - 5, "middle", cx - w / 2), (cx, cy + r + 13, "middle", cx - w / 2)]
+        for tx, ty, anchor, x0 in spots:
+            box = (x0, ty - 12, x0 + w, ty + 3)
+            clear = left <= box[0] and box[2] <= width - right and not any(
+                box[0] < b[2] and b[0] < box[2] and box[1] < b[3] and b[1] < box[3] for b in taken) and not any(
+                (min(max(ox, box[0]), box[2]) - ox) ** 2 + (min(max(oy, box[1]), box[3]) - oy) ** 2 < orr ** 2 for ox, oy, orr in discs if (ox, oy) != (cx, cy))
+            if clear:
+                taken.append(box)
+                texts.append('<text class="blabel" x="%.1f" y="%.1f" text-anchor="%s">%s<title>%s</title></text>' % (tx, ty, anchor, esc(short), esc(name)))
+                break
+    parts.extend(texts)
+    parts.append('<text x="%.1f" y="%d" text-anchor="middle">%s</text>' % ((left + width - right) / 2, height - 6, esc(xlabel)))
+    parts.append('<text transform="rotate(-90 14 %.1f)" x="14" y="%.1f" text-anchor="middle">%s</text>'
+                 % ((top + height - bottom) / 2, (top + height - bottom) / 2, esc(ylabel)))
+    parts.append("</svg><figcaption>%s. Bubble area is spend; dashed lines are the median of the ads shown.</figcaption></figure>" % esc(label))
+    return "".join(parts)
+
+
+def retention_chart(series: Sequence[Tuple[str, Sequence[float]]], steps: Sequence[str], ylabel: str, label: str,
+                    width: int = 560, height: int = 300) -> str:
+    """One line per ad through raw counts at each watch step; the axis is a count, never a percentage. Each line also has its own dash pattern."""
+    if not series or not steps:
+        return ""
+    left, right, top, bottom = 64, 44, 16, 52
+    plot_w, plot_h = width - left - right, height - top - bottom
+    peak = max(max(values) for _, values in series) or 1.0
+    step_w = plot_w / (len(steps) - 1) if len(steps) > 1 else 0
+
+    def px(i):
+        return left + i * step_w
+
+    def py(value):
+        return height - bottom - value / peak * plot_h
+
+    parts = ['<figure class="chart wide"><svg viewBox="0 0 %d %d" role="img" aria-label="%s">' % (width, height, esc(label))]
+    parts.append('<line class="axis" x1="%d" y1="%d" x2="%d" y2="%d"/>' % (left, height - bottom, width - right, height - bottom))
+    parts.append('<line class="axis" x1="%d" y1="%d" x2="%d" y2="%d"/>' % (left, top, left, height - bottom))
+    for frac in (0.0, 0.5, 1.0):
+        parts.append('<text x="%d" y="%.1f" text-anchor="end">%s</text>' % (left - 6, py(peak * frac) + 4, _axis_text(peak * frac)))
+    for i, step in enumerate(steps):
+        parts.append('<text x="%.1f" y="%d" text-anchor="middle">%s</text>' % (px(i), height - bottom + 16, esc(step)))
+    for n, (name, values) in enumerate(series, 1):
+        path = " ".join("%s%.1f %.1f" % ("L" if i else "M", px(i), py(v)) for i, v in enumerate(values))
+        parts.append('<path class="line s%d" d="%s"/>' % (n, path))
+        for i, v in enumerate(values):
+            parts.append('<circle class="dot ret-dot s%d" cx="%.1f" cy="%.1f" r="3.5"><title>%s at %s: %s people</title></circle>'
+                         % (n, px(i), py(v), esc(name), esc(steps[i]), _axis_text(v)))
+    parts.append('<text transform="rotate(-90 12 %.1f)" x="12" y="%.1f" text-anchor="middle">%s</text>'
+                 % (top + plot_h / 2, top + plot_h / 2, esc(ylabel)))
+    key = legend([("line s%d" % n, name) for n, (name, _) in enumerate(series, 1)])
+    parts.append("</svg>%s<figcaption>%s</figcaption></figure>" % (key, esc(label)))
+    return "".join(parts)
+
+
+def heatmap(row_labels: Sequence[str], col_labels: Sequence[str], cells: Sequence[Sequence[Tuple[int, float]]],
+            gaps: Dict[Tuple[int, int], int], label: str, uid: str, currency: str) -> str:
+    """Rows by columns of (ad count, spend): shade follows spend, the number is the ad count, an empty cell is hatched and a
+    gap cell is outlined with its number in the gap list."""
+    if not row_labels or not col_labels:
+        return ""
+    left, head, cw, rh = 156, 46, 84, 28
+    width, height = left + cw * len(col_labels) + 8, head + rh * len(row_labels) + 8
+    peak = max((spend for line in cells for _, spend in line), default=0) or 1.0
+    parts = ['<figure class="chart wide heat"><svg viewBox="0 0 %d %d" role="img" aria-label="%s">' % (width, height, esc(label))]
+    parts.append('<defs><pattern id="hatch-%s" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">'
+                 '<line class="hatch-line" x1="0" y1="0" x2="0" y2="7"/></pattern></defs>' % esc(uid))
+    for j, name in enumerate(col_labels):
+        parts.append('<text class="hm-col-label" x="%d" y="%d" text-anchor="middle"><title>%s</title>%s</text>'
+                     % (left + j * cw + cw / 2, head - 12, esc(name), esc(_short(name, 13))))
+    for i, name in enumerate(row_labels):
+        y = head + i * rh
+        parts.append('<text class="hm-row-label" x="%d" y="%d" text-anchor="end"><title>%s</title>%s</text>'
+                     % (left - 8, y + rh / 2 + 4, esc(name), esc(_short(name, 22))))
+        for j in range(len(col_labels)):
+            count, spend = cells[i][j]
+            x = left + j * cw
+            title = "%s in %s: %s, %s %s spend" % (name, col_labels[j], "no ad" if not count else "%d ad%s" % (count, "" if count == 1 else "s"),
+                                                  _axis_text(spend), esc(currency))
+            if count:
+                level = 0.14 + 0.86 * (spend / peak)
+                parts.append('<rect class="hm-cell" x="%d" y="%d" width="%d" height="%d" rx="5" fill-opacity="%.2f"><title>%s</title></rect>'
+                             % (x + 2, y + 2, cw - 4, rh - 4, level, esc(title)))
+                parts.append('<text class="hm-count %s" x="%.1f" y="%d" text-anchor="middle">%d</text>'
+                             % ("t-light" if level > 0.55 else "t-ink", x + cw / 2, y + rh / 2 + 4, count))
+            else:
+                parts.append('<rect class="hm-cell hm-empty" x="%d" y="%d" width="%d" height="%d" rx="5" fill="url(#hatch-%s)"><title>%s</title></rect>'
+                             % (x + 2, y + 2, cw - 4, rh - 4, esc(uid), esc(title)))
+            if (i, j) in gaps:
+                parts.append('<rect class="hm-gap" x="%d" y="%d" width="%d" height="%d" rx="6"/>' % (x + 1, y + 1, cw - 2, rh - 2))
+                parts.append('<text class="hm-gap-num" x="%d" y="%d" text-anchor="end">#%d</text>' % (x + cw - 5, y + 11, gaps[(i, j)]))
+    key = legend([("hm-sw", "Darker shade = more spend"), ("hm-sw hatch", "Hatched = no ad"), ("hm-sw outline", "Outlined with a number = a gap worth testing")])
+    parts.append("</svg>%s<figcaption>%s. The number in a cell is how many ads sit there.</figcaption></figure>" % (key, esc(label)))
+    return "".join(parts)
