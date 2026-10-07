@@ -5,7 +5,10 @@ Usage: python3 from_mcp.py rows.json [more.json ...] -o ads.csv
            [--expect-spend X] [--expect-impressions Y] [--expect-ads ids.txt] [--tolerance 0.5]
 
 Standard library only. Each input is a saved connector response: a list of rows,
-or an object with a "data" or "rows" list. Rows are mapped to the canonical
+or an object with a "data", "rows" or "ad_entities" list (the connector sends
+"ad_entities" as a JSON string, which is decoded). Anything the connector says
+beside its rows (`additional_info`, for example fields it refused) is printed,
+and so is every expected field that no row carries. Rows are mapped to the canonical
 fields by creative_metrics.load_rows, merged, and de-duplicated on (ad id, date)
 with the last copy kept. The connector can stop a long pull partway or cap a
 batch silently, so give the account-level totals for the same window: a short
@@ -36,24 +39,54 @@ COLUMNS = (
     ("Link clicks", "link_clicks"), ("Clicks (all)", "clicks"),
     ("3-second video plays", "video_views_3s"), ("video_views_3s_source", "video_views_3s_source"),
     ("ThruPlays", "video_thruplay"), ("Adds to cart", "add_to_carts"),
-    ("Purchases", "conversions"), ("Purchases conversion value", "conversion_value"),
+    ("Purchases", "conversions"), ("Purchases conversion value", "conversion_value"), ("Leads", "leads"),
     ("created_time", "created_time"), ("objective", "objective"), ("market", "market"),
     ("campaign_name", "campaign_name"),
 )
 
 
-def read_responses(paths: Sequence[str]) -> List[Dict[str, Any]]:
-    """The raw rows of every saved response, in file order."""
+# Fields the analysis reads when the pull has them; one that no row carries is named in the output.
+EXPECTED_FIELDS = (("link_clicks", "link clicks"), ("conversions", "purchases"),
+                   ("conversion_value", "purchase value"), ("video_thruplay", "ThruPlays"),
+                   ("video_views_3s", "3-second plays"), ("created_time", "created time (ad age)"),
+                   ("objective", "objective"))
+
+
+def read_responses(paths: Sequence[str], notes: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    """The raw rows of every saved response, in file order; each response's own notes go into `notes`."""
     rows: List[Dict[str, Any]] = []
     for path in paths:
         with open(path, encoding="utf-8-sig") as handle:
             loaded = json.load(handle)
-        if isinstance(loaded, dict):
-            loaded = loaded.get("data") or loaded.get("rows") or []
-        if not isinstance(loaded, list):
-            raise ValueError("%s: expected a list of rows, or an object with a data or rows list" % path)
-        rows.extend(r for r in loaded if isinstance(r, dict))
+        try:
+            rows.extend(cm.rows_from_response(loaded))
+        except ValueError as error:
+            raise ValueError("%s: %s" % (path, error))
+        if notes is not None:
+            notes.extend("%s: %s" % (Path(path).name, note) for note in cm.response_notes(loaded))
     return rows
+
+
+def fill_market(rows: Sequence[Dict[str, Any]]) -> None:
+    """Fill each row's empty market from its ad name, read against all the names in the pull."""
+    names = sorted({str(r["ad_name"]) for r in rows if r.get("ad_name")})
+    learned = cm.learn_names(names)
+    markets = {n: cm.parse_name(n, learned=learned, require_read=False).get("market") for n in names}
+    for row in rows:
+        if not row.get("market") and row.get("ad_name"):
+            row["market"] = markets.get(str(row["ad_name"]))
+
+
+def absent_fields(rows: Sequence[Dict[str, Any]]) -> List[str]:
+    """The expected fields that no row carries, in words; 3-second plays count as present when refused for a reason."""
+    absent = []
+    for field, words in EXPECTED_FIELDS:
+        if any(r.get(field) not in (None, "") for r in rows):
+            continue
+        refused = next((r["video_views_3s_source"] for r in rows if field == "video_views_3s"
+                        and str(r.get("video_views_3s_source", "")).startswith("not derived")), None)
+        absent.append("%s (%s)" % (words, refused) if refused else words)
+    return absent
 
 
 def merge(raw_rows: Sequence[Dict[str, Any]], level: Optional[str] = "ad") -> List[Dict[str, Any]]:
@@ -151,11 +184,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help="level of the rows; `id` and `name` read as ad id and name only for ad rows (default: ad)")
     args = parser.parse_args(argv)
 
+    notes: List[str] = []
     try:
-        rows = merge(read_responses(args.inputs), level=args.level)
+        rows = merge(read_responses(args.inputs, notes), level=args.level)
     except ValueError as error:
         print("ERROR: %s" % error)
         return 2
+    fill_market(rows)
     write_csv(rows, args.output)
     summary = summarise(rows)
     problems = reconcile(summary, args.expect_spend, args.expect_impressions,
@@ -166,6 +201,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         out.append("WARNING: the pull does not reconcile, do not analyse it yet: " + "; ".join(problems))
         out.append("If short, re-fetch the missing ads in small batches by id; if over-counted, drop the "
                    "duplicate or overlapping responses. Then run this again.")
+    out += ["CONNECTOR NOTE %s" % note for note in notes]
+    if any("unsupported field" in note.lower() for note in notes):
+        out.append("WARNING: the connector refused some requested fields (see the notes above); every row came back "
+                   "without them. Check the field catalogue for the current names and pull again, or accept them as n/a.")
+    absent = absent_fields(rows) if rows else []
+    if absent:
+        out.append("fields no row carries: %s" % ", ".join(absent))
     out += [
         "wrote %s" % args.output,
         "rows: %d" % summary["rows"],

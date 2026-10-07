@@ -327,17 +327,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--no-family", action="store_true",
                         help="do not group '-suffix' variants of a concept into one family")
     parser.add_argument("--json", action="store_true", help="print JSON instead of text")
+    cm.add_run_arguments(parser)
     args = parser.parse_args(argv)
-    pattern = [f.strip() for f in args.pattern.split(",")] if args.pattern else None
-    group_by = tuple(g.strip() for g in args.group_by.split(",") if g.strip()) if args.group_by else None
     try:
-        key_map = cm.parse_key_map(args.key_map) if args.key_map else None
-        result = analyse_mix(cm.load_rows(args.path), pattern, families=not args.no_family,
+        rows, key_map, run_notes = cm.prepare_run(args, cm.load_rows(args.path))
+        pattern = [f.strip() for f in args.pattern.split(",")] if args.pattern else None
+        group_by = tuple(g.strip() for g in args.group_by.split(",") if g.strip()) if args.group_by else None
+        result = analyse_mix(rows, pattern, families=not args.no_family,
                              group_by=group_by, key_map=key_map, min_proven_spend=args.min_proven_spend)
     except (cm.GroupColumnError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
-    print(json.dumps(result, indent=2) if args.json else render(result))
+    result["run_notes"] = run_notes
+    print(json.dumps(result, indent=2) if args.json else "\n".join(run_notes + [render(result)]))
     return 0
 
 

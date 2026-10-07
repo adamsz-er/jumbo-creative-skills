@@ -1,6 +1,6 @@
 # Acme grade output
 
-Generated, not hand-written: `python3 skills/creative-grader/scripts/grade.py examples/acme/ads_daily.csv` on the fictional Acme Outdoor Co. fixture.
+Generated, not hand-written: `python3 -I skills/creative-grader/scripts/grade.py examples/acme/ads_daily.csv --profile examples/acme/brand-profile.md` on the fictional Acme Outdoor Co. fixture.
 
 ```text
 Basis: graded against this account's own ads of the same campaign objective, never a benchmark.

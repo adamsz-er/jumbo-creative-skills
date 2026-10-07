@@ -21,15 +21,20 @@ First matching rule wins. Every verdict lists its reasons, a plain-English sente
 | 2 | No payback measure can be graded (missing data, or too few comparable ads) | Can't judge: missing ... (`cant_judge`). Never iterate, keep or scale. Fatigue is context only. |
 | 3 | Fatiguing and payback is not bottom on every measure | Iterate (`iterate`) |
 | 4 | Payback measures disagree (one top, one bottom) | Check before cutting (`check_mixed`) |
+| 4a | Pause case, a small comparison group and under two `--window`s of delivery days | Check before cutting (`check_immature`) |
 | 5 | Pause case (below) but not bottom account-wide within its objective | Keep (watch it) |
 | 6 | Pause case but one of the biggest sellers | Check before cutting (`check_top_seller`) |
 | 7 | Bottom on every payback measure, in its group and account-wide within its objective, and fatiguing | Pause: fatigued (`pause_fatigued`) |
-| 8 | Bottom on every payback measure, in its group and account-wide within its objective, and bottom in its first `--window` delivery days too | Pause: never worked (`pause_never_worked`) |
+| 8 | Bottom on every payback measure, in its group and account-wide within its objective, bottom in its first `--window` delivery days too, and missing every target the user set for its payback measures | Pause: never worked (`pause_never_worked`) |
+| 8a | As 8, but the user set no target for its payback measures | Check before cutting (`check_no_target`): weak only next to the account's other ads; the sentence asks for a target |
+| 8b | As 8, but it meets a target the user set | Check before cutting (`check_meets_target`) |
 | 9 | Payback top on every measure, fatigue readable and not fatiguing | Scale (`scale`) |
 | 10 | Attention strong but payback bottom | Check before cutting (`check_feeds`) |
 | 11 | Anything else | Keep (`keep`) |
 
 Every Pause carries this line: rule out tracking, site or audience problems first; only fatigue and never-worked are creative decisions.
+
+Targets come from the user only: `--target cpa=40,roas=3` (any metric id; cost metrics are met at or below the target, rates and ROAS at or above), or `target:` in the profile's `Script settings`. A target set for another objective's measure does not count. An ad whose measure is n/a (no purchases, so no CPA) misses its target. Never suggest a target value.
 
 A thin group may produce a Pause, never a Confident one: the confidence is capped at Early read, and the sentence says so.
 

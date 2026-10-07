@@ -42,6 +42,17 @@ Describe each by emotional starting state, not demographics.
 - Naming convention: <fields and separator> | none
 - Store revenue available for MER: yes | no
 
+## Script settings
+<!-- Read by every script given --profile; a flag on the command line still wins. Fill a line only with what the
+     user confirmed and leave it blank otherwise. key-map: KEY=field pairs, and position=field for unkeyed segments
+     (positions as detect_naming reports them, from 1), e.g. PX=concept,6=tone,7=creator. type-map: the account's
+     own ad-type words, e.g. core=bau. target: the user's own payback targets, e.g. cpa=40,roas=3 (never a
+     benchmark). currency: a three-letter code. -->
+- key-map:
+- type-map:
+- target:
+- currency:
+
 ## Constraints
 - Claims that need approval or are not allowed:
 - Usage rights and end dates for creator content:

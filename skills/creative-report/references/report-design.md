@@ -40,9 +40,7 @@ Header (sticky): logo, "<account label> creative review", date window, data sour
 1. Overview analysis: key numbers (`kpi_strip`), performance over time (`over_time`), do these first (`do_first`), ways to improve (`ways_to_improve`), funnel (`funnel`)
 2. Pareto: where the value comes from (`pareto`), the head and the long tail (`head_tail`)
 3. Keep / kill: verdict board (`verdict_board`), fatigue (`fatigue`), all ads (`all_ads`)
-4. Format: scorecard (`format_scorecard`), hook against hold (`video_hook_hold`), retention (`video_retention`), ad types (`ad_type_split`)
-5. White space: concept heatmap (`concept_heatmap`), stage heatmap (`stage_heatmap`), types with no creative (`no_creative_types`), markets and segments (`segments`), gap list (`gap_list`)
-6. Briefing: ready briefs (`ready_briefs`), copy and call to action (`copy_cta`), prompts (`prompts_panel`)
+4. Format, 5. White space, 6. Briefing: placeholders built by `not_built`, labelled "Not built in this version"
 
 Footer: data and method (the matched funnel columns, every flag and default used, reconciliation, the missing-data notes), image counts, "by Elephant Room", the generated date and the privacy line.
 
@@ -51,6 +49,10 @@ Footer: data and method (the matched funnel columns, every flag and default used
 Every panel function takes the `Ctx` and returns `(html, state)`: `"data"` when filled and `"empty"` when it shows a labelled empty state with **why** and **how to get it** (`empty_state`). A panel is never dropped. Unknown is never zero: a missing operand reads `n/a (missing <field>)`, reach and frequency read `n/a (needs account-level reach)` without `--account`, and a single day has no sparkline and says so.
 
 The ad card (`ad_card`) is the one component used wherever an ad appears: preview image, readable label (concept · creator · format · ad type, never the raw first name segment), ad id, spend with currency, what placed it, verdict chip, confidence and the plain-English sentence. Lists show the top `--top-n` as cards and collapse the rest into a closed `<details>` capped at `LIST_CAP` rows, so a 500-ad account stays readable.
+
+Key numbers that no ad in the pull can show (every ad n/a) are named once at the top of the Overview's first panel, in a "Not in this pull" notice with the reason and how to get them (`missing_everywhere`). The cells keep their own `n/a (missing ...)` text: the notice adds the explanation, it never replaces the label.
+
+`report.py --check page.html` validates a built page's structure (tabs and panels in order, panel states, badge, Scope line, outside requests, inline scripts, n/a never shown as 0, size). Run it after a change and in any environment where you cannot open a browser; it does not replace looking at the page.
 
 ## Adding a panel
 
@@ -72,12 +74,3 @@ Everything below needs the page script; with scripts off every panel and card sh
 - **How to improve** is `interact.improvement`: the verdict's next step, then the fix for the first weak funnel step from the grade output, then the other weak metrics. An ad with no grade data says "Not enough data to suggest a fix." and nothing else.
 - **Words, not ids.** `interact.plain_ids` turns field ids in generated wording into the words a reader knows (3-second plays, purchase value) and `interact.humanise` reads a slug as words (UGC video, BAU); the raw value stays in the data attributes and the page JSON. Hook and hold rate, and the funnel's video steps, are read over video ads only and say how many ads that is.
 - **Ratios over partial data.** ROAS and CPA are ratios of sums over the ads that have both operands; when that is fewer than the ads shown the text says "(X of Y ads)".
-
-## Tabs 4 to 6
-
-- **Sources.** Format, ad types, heatmaps, gaps and prompts read the creative-mix output (`--mix`); the scorecard's CTR, CPM, hook and hold are ratios of summed counts from the rows. Segments read the market from ad names and, only from `--breakdowns`, age, gender, placement, platform, region or country; each segment adds its own spend, purchases and value before dividing. Briefs come from `--briefs` (`briefing.validate_briefs`), else from starters.
-- **Grading across formats** is by rank (`_grade_across`): best, middle or weakest, lowest best for CPM and CPA, equal values share a band and say "(tied)", and fewer than `MIN_FORMATS` formats with a value reads "not graded". An arbitrary default.
-- **Retention** matches columns by normalised header (Video plays at 25, 50, 75, 95 and 100 percent, Video average play time, and the API names); the footer names each column read or not found. All five quartile columns are needed, else the panel is an empty state naming the missing ones. Lines are raw counts, so the y axis is a count.
-- **Heatmaps** show the top `HEATMAP_CONCEPTS` concepts by spend and say how many are hidden. Gap numbers are the gap list's order (creative-mix order), so a number on a cell and a number in the list are the same gap.
-- **Filter attributes.** Every ad shown in a new panel is a `.pv-tile` (or a table row) carrying `data-ad`, so the filter bar hides it; clicking a tile opens the same detail dialog as a card. A format strip with every ad filtered out folds away.
-- **Prompts.** A copy button sits in a `.prompt-scope` beside a `<details>` holding the prompt text, so with scripts off the prompt is still readable. Prompts hold names only and no digits from the data.

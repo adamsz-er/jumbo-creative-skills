@@ -54,7 +54,8 @@ class ReportTest(unittest.TestCase):
         tmp = Path(cls._tmp.name)
         cls.grade, cls.verdicts, cls.mix = tmp / "grade.json", tmp / "verdicts.json", tmp / "mix.json"
         cls.grade.write_text(run_json("creative-grader", "grade.py"))
-        cls.verdicts.write_text(run_json("keep-or-kill", "verdicts.py"))
+        cls.verdicts.write_text(run_json("keep-or-kill", "verdicts.py", "--profile",
+                                         str(ROOT / "examples" / "acme" / "brand-profile.md")))
         cls.mix.write_text(run_json("creative-mix", "mix.py"))
         cls.out = tmp / "report.html"
         code = report.main([str(FIXTURE), "--grade", str(cls.grade), "--verdicts", str(cls.verdicts),
@@ -159,7 +160,7 @@ class ReportTest(unittest.TestCase):
         for heading in HEADINGS:
             self.assertIn(heading, html)
         self.assertIn("keep-or-kill", html)
-        self.assertEqual(html.count('data-state="empty"'), 13)
+        self.assertEqual(html.count('data-state="empty"'), 6)
         parser = Balance()
         parser.feed(html)
         self.assertEqual((parser.errors, parser.stack), ([], []))

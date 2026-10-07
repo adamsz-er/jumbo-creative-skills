@@ -11,6 +11,8 @@ import verdicts  # noqa: E402
 
 FIXTURE = ROOT / "examples" / "acme" / "ads_daily.csv"
 CHECK = "rule out tracking, site or audience problems first"
+# Targets no ad reaches, so a never-worked ad may be paused (a pause needs the user's own target).
+MISSED = {"cpa": 0.01, "roas": 1000.0, "cpc": 0.0001, "ctr": 99.0}
 
 
 def fixture_verdicts(**kwargs):
@@ -87,12 +89,12 @@ class FixtureVerdictsTest(unittest.TestCase):
         self.assertNotIn("pause", " ".join(verdict["reasons"]).lower())
 
     def test_never_worked_ad_is_paused_as_never_worked(self):
-        verdict = fixture_verdicts()["120000000017"]
+        verdict = fixture_verdicts(targets=MISSED)["120000000017"]
         self.assertEqual(verdict["verdict"], "Pause: never worked")
         self.assertEqual(verdict["verdict_id"], "pause_never_worked")
 
     def test_every_pause_carries_the_check_line(self):
-        results = fixture_verdicts()
+        results = fixture_verdicts(targets=MISSED)
         pauses = [r for r in results.values() if r["verdict_id"].startswith("pause")]
         self.assertTrue(pauses)
         for entry in pauses:
@@ -167,7 +169,7 @@ def judge(rows, **kwargs):
 
 class SafetyTest(unittest.TestCase):
     def test_true_pause_in_a_big_group_is_confident(self):
-        weakest = judge(crowd(11))["acme-ad-01"]
+        weakest = judge(crowd(11), targets=MISSED)["acme-ad-01"]
         self.assertEqual(weakest["verdict_id"], "pause_never_worked")
         self.assertEqual(weakest["verdict"], "Pause: never worked")
         self.assertEqual(weakest["confidence"], "Confident")
@@ -179,7 +181,7 @@ class SafetyTest(unittest.TestCase):
         self.assertIn(CHECK, weakest["check"])
 
     def test_thin_group_may_pause_but_only_as_an_early_read(self):
-        weakest = judge(crowd(7))["acme-ad-01"]
+        weakest = judge(crowd(7), targets=MISSED)["acme-ad-01"]
         self.assertEqual(weakest["verdict_id"], "pause_never_worked")
         self.assertTrue(weakest["thin"])
         self.assertEqual(weakest["confidence"], "Early read")
@@ -223,7 +225,7 @@ class SafetyTest(unittest.TestCase):
 
     def test_protect_top_zero_lets_it_be_paused(self):
         rows = crowd(11) + make_rows("acme-seller", spend=5000.0, impressions=900000, clicks=9000, conv=60, value=2400)
-        self.assertEqual(judge(rows, protect_top=0)["acme-seller"]["verdict_id"], "pause_never_worked")
+        self.assertEqual(judge(rows, protect_top=0, targets=MISSED)["acme-seller"]["verdict_id"], "pause_never_worked")
 
     def test_no_conversion_data_is_cant_judge_never_a_decision(self):
         rows = []
@@ -243,7 +245,7 @@ class SafetyTest(unittest.TestCase):
         for i in range(1, 12):
             rows += make_rows("acme-traffic-%02d" % i, conv=0, value=0, spend=100.0, clicks=60 + 25 * i,
                               impressions=20000, objective="OUTCOME_TRAFFIC")
-        results = judge(rows)
+        results = judge(rows, targets=MISSED)
         weakest = results["acme-traffic-01"]
         self.assertEqual(weakest["objective"], "traffic")
         self.assertEqual(set(weakest["payback"]["bands"]), {"cpc", "ctr"})
@@ -268,6 +270,59 @@ class SafetyTest(unittest.TestCase):
         entry = judge(rows)["acme-promo"]
         self.assertEqual(entry["payback"]["group_by"], ["format"])
         self.assertIn("format / ad_type has 1 comparable ads, under 5", " ".join(entry["reasons"]))
+
+
+class TargetTest(unittest.TestCase):
+    def test_never_worked_without_a_target_is_a_check_that_asks_for_one(self):
+        weakest = judge(crowd(11))["acme-ad-01"]
+        self.assertEqual(weakest["verdict_id"], "check_no_target")
+        self.assertEqual(weakest["verdict"], "Check before cutting")
+        self.assertIn("Set a target", weakest["sentence"])
+        self.assertIn("no target is set", " ".join(weakest["reasons"]))
+        self.assertIsNone(weakest["check"])
+
+    def test_a_target_set_for_another_objective_does_not_count(self):
+        self.assertEqual(judge(crowd(11), targets={"cpc": 0.0001})["acme-ad-01"]["verdict_id"], "check_no_target")
+
+    def test_meeting_any_target_keeps_it_from_a_pause(self):
+        weakest = judge(crowd(11), targets={"cpa": 1000.0})["acme-ad-01"]
+        self.assertEqual(weakest["verdict_id"], "check_meets_target")
+        self.assertIn("still meets your cpa target", weakest["sentence"])
+
+    def test_missing_the_target_pauses_and_says_so(self):
+        weakest = judge(crowd(11), targets={"cpa": 0.01})["acme-ad-01"]
+        self.assertEqual(weakest["verdict_id"], "pause_never_worked")
+        reasons = " ".join(weakest["reasons"])
+        self.assertIn("it misses your target: cpa: it costs USD", reasons)
+        self.assertIn("target USD 0.01", reasons)
+
+    def tired_rows(self):
+        rows = crowd(11)
+        tired = make_rows("acme-tired", conv=2, value=60)
+        for i, row in enumerate(tired):
+            row["Link clicks"] = 40 - 4 * i
+            row["Reach"] = row["Impressions"] / (1 + 0.15 * i)
+        for row in rows:
+            row.setdefault("Reach", row["Impressions"])
+        return rows + tired
+
+    def test_a_fatigued_ad_that_meets_its_target_never_reads_as_missing_it(self):
+        entry = judge(self.tired_rows(), targets={"cpa": 1000.0})["acme-tired"]
+        self.assertEqual(entry["verdict_id"], "pause_fatigued")
+        reasons = " ".join(entry["reasons"])
+        self.assertNotIn("misses your target", reasons)
+        self.assertIn("still meets your target", reasons)
+
+    def test_a_fatigued_ad_that_misses_its_target_says_so(self):
+        entry = judge(self.tired_rows(), targets={"cpa": 0.01})["acme-tired"]
+        self.assertEqual(entry["verdict_id"], "pause_fatigued")
+        self.assertIn("misses your target", " ".join(entry["reasons"]))
+
+    def test_parse_targets_reads_aliases_and_refuses_bad_values(self):
+        self.assertEqual(cm.parse_targets("CPA=40,roas=3"), {"cpa": 40.0, "roas": 3.0})
+        for bad in ("cpa=abc", "cpa=0", "nonsense=3"):
+            with self.assertRaises(ValueError):
+                cm.parse_targets(bad)
 
 
 class ReviewFixesTest(unittest.TestCase):
@@ -321,7 +376,7 @@ class ReviewFixesTest(unittest.TestCase):
         self.assertIsNone(short["check"])
 
     def test_pause_sentence_counts_delivery_days(self):
-        entry = judge(crowd(11))["acme-ad-01"]
+        entry = judge(crowd(11), targets=MISSED)["acme-ad-01"]
         self.assertEqual(entry["active_days"], len(set(r["Day"] for r in make_rows("x"))))
         self.assertIn("after %d days" % entry["active_days"], entry["sentence"])
 

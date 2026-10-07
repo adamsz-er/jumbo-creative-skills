@@ -3,8 +3,9 @@
 
 Usage:
   python3 report.py ads.csv --verdicts verdicts.json [--profile creative-profile.md] \\
-      [--source "Meta ads connector"] [--completeness reconciled] \\
-      [--previews DIR] [--thumbs DIR] [--breakdowns FILE] [--briefs FILE] -o report.html
+      [--source "Meta ads connector"] [--completeness reconciled] [--where market=US] \\
+      [--previews DIR] [--thumbs DIR] -o report.html
+  python3 report.py --check report.html
 
 Standard library only. The page has the same header, six tabs and panels in the
 same order every run. A panel without its data renders a labelled empty state
@@ -136,11 +137,13 @@ def tabs_html(ctx: Ctx) -> str:
 
 
 def footer_html(ctx: Ctx, grade, verdicts, mix, brand: Optional[str], completeness: Optional[str], attribution: str,
-                source: str, window: str, generated: str, caps: Dict[str, Any]) -> str:
+                source: str, window: str, generated: str, caps: Dict[str, Any], scope: Optional[str] = None) -> str:
     lines = ["Graded against this account's own ads, never benchmarks.",
              "Metric ids and formulas are defined in creative-context/references/metrics.md."]
     if brand:
         lines.append("Account: %s." % brand.rstrip("."))
+    if scope:
+        lines.append("Scope: %s only; the verdicts and grades should come from the same scope." % scope)
     lines.append("Data source: %s. Window: %s. Attribution: %s. Money is shown in %s."
                  % (source, window, attribution, ctx.currency or "the account's own currency (the export did not name one)"))
     lines.append("Completeness: %s." % ("not reconciled" if completeness is None else completeness))
@@ -159,22 +162,6 @@ def footer_html(ctx: Ctx, grade, verdicts, mix, brand: Optional[str], completene
         read = ["%s read from column %r" % (k.replace("_", " "), v) if v else "%s: no matching column" % k.replace("_", " ")
                 for k, v in sorted(ctx.funnel_headers.items())]
         lines.append("Funnel columns beyond the standard fields: %s (matched by normalised header)." % interact.plain_ids("; ".join(read)))
-    lines.append("Format, White space and Briefing settings (arbitrary defaults): formats graded against each other only with %d or more; "
-                 "heatmaps show the top %d concepts; %d example ads per format and %d video ads in the retention chart; brief starters use the top %d gaps "
-                 "and top %d Iterate ads; the copy table lists the top %d ads."
-                 % (panels.MIN_FORMATS, panels.HEATMAP_CONCEPTS, panels.STRIP_ADS, panels.RETENTION_ADS, panels.briefing.STARTER_GAPS,
-                    panels.briefing.STARTER_ITERATE, panels.COPY_ADS))
-    if ctx.retention_headers:
-        read = ["%s: %s" % (name, "read from column %r" % found if found else "not found") for name, found in
-                ((shown, ctx.retention_headers.get(step)) for step, _, shown, _ in panels.RETENTION_STEPS)]
-        read.append("average watch time: %s" % ("read from column %r" % ctx.retention_headers["average"] if ctx.retention_headers.get("average")
-                                                else "not found"))
-        lines.append("Video retention columns (matched by normalised header): %s." % "; ".join(read))
-    if ctx.copy_headers:
-        lines.append("Ad copy columns: %s." % "; ".join("%s: %s" % (k, "read from column %r" % v if v else "not found") for k, v in ctx.copy_headers.items()))
-    lines.append("Breakdown file: %s." % ("%d rows; segments read from %s" % (len(ctx.breakdowns), ", ".join("%s (column %r)" % kv for kv in ctx.breakdown_dims.items()) or "no known column")
-                                         if ctx.breakdowns else "not supplied"))
-    lines.append("Briefs: %s." % ("%d from the briefs file" % len(ctx.briefs) if ctx.briefs else "starters built from the gaps and Iterate verdicts, no briefs file"))
     lines.append("Reach and frequency: %s." % ("from the account-level file" if ctx.account else "not shown, they need an account-level pull"))
     lines.append("Prior period: %s." % ("supplied" if ctx.prior else "not supplied"))
     lines.append(ctx.previews.summary())
@@ -194,12 +181,19 @@ def build_html(rows: Optional[Sequence[Dict[str, Any]]] = None, grade: Optional[
                completeness: Optional[str] = None, account: Optional[Dict[str, float]] = None,
                prior: Optional[Sequence[Dict[str, Any]]] = None, previews: Optional[Previews] = None,
                top_n: int = panels.TOP_N_CARDS, pareto_share: float = panels.PARETO_SHARE,
-               breakdowns: Optional[Sequence[Dict[str, Any]]] = None, briefs: Optional[Any] = None) -> str:
-    """Render the dashboard. `rows` are normalised ad rows (creative_metrics.load_rows)."""
+               scope: Optional[str] = None, key_map: Optional[Dict[str, str]] = None) -> str:
+    """Render the dashboard. `rows` are normalised ad rows (creative_metrics.load_rows).
+
+    The title is `title` when given, else the brand from the profile; `scope`
+    (for example "market US") is added to it and to the header and footer.
+    """
     ctx = Ctx(rows=rows, verdicts=verdicts, grade=grade, mix=mix, currency=currency, top_n=top_n,
-              pareto_share=pareto_share, account=account, prior=prior, previews=previews, breakdowns=breakdowns, briefs=briefs)
+              pareto_share=pareto_share, account=account, prior=prior, previews=previews, key_map=key_map)
     brand = brand_from_profile(profile)
-    heading, page_title = heading_for(brand or title)
+    label = title or brand
+    if scope:
+        label = "%s, %s" % (label, scope) if label else scope
+    heading, page_title = heading_for(label)
     start, end = cm.data_window(ctx.rows)
     window = "%s to %s" % (start, end) if start else "n/a (no dates)"
     generated = generated or dt.date.today().isoformat()
@@ -209,11 +203,11 @@ def build_html(rows: Optional[Sequence[Dict[str, Any]]] = None, grade: Optional[
     pool, data, bar = panels.pool_html(ctx), panels.data_block(ctx), panels.filter_bar(ctx)
     caps = {"max_kb": ctx.previews.max_kb, "budget_kb": ctx.previews.budget_kb}
     meta = "".join('<li><span>%s</span> %s</li>' % (esc(k), esc(v)) for k, v in (
-        ("Window", window), ("Data source", source), ("Currency", currency or "account currency (not stated)"),
-        ("Attribution", attribution)))
+        ("Window", window), ("Scope", scope or "all ads in the data"), ("Data source", source),
+        ("Currency", currency or "account currency (not stated)"), ("Attribution", attribution)))
     fills = {"title": esc(page_title), "heading": heading, "sprite": ctx.previews.sprite(), "brand": lockup("h"),
              "filterbar": bar, "dialog": panels.DIALOG, "data": data, "pool": pool, "meta": meta, "badge": badge, "nav": nav_html(), "body": body,
-             "footer": footer_html(ctx, grade, verdicts, mix, brand, completeness, attribution, source, window, generated, caps)}
+             "footer": footer_html(ctx, grade, verdicts, mix, brand, completeness, attribution, source, window, generated, caps, scope)}
     return re.sub(r"\{\{(\w+)\}\}", lambda m: fills[m.group(1)], TEMPLATE.read_text(encoding="utf-8"))
 
 
@@ -248,16 +242,66 @@ def load_account(path: Optional[str]) -> Optional[Dict[str, float]]:
         raise ValueError('--account must be a JSON object with numeric "reach" and "frequency"')
 
 
+CHECK_MAX_KB = 16 * 1024  # a page past this is too heavy to share as one file (arbitrary)
+ALLOWED_HOSTS = ("fonts.googleapis.com", "fonts.gstatic.com")
+
+
+def check_html(text: str) -> List[str]:
+    """Structural problems in a built dashboard, [] when none. A floor for when no browser is available, not a visual check.
+
+    Checks that every tab and panel is present in order, each panel has a known
+    state, the completeness badge and the Scope line are present, the only outside
+    requests are the font stylesheet, no script tag carries a src, no "n/a"
+    reads as a number, and the file is under CHECK_MAX_KB.
+    """
+    problems = []
+    last = -1
+    for tab_id, title, tab_panels in panels.TABS:
+        at = text.find('id="tab-%s"' % tab_id)
+        if at < 0:
+            problems.append("tab %s (%s) is missing" % (tab_id, title))
+            continue
+        if at < last:
+            problems.append("tab %s is out of order" % tab_id)
+        last = at
+        for panel_id, _, heading, _ in tab_panels:
+            found = re.search(r'id="panel-%s" data-state="(\w+)"' % re.escape(panel_id), text)
+            if not found:
+                problems.append("panel %s (%s) is missing" % (panel_id, heading))
+            elif found.group(1) not in ("data", "empty", "partial"):
+                problems.append("panel %s has an unknown state %s" % (panel_id, found.group(1)))
+    if not re.search(r'class="status (ok|bad|warn)"', text):
+        problems.append("the completeness badge is missing")
+    if "<span>Scope</span>" not in text:
+        problems.append("the Scope line is missing from the header")
+    hosts = sorted({h for h in re.findall(r'(?:src|href)\s*=\s*"https?://([^/"]+)', text) if h not in ALLOWED_HOSTS})
+    if hosts:
+        problems.append("outside requests besides the font stylesheet: %s" % ", ".join(hosts))
+    if re.search(r"<script[^>]+\bsrc\s*=", text):
+        problems.append("a script is loaded from a file or URL; everything must be inline")
+    if re.search(r"n/a\s*\(missing[^)]*\)\s*0\b|>0 \(missing", text):
+        problems.append("a missing value is shown as 0")
+    size_kb = len(text.encode("utf-8")) / 1024
+    if size_kb > CHECK_MAX_KB:
+        problems.append("the file is %.0f KB, over %d KB" % (size_kb, CHECK_MAX_KB))
+    return problems
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Build the branded creative dashboard as one self-contained HTML file.")
     parser.add_argument("data", nargs="?", help="Ads Manager CSV (or JSON rows): the daily ad-level data behind every number")
     parser.add_argument("--grade", help="creative-grader --json output")
     parser.add_argument("--verdicts", help="keep-or-kill --json output")
     parser.add_argument("--mix", help="creative-mix --json output")
-    parser.add_argument("--profile", help="creative-profile.md, used for the account name")
+    parser.add_argument("--profile", help="creative-profile.md: the account name, and its Script settings block fills any flag left unset")
     parser.add_argument("--csv", help="the Ads Manager CSV behind the JSON files, only to read the currency code from its spend header")
     parser.add_argument("--currency", help="three-letter currency code to show; default: read from the export's spend header")
-    parser.add_argument("--title", help="account label for the title when there is no --profile; 'Acme' reads 'Acme creative review'")
+    parser.add_argument("--title", help="account label for the title, over the profile's brand; 'Acme' reads 'Acme creative review'")
+    parser.add_argument("--scope", help='what the data covers, shown in the title and header, e.g. "market US"; '
+                                        "default: read from --where")
+    parser.add_argument("--key-map", help="extra KEY=field pairs for KEY:value ad names, e.g. PX=concept,6=tone")
+    parser.add_argument("--check", metavar="HTML", help="check a built dashboard's structure and exit (no browser needed)")
+    cm.add_run_arguments(parser, profile=False)
     parser.add_argument("--source", default="Ads Manager export", help='data source shown in the header (pass "Meta ads connector" for a connector pull)')
     parser.add_argument("--attribution", help="attribution setting shown in the header (default: not stated)")
     parser.add_argument("--completeness", help='what from_mcp printed: "reconciled" or "incomplete:<percent>"; absent reads Not reconciled')
@@ -265,8 +309,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--prior", help="CSV or JSON of the previous equal window, for change against prior period")
     parser.add_argument("--previews", help="folder of rendered ad previews named <ad_id>.<ext>")
     parser.add_argument("--thumbs", help="folder of small thumbnails or video stills named <ad_id>.<ext>")
-    parser.add_argument("--breakdowns", help="a second Ads Manager export with age, gender, placement or region columns, for the segment tables")
-    parser.add_argument("--briefs", help="a JSON list of briefs written with the creative-brief and hook-writer skills")
     parser.add_argument("--preview-max-kb", type=int, default=DEFAULT_MAX_KB, help="skip an image larger than this (default %(default)s)")
     parser.add_argument("--preview-budget-kb", type=int, default=DEFAULT_BUDGET_KB, help="stop embedding images past this total (default %(default)s)")
     parser.add_argument("--top-n", type=int, default=panels.TOP_N_CARDS, help="ad cards shown per list before the rest collapse (default %(default)s)")
@@ -274,22 +316,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help="percent of purchase value the Pareto cut must reach; a common convention, not a rule (default %(default)s)")
     parser.add_argument("-o", "--output", default="report.html", help="where to write the HTML (default report.html)")
     args = parser.parse_args(argv)
+    if args.check:
+        problems = check_html(Path(args.check).read_text(encoding="utf-8"))
+        print("\n".join(["problem: " + p for p in problems] or ["OK: structure checks passed (this is not a visual check)"]))
+        return 1 if problems else 0
     if not any((args.data, args.grade, args.verdicts, args.mix)):
         parser.error("give a CSV of ad rows, or at least one of --grade, --verdicts, --mix")
     try:
-        rows = cm.load_rows(args.data) if args.data else None
+        rows, key_map, run_notes = cm.prepare_run(args, cm.load_rows(args.data) if args.data else [])
+        where = cm.parse_where(args.where)
+        prior = cm.filter_rows(cm.load_rows(args.prior), where, key_map) if args.prior else None
         profile = Path(args.profile).read_text(encoding="utf-8") if args.profile else None
         page = build_html(rows=rows, grade=_load_json(args.grade), verdicts=_load_json(args.verdicts), mix=_load_json(args.mix),
                           profile=profile, title=args.title, currency=args.currency or detect_currency(args.data) or detect_currency(args.csv),
                           source=args.source, attribution=args.attribution, completeness=args.completeness,
-                          account=load_account(args.account), prior=cm.load_rows(args.prior) if args.prior else None,
+                          account=load_account(args.account), prior=prior,
                           previews=Previews(args.previews, args.thumbs, args.preview_max_kb, args.preview_budget_kb),
                           top_n=args.top_n, pareto_share=args.pareto_share,
-                          breakdowns=cm.load_rows(args.breakdowns) if args.breakdowns else None, briefs=_load_json(args.briefs))
-    except ValueError as error:
+                          scope=args.scope or cm.describe_where(where), key_map=key_map)
+    except (OSError, ValueError) as error:
         parser.error(str(error))
     Path(args.output).write_text(page, encoding="utf-8")
-    print("wrote %s" % args.output)
+    print("\n".join(run_notes + ["wrote %s" % args.output]))
     return 0
 
 

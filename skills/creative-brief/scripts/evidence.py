@@ -63,12 +63,13 @@ def _fatiguing(rows: Sequence[Dict[str, Any]], key: str, window: int, min_change
 
 def build_evidence(rows: Sequence[Dict[str, Any]], window: int = 6, min_change: float = 8.0,
                    min_impressions: int = 1000, max_gaps: int = 8,
-                   include_types: Sequence[str] = ("bau",)) -> Dict[str, Any]:
+                   include_types: Sequence[str] = ("bau",),
+                   key_map: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     """Top-quartile ads, fatiguing and never-worked ads, and coverage gaps."""
-    ads = [a for a in cm.aggregate_by_ad(rows) if a.get("concept") and a.get("format")]
+    ads = [a for a in cm.aggregate_by_ad(rows, key_map=key_map) if a.get("concept") and a.get("format")]
     if not ads:
         return {"available": False}
-    first_ads = cm.window_aggregate(rows, window, "first")
+    first_ads = cm.window_aggregate(rows, window, "first", key_map=key_map)
     first_by_key = {_key(a): a for a in first_ads}
     top, fatiguing, never, young = [], [], [], []
     for ad in ads:
@@ -170,12 +171,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--min-impressions", type=int, default=1000,
                         help="ads below this are not judged (arbitrary default)")
     parser.add_argument("--max-gaps", type=int, default=8, help="gaps shown (arbitrary default)")
+    parser.add_argument("--key-map", help="extra KEY=field pairs for KEY:value ad names, e.g. PX=concept,6=tone")
     parser.add_argument("--json", action="store_true", help="print JSON instead of text")
+    cm.add_run_arguments(parser)
     args = parser.parse_args(argv)
-    result = build_evidence(cm.load_rows(args.path), args.window, args.min_change,
-                            args.min_impressions, args.max_gaps,
-                            tuple(t.strip().lower() for t in args.include_types.split(",") if t.strip()))
-    print(json.dumps(result, indent=2) if args.json else render(result))
+    try:
+        rows, key_map, run_notes = cm.prepare_run(args, cm.load_rows(args.path))
+        result = build_evidence(rows, args.window, args.min_change, args.min_impressions, args.max_gaps,
+                                tuple(cm.normalise_ad_type(t) for t in args.include_types.split(",") if t.strip()),
+                                key_map)
+    except (OSError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    result["run_notes"] = run_notes
+    print(json.dumps(result, indent=2) if args.json else "\n".join(run_notes + [render(result)]))
     return 0
 
 

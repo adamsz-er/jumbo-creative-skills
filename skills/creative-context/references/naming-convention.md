@@ -43,14 +43,20 @@ Accounts often use their own order. `parse_name` reads any of these without bein
 | TONE | `tone` |
 | LD, DATE, LAUNCH | `launch_date` |
 
-A key that is not in this table needs no map: it is read from the values it takes across all names. If most are format words it is `format`; ad-type words or synonyms, `ad_type`; market codes, `market`; dates, `launch_date`. Otherwise it keeps its own lowercase name as a field, with one exception: when nothing else is the concept and exactly one unmapped key holds free text (more than one distinct value), that key is read as the concept and detection says so. With two or more such keys none is, detection names them, and you ask the user ONE question about which is the concept. A key counts only when more than half of all names carry it, and a key whose values are mostly numbers is never read as the concept. Detection reports each inference with its computed share and the key's coverage ("key X read as format because 92% of its values are format words; the key is in 97% of names"). Override or add keys with `--key-map "PX=concept"` on `detect_naming.py`, `grade.py`, `verdicts.py` and `mix.py`; the map always wins.
+A key that is not in this table needs no map: it is read from the values it takes across all names. If most are format words it is `format`; ad-type words or synonyms, `ad_type`; market codes, `market`; dates, `launch_date`. Otherwise it keeps its own lowercase name as a field, with one exception: when nothing else is the concept and exactly one unmapped key holds free text (more than one distinct value), that key is read as the concept and detection says so. With two or more such keys none is, detection names them, and you ask the user ONE question about which is the concept. A key counts only when more than half of all names carry it, and a key whose values are mostly numbers is never read as the concept. Detection reports each inference with its computed share and the key's coverage ("key X read as format because 92% of its values are format words; the key is in 97% of names"). Override or add keys with `--key-map "PX=concept"` on `detect_naming.py`, `grade.py`, `verdicts.py`, `mix.py` and `report.py`; the map always wins.
+
+Unkeyed segments between keyed ones (a tone word, a creator) are read by shape, and anything that is not a date, a market code or a format word stays `segment_<position>`. Name them in the same map with the position detection reports, counted from 1: `--key-map "PX=concept,6=tone,7=creator"`. A market code is found by its usual position counted from the start or from the end of names that share a separator, so a name missing one segment, or an older convention with another separator, still has its market.
+
+An ad-type word outside the six types (an account's own word for a product line, say) is asked about once. Record the answer with `--type-map core=bau`; every script then reads that word as the type you gave.
+
+Once the user has confirmed the key map, positions and type map, write them into the `Script settings` block of `creative-profile.md` (`brand-profile-template.md` shows it) and pass `--profile creative-profile.md` to every script. Detection then never asks the same question again, and the analyses all read the same settings.
 
 ## Detect before you describe
 
 Never tell the user how their names are structured from a handful of examples. Run detection on every ad name in the pull:
 
 ```
-python3 scripts/detect_naming.py ads.csv
+python3 -I scripts/detect_naming.py ads.csv
 ```
 
 (`creative_metrics.detect_convention(names)` does the same in code.) It reports the separator, each field and the share of all names carrying it, the KEY:value keys, the conventions in use with counts, the overall match rate (the share of names where a format, concept or ad type was read) and the names that did not parse.
@@ -58,7 +64,11 @@ python3 scripts/detect_naming.py ads.csv
 - **Report the match rate** with whatever you say about the convention.
 - **Ask the user to confirm only when** the match rate is under 85% of names, or a second convention covers at least 5% of names (report both, with counts). Both numbers are arbitrary defaults: `--min-match-rate` sets the first, and you should set both from how tidy this account's names are.
 - **Below those lines, do not ask.** A few stray names are listed as "unparsed / odd names" and you carry on. The user should not have to answer a question the data has already answered.
-- Ad types outside the six in `ad-types.md` are asked about in one question that lists them. Never drop them.
+- Ad types outside the six in `ad-types.md` are asked about in one question that lists them. Never drop them. Record the answer with `--type-map` (or `type-map:` in the profile).
+
+## Restricting the analysis to one scope
+
+`--where market=US` (repeatable; commas list more values, as in `--where format=video,image`) keeps only the rows whose column or name field matches, in `grade.py`, `verdicts.py`, `mix.py` and `report.py`. Every script prints the scope it kept and how many rows that was. Use it when markets must be judged apart: grouping by market splits the baselines but still mixes markets in every total. A field that no row carries stops the run, so a typo never empties the analysis silently. Pass the same `--where` to every script in a run.
 
 ## Grouping by anything the data carries
 
