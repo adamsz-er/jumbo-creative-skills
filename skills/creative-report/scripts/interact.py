@@ -178,6 +178,16 @@ def _num(value: Any) -> Optional[float]:
     return None if value is None else value
 
 
+def _money(value: Any) -> Optional[float]:
+    """Money to 2 decimals: float sums differ by Python version, so the page never carries the raw sum."""
+    return None if value is None else round(value, 2)
+
+
+def _count(value: Any) -> Any:
+    """A count is an integer when it is whole; a fractional (modelled) count is kept as it is."""
+    return int(value) if isinstance(value, float) and value.is_integer() else value
+
+
 def _record(key: str, base: Dict[str, Any], verdict: Optional[Dict[str, Any]], grade: Optional[Dict[str, Any]],
             label_of: Callable[..., str]) -> Dict[str, Any]:
     verdict, grade = verdict or {}, grade or {}
@@ -199,13 +209,13 @@ def _record(key: str, base: Dict[str, Any], verdict: Optional[Dict[str, Any]], g
         "confidence": verdict.get("confidence"),
         "format": fmt, "ad_type": fields.get("ad_type"), "concept": fields.get("concept"), "market": fields.get("market"),
         "funnel_stage": fields.get("funnel_stage"), "creator": fields.get("creator"), "objective": objective,
-        "spend": _num(spend), "conversions": _num(base.get("conversions")), "conversion_value": _num(base.get("conversion_value")),
-        "impressions": _num(base.get("impressions") if base else grade.get("impressions")),
-        "link_clicks": _num(base.get("link_clicks")), "clicks": _num(base.get("clicks")),
-        "video_views_3s": _num(base.get("video_views_3s")), "video_thruplay": _num(base.get("video_thruplay")),
+        "spend": _money(spend), "conversions": _count(_num(base.get("conversions"))), "conversion_value": _money(base.get("conversion_value")),
+        "impressions": _count(_num(base.get("impressions") if base else grade.get("impressions"))),
+        "link_clicks": _count(_num(base.get("link_clicks"))), "clicks": _count(_num(base.get("clicks"))),
+        "video_views_3s": _count(_num(base.get("video_views_3s"))), "video_thruplay": _count(_num(base.get("video_thruplay"))),
         "fatiguing": None if unknown_fatigue else bool(verdict["fatiguing"]),
         "age_days": base.get("age_days") if base and base.get("age_days") is not None else verdict.get("age_days"),
-        "stake": stake if stake is not None else _num(spend),
+        "stake": _money(stake if stake is not None else spend),
         "weak": STEP_SLUG.get(step, "none" if step == "none" else None),
     }
 
@@ -290,7 +300,11 @@ def _sum(records: Sequence[Dict[str, Any]], field: str) -> Optional[float]:
     return sum(values) if values else None
 
 
-def ratio_of_sums(records: Sequence[Dict[str, Any]], num: str, den: str, num_words: str, den_words: str) -> Dict[str, Any]:
+def _money_sum(records: Sequence[Dict[str, Any]], field: str) -> Optional[float]:
+    return _money(_sum(records, field))
+
+
+def ratio_of_sums(records: Sequence[Dict[str, Any]], num: str, den: str, num_words: str, den_words: str, digits: int = 4) -> Dict[str, Any]:
     """Sum of num over sum of den across the ads that have both; says how many ads that was when it is not all of them."""
     pairs = [r for r in records if r.get(num) is not None and r.get(den) is not None]
     if not pairs:
@@ -300,21 +314,21 @@ def ratio_of_sums(records: Sequence[Dict[str, Any]], num: str, den: str, num_wor
     if bottom == 0:
         return {"value": None, "n": len(pairs), "suffix": "", "why": "n/a (zero %s)" % den_words}
     suffix = " (%d of %d ads)" % (len(pairs), len(records)) if len(pairs) < len(records) else ""
-    return {"value": top / bottom, "n": len(pairs), "suffix": suffix, "why": None}
+    return {"value": round(top / bottom, digits), "exact": top / bottom, "n": len(pairs), "suffix": suffix, "why": None}
 
 
 def totals_of(records: Sequence[Dict[str, Any]], total_spend: Optional[float], money: Optional[Callable[..., str]] = None) -> Dict[str, Any]:
     """Ads, spend, share of account spend, ROAS and CPA of a set of ads: ratios of sums over the ads that have both operands."""
-    spend, conv, value = _sum(records, "spend"), _sum(records, "conversions"), _sum(records, "conversion_value")
+    spend, conv, value = _money_sum(records, "spend"), _count(_sum(records, "conversions")), _money_sum(records, "conversion_value")
     roas = ratio_of_sums(records, "conversion_value", "spend", "purchase value", "spend")
-    cpa = ratio_of_sums(records, "spend", "conversions", "spend", "purchases")
+    cpa = ratio_of_sums(records, "spend", "conversions", "spend", "purchases", 2)
     show_money = money or (lambda v, d=0: "%.*f" % (d, v))
     return {"ads": len(records), "spend": spend, "conversions": conv, "conversion_value": value,
             "share": None if not total_spend or spend is None else spend / total_spend * 100,
             "roas": roas["value"], "cpa": cpa["value"], "roas_n": roas["n"], "cpa_n": cpa["n"],
             "roas_suffix": roas["suffix"], "cpa_suffix": cpa["suffix"],
-            "roas_text": roas["why"] or "%.2fx%s" % (roas["value"], roas["suffix"]),
-            "cpa_text": cpa["why"] or "%s%s" % (show_money(cpa["value"], 2), cpa["suffix"])}
+            "roas_text": roas["why"] or "%.2fx%s" % (roas["exact"], roas["suffix"]),
+            "cpa_text": cpa["why"] or "%s%s" % (show_money(cpa["exact"], 2), cpa["suffix"])}
 
 
 def group_records(records: Sequence[Dict[str, Any]], key: str) -> List[Dict[str, Any]]:
@@ -429,7 +443,7 @@ def weak_groups(records: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
     def row(step: Optional[str]) -> Dict[str, Any]:
         members = found[step]
-        spend = sum(r.get("spend") or 0 for r in members)
+        spend = _money(sum(r.get("spend") or 0 for r in members))
         return {"step": step, "ads": len(members), "spend": spend, "share": spend / total * 100 if total else None,
                 "words": STEP_WORDS.get(UNSLUG.get(step), "no weak step found" if step == "none" else "not diagnosed (missing data)"),
                 "fix": STEP_FIX.get(UNSLUG.get(step))}

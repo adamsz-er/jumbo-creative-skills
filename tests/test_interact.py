@@ -118,6 +118,25 @@ class PayloadTest(Fixture):
         self.assertEqual(first["verdict"], "iterate")
         self.assertIs(first["fatiguing"], True)
 
+    def test_money_is_rounded_so_float_sums_cannot_differ_by_python_version(self):
+        ten_tenths = 0.0
+        for _ in range(10):
+            ten_tenths += 0.1
+        self.assertNotEqual(ten_tenths, 1.0)
+        recs = interact.ad_records([{"ad_id": "x", "ad_name": "x", "spend": ten_tenths, "conversion_value": ten_tenths,
+                                     "conversions": 3}], None, None)
+        self.assertEqual(recs[0]["spend"], 1.0)
+        self.assertEqual(recs[0]["conversion_value"], 1.0)
+        self.assertIsInstance(recs[0]["conversions"], int)
+        _, data = page_data(report.build_html(rows=[{"ad_id": "x", "ad_name": "x", "spend": ten_tenths}], verdicts=None, currency="USD", title="T"))
+        self.assertEqual(data["ads"][0]["spend"], 1.0)
+        sub = interact.totals_of(recs + recs, None)
+        self.assertEqual(sub["spend"], 2.0)
+        self.assertEqual(interact.totals_of([{"spend": 1.0, "conversion_value": 1.0 / 3}], None)["roas"], 0.3333)
+        near = interact.totals_of([{"spend": 10000.0, "conversion_value": 28749.7}], None)
+        self.assertEqual(near["roas"], 2.875)
+        self.assertEqual(near["roas_text"], "2.87x")
+
     def test_unknowns_are_null_never_zero(self):
         _, data = page_data(self.html)
         first = data["ads"][0]
@@ -214,7 +233,7 @@ class SubtotalTest(unittest.TestCase):
         (group,) = interact.group_subtotals(recs, "verdict")
         self.assertEqual((group["ads"], group["spend"]), (2, 400.0))
         self.assertAlmostEqual(group["roas"], 600 / 400)
-        self.assertAlmostEqual(group["cpa"], 400 / 15)
+        self.assertEqual(group["cpa"], round(400 / 15, 2))
         self.assertAlmostEqual(group["share"], 100.0)
 
     def test_share_is_of_the_whole_account_and_groups_follow_the_board_order(self):
@@ -468,7 +487,7 @@ class ScriptLogicTest(Fixture):
                 if b[field] is None:
                     self.assertIsNone(a[field], field)
                 else:
-                    self.assertAlmostEqual(a[field], b[field], places=6, msg=field)
+                    self.assertAlmostEqual(a[field], b[field], places={"roas": 4, "cpa": 2}.get(field, 6), msg=field)
 
     def test_filtering_and_hash_round_trip_use_public_ids_only(self):
         _, data = page_data(self.html)
@@ -587,8 +606,8 @@ class ReviewScriptTest(Fixture):
         js = self.js("console.log(JSON.stringify(CR.subtotals(%s, 'verdict', 300)[0]));" % json.dumps(recs))
         for field in ("roas_text", "cpa_text", "roas_n", "cpa_n"):
             self.assertEqual(js[field], py[field], field)
-        self.assertAlmostEqual(js["roas"], py["roas"])
-        self.assertAlmostEqual(js["cpa"], py["cpa"])
+        self.assertAlmostEqual(js["roas"], py["roas"], places=4)
+        self.assertAlmostEqual(js["cpa"], py["cpa"], places=2)
         self.assertEqual(py["roas_text"], "3.00x (2 of 3 ads)")
         self.assertEqual(py["cpa_text"], "%.2f (2 of 3 ads)" % (200 / 15))
 
