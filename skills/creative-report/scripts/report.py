@@ -38,9 +38,11 @@ STEPS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
     ("reach cost", ("cpm",)), ("hook", ("hook_rate",)), ("hold", ("hold_rate",)),
     ("click", ("ctr",)), ("post-click", ("cvr", "add_to_cart_rate")), ("pays back", ("cpa", "roas")),
 )
-VERDICT_ORDER = ("iterate", "kill", "scale", "check", "keep", "early")
-VERDICT_LABEL = {"iterate": "Iterate", "kill": "Kill", "scale": "Scale", "check": "Check before cutting",
-                 "keep": "Keep", "early": "Too early to judge"}
+VERDICT_ORDER = ("iterate", "kill", "scale", "check", "keep", "cant", "early")
+VERDICT_LABEL = {"iterate": "Iterate", "kill": "Pause", "scale": "Scale", "check": "Check before cutting",
+                 "keep": "Keep", "cant": "Can't judge", "early": "Too early to judge"}
+VERDICT_SECTION = "Pause, check, iterate, scale, keep"
+ID_CLASS = {"scale": "scale", "keep": "keep", "iterate": "iterate", "cant_judge": "cant", "too_early": "early"}
 FATIGUE_WINDOW = 6  # arbitrary default, as in keep-or-kill: set it from your own account
 TOP_N = 3  # arbitrary default, as in keep-or-kill: how many top-spend ads the concentration line counts
 MAX_ACTIONS = 3
@@ -75,17 +77,29 @@ def esc(value: Any) -> str:
     return html.escape("" if value is None else str(value), quote=True)
 
 
+def entry_class(ad: Dict[str, Any]) -> str:
+    """The display class of a verdict entry: its stable verdict_id when present, else its label."""
+    vid = ad.get("verdict_id") or ""
+    if vid.startswith("pause"):
+        return "kill"
+    if vid.startswith("check"):
+        return "check"
+    return ID_CLASS.get(vid) or verdict_class(ad["verdict"])
+
+
 def verdict_class(verdict: str) -> str:
     text = (verdict or "").lower()
     if text.startswith("scale"):
         return "scale"
-    if text.startswith("keep: check"):
+    if text.startswith(("keep: check", "check")):
         return "check"
+    if text.startswith("can't"):
+        return "cant"
     if text.startswith("keep"):
         return "keep"
     if text.startswith("iterate"):
         return "iterate"
-    if text.startswith("kill"):
+    if text.startswith(("kill", "pause")):
         return "kill"
     return "early"
 
@@ -245,16 +259,21 @@ def table(header: Sequence[Tuple[str, bool]], body: Sequence[str], stack: bool =
 
 
 def verdict_counts(verdicts: Optional[Dict[str, Any]]) -> Counter:
-    return Counter(verdict_class(a["verdict"]) for a in (verdicts or {}).get("ads", []))
+    return Counter(entry_class(a) for a in (verdicts or {}).get("ads", []))
 
 
 def top_actions(verdicts: Optional[Dict[str, Any]], grade: Optional[Dict[str, Any]]) -> List[str]:
-    """Up to three actions: one per decision type first, largest spend first, then the next largest."""
+    """Up to three actions: keep-or-kill's own do-first list (largest spend at stake, never an ad that cannot
+    be judged) when it is there, else one per decision type first, largest spend first, then the next largest."""
     items: List[str] = []
-    if verdicts and verdicts.get("ads"):
+    do_first = ((verdicts or {}).get("summary") or {}).get("do_first")
+    if do_first:
+        for ad in do_first[:MAX_ACTIONS]:
+            items.append("<strong>%s</strong>: %s" % (esc(short_name(ad)), say(ad.get("sentence") or ad["verdict"])))
+    elif verdicts and verdicts.get("ads"):
         by_class: Dict[str, List[Dict[str, Any]]] = {}
         for ad in sorted(verdicts["ads"], key=lambda a: -(a.get("spend") or 0)):
-            by_class.setdefault(verdict_class(ad["verdict"]), []).append(ad)
+            by_class.setdefault(entry_class(ad), []).append(ad)
         queue = [ad for cls in ("iterate", "kill", "scale") for ad in by_class.get(cls, [])]
         firsts = [by_class[c][0] for c in ("iterate", "kill", "scale") if by_class.get(c)]
         ordered = firsts + [ad for ad in queue if ad not in firsts]
@@ -318,28 +337,31 @@ def verdict_section(verdicts, rows) -> str:
         chart = bar_chart([(VERDICT_LABEL[c], counts[c], c, str(counts[c])) for c in VERDICT_ORDER if counts.get(c)],
                           "Ads per verdict", "Number of ads")
         body = []
-        ads = sorted(verdicts["ads"], key=lambda a: (VERDICT_ORDER.index(verdict_class(a["verdict"])), -(a.get("spend") or 0)))
+        ads = sorted(verdicts["ads"], key=lambda a: (VERDICT_ORDER.index(entry_class(a)), -(a.get("spend_at_stake") or a.get("spend") or 0)))
         for ad in ads:
-            cls = verdict_class(ad["verdict"])
+            cls = entry_class(ad)
             reasons = "".join("<li>%s</li>" % say(r) for r in ad.get("reasons", []))
             check = "<p class=\"muted\"><strong>Check first:</strong> %s</p>" % say(ad["check"]) if ad.get("check") else ""
             head, _, rest = ad["verdict"].partition(": ")
-            if head == "kill":
+            if cls == "kill":
                 head, rest = ad["verdict"], ""
+            sentence = "<p>%s</p>" % say(ad["sentence"]) if ad.get("sentence") else ""
+            confidence = ("<p class=\"muted\"><strong>%s:</strong> %s</p>" % (say(ad["confidence"]), say(ad.get("confidence_reason", "")))
+                          if ad.get("confidence") else "")
             detail = "<small>%s</small>" % say(rest) if rest else ""
             facts = "%s, %s days old" % (ad.get("format") or "no format", _num(ad.get("age_days")))
             body.append("<tr>%s<td class=\"num\" data-label=\"%s\">%s</td><td><span class=\"badge %s\">%s</span>%s</td>"
-                        "<td class=\"why\"><ul class=\"reasons\">%s</ul>%s</td></tr>"
+                        "<td class=\"why\">%s%s<ul class=\"reasons\">%s</ul>%s</td></tr>"
                         % (ad_cell({"ad": ad.get("ad"), "name": ad.get("ad_name")}, facts), money("Spend"), _num(ad.get("spend")),
-                           cls, say(head), detail, reasons, check))
+                           cls, say(head), detail, sentence, confidence, reasons, check))
         grid = table([("Ad", False), (money("Spend"), True), ("Verdict", False), ("Why", False)], body, stack=True)
         concentration = (verdicts.get("summary") or {}).get("concentration_line")
         note = '<p class="muted">%s</p>' % esc(concentration) if concentration else ""
-        return section("Verdicts", "Keep, kill, iterate, scale", chart + grid + note)
-    msg = ('<p>Keep, kill, iterate or scale calls need the keep-or-kill output: run keep-or-kill with <code>--json</code> '
+        return section("Verdicts", VERDICT_SECTION, chart + grid + note)
+    msg = ('<p>Pause, check, iterate, scale or keep calls need the keep-or-kill output: run keep-or-kill with <code>--json</code> '
            'and pass the file with <code>--verdicts</code>.</p>')
     if not rows:
-        return section("Verdicts", "Keep, kill, iterate, scale", msg)
+        return section("Verdicts", VERDICT_SECTION, msg)
     body = []
     for entry in fatigue_rows(rows):
         t = entry["trend"]
@@ -356,7 +378,7 @@ def verdict_section(verdicts, rows) -> str:
     grid = table([("Ad", False), ("Format", False), (label("ctr") + " change", True), ("Frequency change", True), ("Fatigue read", False)], body)
     note = ('<p class="muted">ctr and frequency compare each ad\'s first and last %d delivery days (an arbitrary '
             'default: set it from your own account). A move is not a verdict by itself.</p>' % FATIGUE_WINDOW)
-    return section("Verdicts", "Keep, kill, iterate, scale", msg + "<h3>Fatigue read in the meantime</h3>" + grid + note)
+    return section("Verdicts", VERDICT_SECTION, msg + "<h3>Fatigue read in the meantime</h3>" + grid + note)
 
 
 def _cell(grade: Dict[str, Any]) -> str:

@@ -82,16 +82,16 @@ Funnel stage
 
 Read-outs
   Top quartile on pooled ROAS among BAU ads: concepts partnership-haul, social-proof, staff-picks, trail-diary; formats carousel, partnership.
-  Gaps worth testing: empty or single-ad cells beside a top-quartile concept or format, strongest first. A hypothesis to test, not a result:
-    partnership-haul in carousel: gap (top concept and top format)
-    social-proof in carousel: gap (top concept and top format)
-    social-proof in partnership: gap (top concept and top format)
-    staff-picks in partnership: gap (top concept and top format)
-    trail-diary in carousel: gap (top concept and top format)
-    partnership-haul in partnership: 1 ad (top concept and top format)
-    staff-picks in carousel: 1 ad (top concept and top format)
-    trail-diary in partnership: 1 ad (top concept and top format)
-    ... 51 more (see --json)
+  Gaps worth testing: empty or single-ad cells beside a proven top-quartile concept or format, strongest first. Proven means at least 9821 of BAU spend (default: 3 x the median ad spend, an arbitrary default: set it with --min-proven-spend); below it are concepts before-after, behind-the-seams, durability-test, fix-it-yourself, founder-story, guarantee, packing-list, partnership-haul and 6 more (see --json) and formats partnership, which never lead a gap. A hypothesis to test, not a result:
+    before-after in carousel: gap (top format)
+    behind-the-seams in carousel: gap (top format)
+    comparison in carousel: gap (top format)
+    durability-test in carousel: gap (top format)
+    fix-it-yourself in carousel: gap (top format)
+    founder-note in carousel: gap (top format)
+    founder-story in carousel: gap (top format)
+    guarantee in carousel: gap (top format)
+    ... 15 more (see --json)
   Over-reliance: no concept family or format holds more than 60% of spend.
   Near-duplicates counted as one concept (override with --no-family):
     new-drop: new-drop, new-drop-four, new-drop-three, new-drop-two (ads 120000000007, 120000000013, 120000000025, 120000000030)

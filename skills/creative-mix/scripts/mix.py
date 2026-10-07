@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """The account's creative portfolio: theme x format coverage, ad types, spend concentration.
 
-Usage: python3 mix.py ads.csv [--pattern concept,format,...] [--key-map PX=concept] [--group-by market] [--no-family] [--json]
+Usage: python3 mix.py ads.csv [--pattern concept,format,...] [--key-map PX=concept] [--group-by market] [--min-proven-spend 4000] [--no-family] [--json]
 
 Standard library only. Ad names are split with the naming convention (see
 creative-context). Names that do not parse go to an "unclassified" bucket that
 is counted and listed, never dropped. Ad types outside the six known ones are kept as
 written, counted, and flagged so the agent asks the user about them. Performance read-outs (which concepts and
 formats are top quartile) use pooled ROAS over BAU ads only, relative to this
-account, with no benchmark. Promo and BAU are shown separately, never blended.
+account, with no benchmark. Only a concept or format with enough BAU spend counts
+as proven (--min-proven-spend, default three times the account's median ad spend,
+an arbitrary default: set it from your own account), so one with negligible spend
+never leads the gap list. Promo and BAU are shown separately, never blended.
 """
 from __future__ import annotations
 
@@ -29,6 +32,7 @@ OVER_RELIANCE = 60.0  # percent of spend; arbitrary default, set from your own a
 # default, not a statistical rule: set your own from how many concepts you run.
 MIN_FOR_QUARTILES = 5
 MAX_GAPS_SHOWN = 8
+PROVEN_MULTIPLE = 3  # arbitrary default: proven spend is this many times the account's median ad spend
 
 
 def concept_families(concepts: Sequence[str]) -> Dict[str, str]:
@@ -85,10 +89,13 @@ def _top_quartile(values: Dict[str, Optional[float]]) -> List[str]:
 
 def analyse_mix(rows: Sequence[Dict[str, Any]], pattern: Optional[Sequence[str]] = None,
                 families: bool = True, group_by: Optional[Sequence[str]] = None,
-                key_map: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+                key_map: Optional[Dict[str, str]] = None,
+                min_proven_spend: Optional[float] = None) -> Dict[str, Any]:
     """Portfolio tables and read-outs from daily or per-ad rows.
 
     `group_by` adds a table by any column the data carries (market, objective, ...).
+    `min_proven_spend` is the BAU spend a concept or format needs before it counts as
+    proven for gap ranking; the default is PROVEN_MULTIPLE times the median ad spend.
     """
     ads = cm.aggregate_by_ad(rows, key_map=key_map)
     group_by = cm.resolve_group_by(ads, group_by) if group_by else ()
@@ -142,7 +149,19 @@ def analyse_mix(rows: Sequence[Dict[str, Any]], pattern: Optional[Sequence[str]]
                 if any(a["family"] == f for a in bau)}
     fmt_roas = {f: pooled([a for a in bau if (a["fields"].get("format") or "unknown") == f])["roas"]
                 for f in formats if any((a["fields"].get("format") or "unknown") == f for a in bau)}
+    if min_proven_spend is None:
+        spends = [a["spend"] for a in classified if a.get("spend")]
+        min_proven_spend = PROVEN_MULTIPLE * statistics.median(spends) if spends else 0.0
+
+    def bau_spend(match) -> float:
+        return sum(a.get("spend") or 0 for a in bau if match(a))
+
+    unproven = {"concepts": sorted(f for f in fam_roas if bau_spend(lambda a: a["family"] == f) < min_proven_spend),
+                "formats": sorted(f for f in fmt_roas
+                                  if bau_spend(lambda a: (a["fields"].get("format") or "unknown") == f) < min_proven_spend)}
     top_concepts, top_formats = _top_quartile(fam_roas), _top_quartile(fmt_roas)
+    proven_concepts = [c for c in top_concepts if c not in unproven["concepts"]]
+    proven_formats = [f for f in top_formats if f not in unproven["formats"]]
     gaps = []
     for name, line in zip(family_names, cells):
         for fmt in formats:
@@ -150,9 +169,9 @@ def analyse_mix(rows: Sequence[Dict[str, Any]], pattern: Optional[Sequence[str]]
             if count > 1:
                 continue
             why = []
-            if name in top_concepts:
+            if name in proven_concepts:
                 why.append("top concept")
-            if fmt in top_formats:
+            if fmt in proven_formats:
                 why.append("top format")
             if why:
                 gaps.append({"concept": name, "format": fmt, "ads": count, "why": why,
@@ -189,6 +208,7 @@ def analyse_mix(rows: Sequence[Dict[str, Any]], pattern: Optional[Sequence[str]]
         "by_stage": by_stage,
         "grid": {"formats": formats, "families": family_names, "cells": cells},
         "top_concepts": top_concepts, "top_formats": top_formats,
+        "min_proven_spend": min_proven_spend, "unproven": unproven,
         "gaps": gaps, "over_reliance": over,
         "duplicates": [{"concept": r["concept"], "variants": r["variants"], "ads": r["ad_ids"]}
                        for r in by_concept if len(r["ad_ids"]) > 1],
@@ -211,6 +231,11 @@ def _simple(rows: Sequence[Dict[str, Any]], key: str, label: str, note: str = ""
     lines = [[str(r[key]) + (note if key == "ad_type" and r[key] not in TYPES else ""), str(r["ads"]),
               _num(r["spend"], 0), _num(r["share"], 1), _num(r["roas"]), _num(r["cpa"])] for r in rows]
     return _fmt_table([label, "ads", "spend", "share%", "roas", "cpa"], lines)
+
+
+def _short_list(names: Sequence[str]) -> str:
+    shown = ", ".join(names[:MAX_GAPS_SHOWN]) or "none"
+    return shown + (" and %d more (see --json)" % (len(names) - MAX_GAPS_SHOWN) if len(names) > MAX_GAPS_SHOWN else "")
 
 
 def render(result: Dict[str, Any]) -> str:
@@ -263,8 +288,12 @@ def render(result: Dict[str, Any]) -> str:
     else:
         out.append("  Performance not read: fewer than %d BAU concepts or formats to rank against each other."
                    % MIN_FOR_QUARTILES)
-    out.append("  Gaps worth testing: empty or single-ad cells beside a top-quartile concept or format, "
-               "strongest first. A hypothesis to test, not a result:")
+    out.append("  Gaps worth testing: empty or single-ad cells beside a proven top-quartile concept or format, "
+               "strongest first. Proven means at least %s of BAU spend (default: %d x the median ad spend, an "
+               "arbitrary default: set it with --min-proven-spend); below it are concepts %s and formats %s, which never "
+               "lead a gap. A hypothesis to test, not a result:" % (
+                   _num(result["min_proven_spend"], 0), PROVEN_MULTIPLE,
+                   _short_list(result["unproven"]["concepts"]), _short_list(result["unproven"]["formats"])))
     for gap in result["gaps"][:MAX_GAPS_SHOWN]:
         out.append("    %s in %s: %s (%s)" % (gap["concept"], gap["format"],
                                               "gap" if gap["ads"] == 0 else "1 ad", " and ".join(gap["why"])))
@@ -292,6 +321,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--key-map", help="extra KEY=field pairs for KEY:value ad names, e.g. PX=concept")
     parser.add_argument("--group-by", help="also show a table by these comma-separated columns: a name field or "
                                            "any column in the data, e.g. market or format,market")
+    parser.add_argument("--min-proven-spend", type=float,
+                        help="BAU spend a concept or format needs before it counts as proven for gap ranking "
+                             "(arbitrary default: %d times the account's median ad spend)" % PROVEN_MULTIPLE)
     parser.add_argument("--no-family", action="store_true",
                         help="do not group '-suffix' variants of a concept into one family")
     parser.add_argument("--json", action="store_true", help="print JSON instead of text")
@@ -301,7 +333,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
         key_map = cm.parse_key_map(args.key_map) if args.key_map else None
         result = analyse_mix(cm.load_rows(args.path), pattern, families=not args.no_family,
-                             group_by=group_by, key_map=key_map)
+                             group_by=group_by, key_map=key_map, min_proven_spend=args.min_proven_spend)
     except (cm.GroupColumnError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 2

@@ -49,7 +49,7 @@ This grades the ads and reads fatigue and spend from the shared metrics module. 
 
 1. **What to do first:** verdict counts and the three actions that matter most.
 2. **Basis:** window, grouping, which clicks and conversions columns, defaults used, and that grades are against this account's own baseline.
-3. **Keep, kill, iterate, scale:** one row per ad with its reasons. The check to run before any kill is shown with it.
+3. **Pause, check, iterate, scale, keep:** one row per ad with its plain-English sentence, confidence and reasons, largest spend at stake first. The check to run before any pause is shown with it.
 4. **Funnel diagnosis:** the first broken step per ad, plus a hook against hold plot for video.
 5. **Creative mix:** spend by format and ad type, the concept by format grid, and gaps.
 6. **Notes and missing data:** every `n/a (missing ...)` from the inputs, ads too young to judge, and sections that could not be built.

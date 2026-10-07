@@ -25,7 +25,7 @@ Follow `creative-context/references/data-inputs.md`.
 
 ```
 python3 scripts/grade.py ads.csv                 # ads.csv from the connector: see step 1
-python3 scripts/grade.py ads.csv --group-by format,ad_type --min-impressions 2000
+python3 scripts/grade.py ads.csv --group-by format,ad_type,market --min-impressions 2000   # default grouping is format,ad_type
 python3 scripts/grade.py ads.csv --json
 ```
 
@@ -33,7 +33,8 @@ python3 scripts/grade.py ads.csv --json
 
 ## What the script does
 
-- Grades hook rate, hold rate, CTR, CPM, CVR, add-to-cart rate, CPA and ROAS per ad as top quartile, middle or bottom quartile within the ad's group. A group with fewer than 5 ads falls back to the whole account, and the output says so. Costs are inverted: a low CPM is top quartile.
+- Grades hook rate, hold rate, CTR, CPM, CVR, add-to-cart rate, CPA and ROAS (plus CPC, cost per lead and engagement rate where the data has them) per ad as top quartile, middle or bottom quartile within the ad's group and campaign objective. The default group is format then ad type; a group with fewer than 5 comparable ads widens to format, then to the whole objective, and the output names the group each ad was graded in. Groups under twice that minimum are flagged as small: a grade there is an early read. Costs are inverted: a low CPM is top quartile.
+- Reads payback by objective: sales on CPA and ROAS, traffic on CPC and CTR, awareness on CPM and hook rate, leads on cost per lead, engagement on engagement rate and CPM. An ad is never judged on a measure its objective does not use. With no objective column every ad is graded as sales and the output says so.
 - Reads the funnel in order and stops at the first bottom-quartile step: reach cost, hook, hold, click, post-click, payback. Post-click is only read while CTR is healthy, because a weak CTR is already the broken step. The action for each step is in `references/diagnosis-patterns.md`.
 - Ads under the impression floor are "not graded (low volume)". Missing video fields show as `n/a (missing <field>)`, the diagnosis skips that step and lists what it skipped. A skipped step is never read as healthy.
 

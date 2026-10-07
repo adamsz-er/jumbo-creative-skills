@@ -1,37 +1,57 @@
 # Verdict rules
 
-First matching rule wins. Every verdict lists its reasons. All grading is relative to the account's own ads in the same group (usually format): top quartile at or above p75, bottom quartile at or below p25, costs inverted.
+First matching rule wins. Every verdict lists its reasons, a plain-English sentence, a confidence level and the spend at stake. All grading is relative to the account's own ads: top quartile at or above p75, bottom quartile at or below p25, costs inverted. No benchmark is used.
 
 ## Inputs
 
-- **Learning flag.** Age is days from first delivery to the latest date in the data, so an ad older than the export window looks as young as the window start; widen the export if that matters. An ad is learning when age is under `--young-days` or its impressions are under `--min-impressions`.
-- **Payback band.** Combines `cpa` and `roas`. Bottom if either is bottom quartile; top only if every graded one is top. A metric that cannot be computed (for example CPA with zero purchases) is not graded and is named, never read as 0. "From the start" means the ad's first `--window` delivery days graded against every ad's own first window.
+- **Learning flag.** Age is days from first delivery (or `created_time` when the data has it) to the latest date in the data. An ad is learning when age is under `--young-days` or its impressions are under `--min-impressions`.
+- **Objective.** Read from the `objective` column. Sales (OUTCOME_SALES, CONVERSIONS, PRODUCT_CATALOG_SALES), traffic (OUTCOME_TRAFFIC, LINK_CLICKS), awareness (OUTCOME_AWARENESS, REACH, BRAND_AWARENESS, VIDEO_VIEWS), leads (OUTCOME_LEADS, LEAD_GENERATION), engagement (OUTCOME_ENGAGEMENT, POST_ENGAGEMENT). Unknown or absent is judged as sales and the output says so. An ad is only ever compared with ads of the same objective, so a traffic ad is never judged on purchases.
+- **Payback measures, by objective.** Sales: `cpa` and `roas`. Traffic: `cpc` and `ctr`. Awareness: `cpm` and `hook_rate`. Leads: `cost_per_lead`. Engagement: `engagement_rate` and `cpm`. Formulas are in `creative-context/references/metrics.md`. A measure that cannot be computed is named and never read as 0.
+- **Comparison group.** Default `--group-by format,ad_type`, within the objective. An ad is graded in the narrowest group with at least 5 comparable ads: format and ad type, then format, then the whole objective. Each reason names the group used and why a narrower one was skipped. 5 is an arbitrary default.
+- **Thin group.** A group with 5 up to 9 comparable ads (under twice the minimum) is thin. The output lists thin groups in a warning, and every verdict that rests on one reads "Early read".
 - **Attention.** `hook_rate` or `ctr` in the top quartile.
 - **Fatiguing.** Comparing an ad's first and last `--window` delivery days: CTR falls by at least `--min-change` percent AND (average frequency rises by at least that, OR hook rate falls by at least that). With fewer than 2 x window delivery days the trend is "insufficient data": the ad is neither called fatiguing nor cleared.
+- **Biggest sellers.** The account's top `--protect-top` ads by purchases, and by purchase value (default 3, arbitrary: set it from how many ads you run).
 
 ## Rules
 
-| # | Condition | Verdict |
+| # | Condition | Verdict (`verdict_id`) |
 |---|---|---|
-| 1 | Learning | too early (learning). Nothing else is said. |
-| 2 | Payback bottom overall AND bottom from the start, not fatiguing | kill: never worked |
-| 3 | Fatiguing and payback not bottom (middle, top, or not gradable) | iterate: refresh the hook or creator, keep the concept |
-| 4 | Fatiguing and payback bottom | kill: fatigued |
-| 5 | Payback top, fatigue readable and not fatiguing | scale: raise budget in steps |
-| 6 | Attention strong but payback bottom | keep: check whether it feeds other ads before cutting |
-| 7 | Anything else | keep |
+| 1 | Learning | Too early (`too_early`) |
+| 2 | No payback measure can be graded (missing data, or too few comparable ads) | Can't judge: missing ... (`cant_judge`). Never iterate, keep or scale. Fatigue is context only. |
+| 3 | Fatiguing and payback is not bottom on every measure | Iterate (`iterate`) |
+| 4 | Payback measures disagree (one top, one bottom) | Check before cutting (`check_mixed`) |
+| 5 | Pause case (below) but not bottom account-wide within its objective | Keep (watch it) |
+| 6 | Pause case but one of the biggest sellers | Check before cutting (`check_top_seller`) |
+| 7 | Bottom on every payback measure, in its group and account-wide within its objective, and fatiguing | Pause: fatigued (`pause_fatigued`) |
+| 8 | Bottom on every payback measure, in its group and account-wide within its objective, and bottom in its first `--window` delivery days too | Pause: never worked (`pause_never_worked`) |
+| 9 | Payback top on every measure, fatigue readable and not fatiguing | Scale (`scale`) |
+| 10 | Attention strong but payback bottom | Check before cutting (`check_feeds`) |
+| 11 | Anything else | Keep (`keep`) |
 
-Every kill verdict carries this line: rule out tracking, site or audience problems first; only fatigue and never-worked are creative decisions.
+Every Pause carries this line: rule out tracking, site or audience problems first; only fatigue and never-worked are creative decisions.
+
+A thin group may produce a Pause, never a Confident one: the confidence is capped at Early read, and the sentence says so.
+
+## Confidence
+
+- **Confident**: group not thin, at least 2 x window delivery days, at least two payback measures that agree.
+- **Early read**: thin group, or fewer delivery days than 2 x window, or one payback measure only, or the measures disagree.
+- **Can't judge yet**: Can't judge or Too early.
+
+## Spend at stake
+
+`spend_at_stake` is the ad's spend in the window. Within each verdict the list is sorted by it, largest first. The do-these-first list is the top 5 by spend at stake across Pause, Check, Iterate and Scale; an ad that cannot be judged never leads it.
 
 ## Judgement calls to know about
 
-- Payback top with fatigue unreadable (under two windows of delivery days) is held at "keep", never scaled. Scaling an ad whose trend cannot be read is a bet the data cannot support.
-- Fatiguing with a payback that cannot be graded is "iterate", because there is no evidence it is weak.
-- Rule 2 uses the combined payback band: an ad weak on either cost or return from day one counts as never worked.
+- Payback top with fatigue unreadable (under two windows of delivery days) is held at Keep, never scaled.
+- Fatiguing with a payback that is bottom on one measure only is Iterate: there is no agreement that it is weak.
+- Never-worked uses the same payback measures over the ad's first `--window` delivery days, graded against every ad's own first window.
 - Several ads of one concept share one fatigue clock; read their verdicts together.
-- Grading within a group needs at least 5 comparable ads; with fewer it falls back to the whole account. 5 is an arbitrary default, not a statistical rule.
 - `--min-change` (default 8) is a materiality size to separate a real move from week-to-week noise. It is not a benchmark for fatigue: set it from how much your own metrics wobble when nothing is wrong.
+- Every default here (`--young-days`, `--window`, `--min-impressions`, `--min-change`, `--top-n`, `--protect-top`, the group minimum of 5) is arbitrary. Set them from your own account.
 
 ## Summary block
 
-Counts per verdict, the ads too young to judge, and spend concentration: "top N ads (N=3, an arbitrary default: set your own with `--top-n`) hold P% of spend". Heavy concentration means one fatigue event hurts the account. Judge how heavy against the account's own history.
+Counts per verdict group, the ads too young to judge, the thin groups, the do-these-first list and spend concentration: "top N ads (N=3, an arbitrary default: set your own with `--top-n`) hold P% of spend". Heavy concentration means one fatigue event hurts the account. Judge how heavy against the account's own history.

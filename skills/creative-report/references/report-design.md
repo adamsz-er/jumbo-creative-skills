@@ -36,7 +36,7 @@ Type: Plus Jakarta Sans for headings (tight negative letter-spacing, sentence ca
 
 1. What to do first (`headline`)
 2. Basis (`basis_section`)
-3. Keep, kill, iterate, scale (`verdict_section`)
+3. Pause, check, iterate, scale, keep (`verdict_section`)
 4. Funnel diagnosis (`funnel_section`)
 5. Creative mix (`mix_section`)
 6. Notes and missing data (`notes_section`)

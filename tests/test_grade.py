@@ -156,5 +156,79 @@ class FixtureTest(unittest.TestCase):
         self.assertIn("link_clicks", header)
 
 
+class ObjectiveAndGroupingTest(unittest.TestCase):
+    def rows(self):
+        rows = []
+        for i in range(1, 10):
+            rows.append(day_row("acme-traffic-%02d" % i, "static", 20000, spend=100.0, link_clicks=60.0 + 25 * i,
+                                objective="OUTCOME_TRAFFIC", ad_type="bau", **{"Purchases": 0, "Purchases conversion value": 0}))
+        for i in range(1, 10):
+            rows.append(day_row("acme-sale-%02d" % i, "static", 20000, spend=100.0, link_clicks=100.0,
+                                objective="OUTCOME_SALES", ad_type="bau",
+                                **{"Purchases": 3 + i, "Purchases conversion value": (3 + i) * 70}))
+        return rows
+
+    def test_payback_metrics_follow_the_objective(self):
+        self.assertEqual(cm.payback_metrics("OUTCOME_TRAFFIC")["metrics"], ("cpc", "ctr"))
+        self.assertEqual(cm.payback_metrics("LINK_CLICKS")["objective"], "traffic")
+        self.assertEqual(cm.payback_metrics("REACH")["metrics"], ("cpm", "hook_rate"))
+        self.assertEqual(cm.payback_metrics("LEAD_GENERATION")["metrics"], ("cost_per_lead",))
+        self.assertEqual(cm.payback_metrics("POST_ENGAGEMENT")["metrics"], ("engagement_rate", "cpm"))
+        for sales in ("OUTCOME_SALES", "CONVERSIONS", "PRODUCT_CATALOG_SALES"):
+            self.assertEqual(cm.payback_metrics(sales)["metrics"], ("cpa", "roas"))
+
+    def test_unknown_objective_is_sales_with_a_note(self):
+        for value in (None, "", "SOMETHING_NEW"):
+            info = cm.payback_metrics(value)
+            self.assertEqual(info["objective"], "sales")
+            self.assertTrue(info["assumed"])
+            self.assertIn("judged as sales", info["note"])
+
+    def test_traffic_ads_are_graded_only_against_traffic_ads(self):
+        results = {r["ad"]: r for r in grade.grade_ads(cm.load_rows(self.rows()))}
+        traffic = results["acme-traffic-01"]
+        self.assertEqual(traffic["objective"], "traffic")
+        self.assertEqual(traffic["payback_metrics"], ["cpc", "ctr"])
+        self.assertEqual(traffic["grades"]["cpc"]["band"], BOTTOM)
+        self.assertEqual(traffic["diagnosis"]["step"], "click")
+        self.assertEqual(traffic["graded_in_size"], 9)
+        self.assertNotIn("pays back", traffic["diagnosis"]["summary"])
+        self.assertTrue(traffic["grades"]["cpa"]["band"].startswith("not graded"))
+
+    def test_basis_names_the_group_each_ad_was_graded_in_and_warns_when_thin(self):
+        rows = cm.load_rows(self.rows())
+        results = grade.grade_ads(rows)
+        header = grade.basis_header(rows, results, ("format", "ad_type"))
+        self.assertIn("static / bau (traffic) n=9", header)
+        self.assertIn("WARNING small comparison groups", header)
+        self.assertIn("Payback is read by objective", header)
+
+    def test_default_group_by_is_format_then_ad_type_and_widens(self):
+        rows = cm.load_rows(self.rows() + [day_row("acme-odd", "static", 20000, ad_type="promo", objective="OUTCOME_SALES")])
+        odd = {r["ad"]: r for r in grade.grade_ads(rows)}["acme-odd"]
+        self.assertEqual(odd["group_by"], ["format", "ad_type"])
+        self.assertEqual(odd["graded_in"], "static")
+        self.assertIn("format / ad_type has 1 comparable ads, under 5", odd["grades"]["ctr"]["fallback"])
+
+    def test_missing_ad_type_column_drops_out_with_a_note_but_a_named_one_still_errors(self):
+        rows = cm.load_rows([dict(r, ad_type=None) for r in self.rows()])
+        ads = cm.aggregate_by_ad(rows)
+        columns, note = cm.default_group_by(ads)
+        self.assertEqual(columns, ("format",))
+        self.assertIn("ad_type not in the data", note)
+        with self.assertRaises(cm.GroupColumnError):
+            cm.default_group_by(ads, ("nope",))
+
+    def test_engagement_rate_and_cost_per_lead_follow_the_schema(self):
+        ad = cm.aggregate_by_ad(cm.load_rows([{"ad_name": "a", "spend": 10, "impressions": 1000, "post_shares": 2,
+                                               "post_save": 3, "comment": 5, "lead": 4}]))[0]
+        self.assertAlmostEqual(ad["engagement_rate"], 1.0)
+        self.assertAlmostEqual(ad["cost_per_lead"], 2.5)
+        partial = cm.aggregate_by_ad(cm.load_rows([{"ad_name": "b", "spend": 10, "impressions": 1000, "post_shares": 2}]))[0]
+        self.assertIsNone(partial["engagement_rate"])
+        self.assertIn("missing saves and comments", cm.format_value(partial, "engagement_rate"))
+        self.assertIsNone(partial["cost_per_lead"])
+
+
 if __name__ == "__main__":
     unittest.main()

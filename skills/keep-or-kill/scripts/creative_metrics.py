@@ -27,12 +27,14 @@ METRICS: Dict[str, Tuple[Tuple[str, ...], Tuple[str, ...], float]] = {
     "video_completion_rate": (("video_thruplay",), ("impressions",), 100.0),
     "ctr": (("link_clicks", "clicks"), ("impressions",), 100.0),
     "cpm": (("spend",), ("impressions",), 1000.0),
-    "cpc": (("spend",), ("clicks", "link_clicks"), 1.0),
+    "cpc": (("spend",), ("link_clicks", "clicks"), 1.0),
     "cpa": (("spend",), ("conversions",), 1.0),
     "roas": (("conversion_value",), ("spend",), 1.0),
     "cvr": (("conversions",), ("clicks", "link_clicks"), 100.0),
     "add_to_cart_rate": (("add_to_carts",), ("clicks", "link_clicks"), 100.0),
     "cost_per_add_to_cart": (("spend",), ("add_to_carts",), 1.0),
+    "cost_per_lead": (("spend",), ("leads",), 1.0),
+    "engagement_rate": (("engagements",), ("impressions",), 100.0),
     "frequency": (("impressions",), ("reach",), 1.0),
     "mer": (("revenue",), ("spend",), 1.0),
 }
@@ -43,7 +45,7 @@ METRIC_ALIASES = {"thumb_stop_rate": "hook_rate"}
 NUMERIC_FIELDS = (
     "spend", "impressions", "reach", "video_views_3s", "video_thruplay",
     "link_clicks", "clicks", "conversions", "conversion_value", "add_to_carts",
-    "revenue",
+    "revenue", "leads", "shares", "saves", "comments",
 )
 COST_PER_VIEW = "cost_per_action_type:video_view"
 DERIVED_3S = "derived: spend / cost per 3-second view"
@@ -107,6 +109,9 @@ _ALIASES = {
     "addstocart": "add_to_carts", "addtocart": "add_to_carts",
     "addtocarts": "add_to_carts", "websiteaddstocart": "add_to_carts",
     "revenue": "revenue", "storerevenue": "revenue",
+    "lead": "leads", "leads": "leads", "postshares": "shares", "postshare": "shares", "shares": "shares",
+    "postsave": "saves", "postsaves": "saves", "saves": "saves",
+    "comment": "comments", "comments": "comments", "postcomments": "comments",
     "adname": "ad_name", "adid": "ad_id",
     "day": "date", "date": "date", "reportingstarts": "date", "datestart": "date",
     # Meta's hosted Ads MCP field names (not in Meta's documentation as of this writing and may change: check in your own session).
@@ -124,6 +129,10 @@ _API_ACTION_TYPES = {
     "video_view": "video_views_3s",
     "purchase": "conversions",
     "add_to_cart": "add_to_carts",
+    "lead": "leads",
+    "comment": "comments",
+    "post": "shares",
+    "onsite_conversion.post_save": "saves",
 }
 _API_VALUE_TYPES = {"purchase": "conversion_value"}
 _API_LIST_FIELDS = {"video_thruplay_watched_actions": "video_thruplay"}
@@ -282,11 +291,22 @@ def _pick(row: Dict[str, Any], fields: Sequence[str]) -> Tuple[str, Optional[flo
     return fields[0], None
 
 
+ENGAGEMENT_PARTS = ("shares", "saves", "comments")
+
+
+def _with_engagements(row: Dict[str, Any]) -> Dict[str, Any]:
+    """The row plus `engagements` = shares + saves + comments, None unless all three are present."""
+    parts = [row.get(f) for f in ENGAGEMENT_PARTS]
+    return dict(row, engagements=None if any(p is None for p in parts) else sum(parts))
+
+
 def compute_metrics(row: Dict[str, Any]) -> Dict[str, Optional[float]]:
     """Compute every metric in METRICS from a row's base fields.
 
-    A missing operand or a zero denominator gives None, never 0.
+    A missing operand or a zero denominator gives None, never 0. Engagement rate
+    needs shares, saves and comments all present.
     """
+    row = _with_engagements(row)
     result: Dict[str, Optional[float]] = {}
     for name, (num_fields, den_fields, scale) in METRICS.items():
         _, num = _pick(row, num_fields)
@@ -298,6 +318,7 @@ def compute_metrics(row: Dict[str, Any]) -> Dict[str, Optional[float]]:
 def metric_basis(row: Dict[str, Any], metric: str) -> Dict[str, Optional[str]]:
     """Say which fields fed a metric, e.g. whether ctr used link or all clicks."""
     num_fields, den_fields, _ = METRICS[resolve_metric(metric)]
+    row = _with_engagements(row)
     num_field, num = _pick(row, num_fields)
     den_field, den = _pick(row, den_fields)
     return {
@@ -308,7 +329,11 @@ def metric_basis(row: Dict[str, Any], metric: str) -> Dict[str, Optional[str]]:
 
 def describe_missing(row: Dict[str, Any], metric: str) -> Optional[str]:
     """Why a metric is unavailable for a row, or None when it can be computed."""
-    num_fields, den_fields, _ = METRICS[resolve_metric(metric)]
+    metric = resolve_metric(metric)
+    num_fields, den_fields, _ = METRICS[metric]
+    row = _with_engagements(row)
+    if metric == "engagement_rate" and row["engagements"] is None:
+        return "missing " + " and ".join(f for f in ENGAGEMENT_PARTS if row.get(f) is None)
     for fields in (num_fields, den_fields):
         if _pick(row, fields)[1] is None:
             return "missing " + " or ".join(fields)
@@ -1025,8 +1050,8 @@ def _describe(found: Dict[str, Any]) -> str:
 
 BAND_TOP, BAND_MID, BAND_BOTTOM = "top quartile", "middle", "bottom quartile"
 HIGHER_IS_BETTER = ("hook_rate", "hold_rate", "video_completion_rate", "ctr", "cvr",
-                    "add_to_cart_rate", "roas")
-LOWER_IS_BETTER = ("cpm", "cpc", "cpa", "cost_per_add_to_cart")
+                    "add_to_cart_rate", "roas", "engagement_rate")
+LOWER_IS_BETTER = ("cpm", "cpc", "cpa", "cost_per_add_to_cart", "cost_per_lead")
 # Fewer comparable ads than this is not enough to grade against. An arbitrary
 # default, not a statistical rule: set your own from how many ads you run per format.
 MIN_GROUP = 5
@@ -1075,6 +1100,8 @@ def grade_against(ad: Dict[str, Any], ads: Sequence[Dict[str, Any]], metric: str
         return result
     if result["value"] is None:
         return not_graded(describe_missing(ad, metric) or "no value")
+    if metric in LOWER_IS_BETTER and "spend" in ad and not ad["spend"]:
+        return not_graded("missing spend")
     if (ad.get("impressions") or 0) < min_impressions:
         return not_graded("low volume")
     base = baseline(ads, metric, group_by=group_by, min_impressions=min_impressions)
@@ -1086,19 +1113,142 @@ def grade_against(ad: Dict[str, Any], ads: Sequence[Dict[str, Any]], metric: str
         pool = [a[metric] for a in eligible if group_key(a, group_by) == group]
     else:
         pool = [a[metric] for a in eligible]
+    result["n_comparable"] = len(pool)
     if len(pool) < MIN_GROUP:
         return not_graded("too little comparison data: %d comparable ads, need %d" % (len(pool), MIN_GROUP))
     result["percentile"] = percentile_rank(result["value"], pool)
     result["p25"], result["median"], result["p75"] = stats["p25"], stats["median"], stats["p75"]
     if stats["p25"] == stats["p75"]:
-        result["band"] = BAND_MID
-        return result
+        return not_graded("no spread in group")
     high = result["value"] >= stats["p75"]
     low = result["value"] <= stats["p25"]
     if metric in LOWER_IS_BETTER:
         high, low = low, high
     result["band"] = BAND_TOP if high else BAND_BOTTOM if low else BAND_MID
     return result
+
+
+def _comparable(ad: Dict[str, Any], ads: Sequence[Dict[str, Any]], metric: str,
+                group_by: Sequence[str], min_impressions: int) -> int:
+    key = group_key(ad, group_by)
+    return sum(1 for a in ads if a.get(metric) is not None and (a.get("impressions") or 0) >= min_impressions
+               and group_key(a, group_by) == key)
+
+
+def grade_with_fallback(ad: Dict[str, Any], ads: Sequence[Dict[str, Any]], metric: str,
+                        group_by: Sequence[str] = ("format",), min_impressions: int = 1000) -> Dict[str, Any]:
+    """Grade against the narrowest group with at least MIN_GROUP comparable ads.
+
+    Tries every prefix of `group_by` from the whole list down to its first
+    column, then the whole of `ads`. The result is grade_against's, plus
+    `group_by` (the columns actually used, empty for account-wide), `group_value`
+    (the ad's group, e.g. "static / promo"), `group_size`
+    (comparable ads in that group, None when nothing could be graded) and
+    `fallback` (one line per narrower grouping that was too small, or None).
+    A grouping is too small when it has fewer than MIN_GROUP comparable ads.
+    """
+    metric = resolve_metric(metric)
+    levels = [tuple(group_by[:k]) for k in range(len(group_by), 0, -1)] + [()]
+    skipped: List[str] = []
+    grade: Dict[str, Any] = {}
+    for level in levels:
+        grade = grade_against(ad, ads, metric, level, min_impressions)
+        if grade["basis"] is None:
+            break
+        if grade["basis"] == "group":
+            break
+        skipped.append("%s has %d comparable ads, under %d" % (
+            " / ".join(level) or "account-wide", _comparable(ad, ads, metric, level, min_impressions), MIN_GROUP))
+    grade["group_by"] = list(level)
+    grade["group_value"] = group_key(ad, level) if level else "account-wide"
+    grade["group_size"] = grade.get("n_comparable")
+    grade["fallback"] = "; ".join(skipped) or None
+    return grade
+
+
+def is_thin(group_size: Optional[int]) -> bool:
+    """A group big enough to grade but too small to act on alone: under twice MIN_GROUP."""
+    return group_size is not None and group_size < 2 * MIN_GROUP
+
+
+OBJECTIVES = {
+    "sales": ("sales", "conversions", "productcatalogsales"),
+    "traffic": ("traffic", "linkclicks"),
+    "awareness": ("awareness", "reach", "brandawareness", "videoviews"),
+    "leads": ("leads", "leadgeneration"),
+    "engagement": ("engagement", "postengagement"),
+}
+# objective -> (payback metrics, plain name of what they measure)
+PAYBACK = {
+    "sales": (("cpa", "roas"), "cost per sale and return on ad spend"),
+    "traffic": (("cpc", "ctr"), "cost per click and click-through rate"),
+    "awareness": (("cpm", "hook_rate"), "cost per 1,000 impressions and hook rate"),
+    "leads": (("cost_per_lead",), "cost per lead"),
+    "engagement": (("engagement_rate", "cpm"), "engagement rate and cost per 1,000 impressions"),
+}
+
+
+def objective_class(value: Any) -> Optional[str]:
+    """sales, traffic, awareness, leads or engagement for a Meta campaign objective; None when unknown or absent.
+
+    Reads Meta's current (OUTCOME_SALES) and legacy (CONVERSIONS, LINK_CLICKS, ...) names,
+    ignoring case and punctuation.
+    """
+    if not isinstance(value, str):
+        return None
+    text = re.sub(r"[^a-z]", "", value.lower())
+    for name, words in OBJECTIVES.items():
+        if text in words or text.replace("outcome", "", 1) in words:
+            return name
+    return None
+
+
+def payback_metrics(objective: Any) -> Dict[str, Any]:
+    """The metrics that decide payback for a campaign objective.
+
+    An unknown or absent objective is treated as sales and `assumed` says so,
+    with a `note` to print.
+    """
+    known = objective_class(objective)
+    name = known or "sales"
+    metrics, what = PAYBACK[name]
+    note = None
+    if known is None:
+        note = ("objective %s: judged as sales" % ("%r is not one of the known objectives" % objective
+                                                   if objective else "not in the data"))
+    return {"objective": name, "metrics": metrics, "what": what, "assumed": known is None, "note": note}
+
+
+def detect_currency(path: Any) -> Optional[str]:
+    """The currency code in an export's spend header, e.g. "Amount spent (USD)"; None when it is not stated."""
+    if not path or str(path).lower().endswith(".json"):
+        return None
+    try:
+        with open(path, newline="", encoding="utf-8-sig") as handle:
+            header = handle.readline()
+    except OSError:
+        return None
+    found = re.search(r"amount spent\s*\(([A-Za-z]{3})\)", header, re.I)
+    return found.group(1).upper() if found else None
+
+
+DEFAULT_GROUP_BY = ("format", "ad_type")
+
+
+def default_group_by(ads: Sequence[Dict[str, Any]], group_by: Optional[Sequence[str]] = None) -> Tuple[Tuple[str, ...], Optional[str]]:
+    """Resolve --group-by, returning (columns, note).
+
+    With no list given the default is format then ad type; a default column the
+    data does not carry drops out and `note` says so. A column the user named
+    that is absent still raises GroupColumnError.
+    """
+    if group_by:
+        return resolve_group_by(ads, group_by), None
+    available = groupable_columns(ads)
+    kept = tuple(c for c in DEFAULT_GROUP_BY if c == "format" or c in available)
+    dropped = [c for c in DEFAULT_GROUP_BY if c not in kept]
+    note = ("%s not in the data, so grouped by %s only" % (", ".join(dropped), ", ".join(kept))) if dropped else None
+    return kept, note
 
 
 def data_window(rows: Sequence[Dict[str, Any]]) -> Tuple[Optional[str], Optional[str]]:
