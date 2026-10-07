@@ -211,6 +211,41 @@ def unique_labels(records: Sequence[Dict[str, Any]], fields: Optional[Dict[str, 
     return labels
 
 
+# metric -> lower is better; spend is left out on purpose, since a higher spend is neither good nor bad
+HEAT_METRICS = {"roas": False, "cpa": True, "ctr": False, "hook_rate": False, "cpm": True}
+HEAT_FLOOR, HEAT_RANGE, HEAT_CAP = 0.10, 0.5, 0.6
+HEAT_GOOD, HEAT_BAD = "34 197 94", "220 38 38"
+
+
+def heat_tints(values: Dict[str, Optional[float]], lower_is_better: bool) -> Dict[str, Optional[str]]:
+    """A CSS colour per key from where its value ranks among the others: green for the better half, red for the worse.
+
+    Strength is the distance of the rank from the middle (0 at the middle, 1 at either end), so one extreme value cannot
+    wash the rest to neutral; alpha is HEAT_FLOOR + HEAT_RANGE x strength, capped. A value that is missing, a tie at the
+    middle, all values equal or a single value gets no tint (None).
+    """
+    known = {k: v for k, v in values.items() if v is not None}
+    out: Dict[str, Optional[str]] = {k: None for k in values}
+    if len(known) < 2 or len(set(known.values())) < 2:
+        return out
+    ordered = list(known.values())
+    for key, value in known.items():
+        below, same = sum(1 for v in ordered if v < value), sum(1 for v in ordered if v == value)
+        good = (below + (same - 1) / 2) / (len(ordered) - 1)
+        good = 1 - good if lower_is_better else good
+        if good == 0.5:
+            continue
+        alpha = min(HEAT_CAP, HEAT_FLOOR + HEAT_RANGE * abs(good - 0.5) * 2)
+        out[key] = "rgb(%s / %.2f)" % (HEAT_GOOD if good > 0.5 else HEAT_BAD, alpha)
+    return out
+
+
+def heat_map(ads: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, Optional[str]]]:
+    """{metric: {ad key: tint}} over the ads on the page, for every metric in HEAT_METRICS."""
+    return {metric: heat_tints({str(a.get("ad_id") or a.get("ad_name")): a.get(metric) for a in ads}, lower)
+            for metric, lower in HEAT_METRICS.items()}
+
+
 def metric_label(metric: str) -> str:
     return LABELS.get(metric, metric.replace("_", " "))
 

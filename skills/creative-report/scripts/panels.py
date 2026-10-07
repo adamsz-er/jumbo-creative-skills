@@ -127,6 +127,7 @@ class Ctx:
         for ad in self.ads:
             self.format_spend[ad.get("format") or "unknown"] = self.format_spend.get(ad.get("format") or "unknown", 0.0) + (ad.get("spend") or 0.0)
         self.colours = charts.format_colours({f: v for f, v in self.format_spend.items() if f != "unknown"})
+        self.heat = interact.heat_map(self.ads)
 
     def prior_label(self) -> str:
         """What the prior period is called: the last review's date when a run compared itself with it, else "prior period"."""
@@ -285,6 +286,38 @@ def ad_detail(ctx: Ctx, key: str, label: str, fmt: str, full: Dict[str, Any], ba
                metrics, funnel_table, esc(age_text), why))
 
 
+CARD_METRICS = (("spend", "Spend"), ("roas", "ROAS"), ("cpa", "CPA"), ("ctr", "CTR"))
+HEAT_WORDS = {True: "Better than most ads on this page for this measure.", False: "Weaker than most ads on this page for this measure."}
+
+
+def _metric_text(ctx: Ctx, key: str, value: float) -> str:
+    if key == "spend":
+        return ctx.money(value)
+    if key in ("cpa", "cpm"):
+        return ctx.money(value, 2)
+    return "%.2fx" % value if key == "roas" else "%.2f%%" % value
+
+
+def metric_rows(ctx: Ctx, ad_id: Any, fmt: Any, only: Optional[Sequence[str]] = None) -> str:
+    """The card's metric rows: a muted label and a value pill tinted by where the ad ranks on the page; n/a is never tinted."""
+    key = str(ad_id)
+    ad = ctx.ad_index.get(key)
+    video = interact.is_video(fmt)
+    last = "hook_rate" if video or (video is None and ad and ad.get("hook_rate") is not None) else "cpm"
+    wanted = [(k, label) for k, label in CARD_METRICS + ((last, interact.metric_label(last)),) if only is None or k in only]
+    rows = []
+    for metric, label in wanted:
+        value = ad.get(metric) if ad else None
+        if value is None:
+            why = "n/a (ad not in this data)" if ad is None else interact.plain_ids(cm.format_value(ad, metric))
+            rows.append('<div class="m-row"><span class="m-label">%s</span><span class="m-pill" title="%s">n/a</span></div>' % (esc(label), esc(why)))
+            continue
+        tint = ctx.heat.get(metric, {}).get(key)
+        attrs = ' style="--heat:%s" title="%s"' % (tint, esc(HEAT_WORDS[tint.startswith("rgb(34")])) if tint else ""
+        rows.append('<div class="m-row"><span class="m-label">%s</span><span class="m-pill"%s>%s</span></div>' % (esc(label), attrs, esc(_metric_text(ctx, metric, value))))
+    return '<div class="metrics">%s</div>' % "".join(rows)
+
+
 def ad_card(ctx: Ctx, entry: Dict[str, Any], driver: str = "", next_step: bool = False) -> str:
     """The one ad component: image, label, id, spend, what placed it, verdict, confidence and sentence."""
     base = _fields_for(ctx, entry)
@@ -318,9 +351,9 @@ def ad_card(ctx: Ctx, entry: Dict[str, Any], driver: str = "", next_step: bool =
     badge = interact.format_label(fmt) + (" %s" % clock(ctx.video_lengths[key]) if key in ctx.video_lengths else "")
     title = ' title="%s"' % esc(name) if name else ""
     return ('<article class="ad-card" data-ad="%s"%s><div class="ad-img"><span class="fmt-badge">%s</span>%s</div><div class="ad-body"><h4>%s</h4>'
-            '<p class="adid">Ad ID %s</p><p class="ad-spend"><b>%s</b> spend</p>%s<p class="chips">%s%s</p>%s%s%s%s%s</div></article>'
+            '<p class="adid">Ad ID %s</p>%s%s<p class="chips">%s%s</p>%s%s%s%s%s</div></article>'
             % (esc(key), title, esc(badge), _image(ctx, ad_id, label, fmt), esc(label), esc(ad_id if ad_id is not None else "n/a"),
-               esc(ctx.money(spend)), drive, chip, conf, sentence, step, check, action, ad_detail(ctx, key, label, fmt, full, base, name)))
+               metric_rows(ctx, key, fmt), drive, chip, conf, sentence, step, check, action, ad_detail(ctx, key, label, fmt, full, base, name)))
 
 
 def card_grid(cards: Sequence[str]) -> str:

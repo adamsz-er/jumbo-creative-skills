@@ -163,6 +163,80 @@ class VerdictChipTest(Fixture):
         self.assertIn("font: 600 11px/1.4", re.search(r"\.badge \{[^}]*\}", template).group(0))
 
 
+class HeatTest(unittest.TestCase):
+    GREEN, RED = "rgb(34 197 94 / 0.60)", "rgb(220 38 38 / 0.60)"
+
+    def test_the_best_value_of_a_higher_is_better_metric_gets_the_strongest_green_and_the_worst_the_strongest_red(self):
+        tints = interact.heat_tints({"a": 1.0, "b": 2.0, "c": 3.0, "d": 4.0, "e": 5.0}, lower_is_better=False)
+        self.assertEqual(tints["e"], self.GREEN)
+        self.assertEqual(tints["a"], self.RED)
+        self.assertIsNone(tints["c"])
+
+    def test_a_cost_metric_is_inverted_so_the_lowest_cost_is_the_strongest_green(self):
+        tints = interact.heat_tints({"a": 10.0, "b": 20.0, "c": 30.0}, lower_is_better=True)
+        self.assertEqual(tints["a"], self.GREEN)
+        self.assertEqual(tints["c"], self.RED)
+
+    def test_an_unreadable_value_is_not_tinted_and_does_not_take_a_rank(self):
+        tints = interact.heat_tints({"a": 1.0, "b": None, "c": 3.0}, lower_is_better=False)
+        self.assertIsNone(tints["b"])
+        self.assertEqual((tints["a"], tints["c"]), (self.RED, self.GREEN))
+
+    def test_a_tie_is_never_painted_green_or_red(self):
+        self.assertEqual(interact.heat_tints({"a": 2.0, "b": 2.0, "c": 2.0}, False), {"a": None, "b": None, "c": None})
+        self.assertEqual(interact.heat_tints({"a": 2.0}, False), {"a": None})
+        tints = interact.heat_tints({"a": 1.0, "b": 2.0, "c": 2.0, "d": 3.0}, False)
+        self.assertEqual((tints["b"], tints["c"]), (None, None))
+
+    def test_strength_comes_from_ranks_so_one_outlier_does_not_wash_the_rest_to_neutral(self):
+        tints = interact.heat_tints({"a": 1.0, "b": 2.0, "c": 3.0, "d": 4.0, "e": 100000.0}, False)
+        alphas = [float(tints[k].split("/ ")[1].rstrip(")")) for k in "abde"]
+        self.assertEqual(alphas, [0.6, 0.35, 0.35, 0.6])
+
+    def test_the_tint_never_goes_past_the_cap_so_text_stays_readable(self):
+        for tint in interact.heat_tints({str(n): float(n) for n in range(9)}, False).values():
+            if tint:
+                self.assertLessEqual(float(tint.split("/ ")[1].rstrip(")")), 0.6)
+
+
+class MetricPillTest(Fixture):
+    def pills(self, html):
+        return re.findall(r'<div class="m-row"><span class="m-label">([^<]+)</span><span class="m-pill"([^>]*)>([^<]*)</span></div>', html)
+
+    def test_a_card_shows_spend_roas_cpa_ctr_and_hook_rate_for_video_and_cpm_for_the_rest(self):
+        video = next(a for a in self.ctx.ads if "video" in str(a["format"]))
+        still = next(a for a in self.ctx.ads if "video" not in str(a["format"]))
+        labels = lambda ad: [l for l, _, _ in self.pills(panels.ad_card(self.ctx, {"ad": ad["ad_id"], "ad_name": ad["ad_name"]}))]
+        self.assertEqual(labels(video), ["Spend", "ROAS", "CPA", "CTR", "Hook rate"])
+        self.assertEqual(labels(still), ["Spend", "ROAS", "CPA", "CTR", "CPM"])
+
+    def test_the_best_roas_on_the_page_gets_the_strongest_green_and_the_best_cpa_too(self):
+        best_roas = max((a for a in self.ctx.ads if a["roas"] is not None), key=lambda a: a["roas"])
+        best_cpa = min((a for a in self.ctx.ads if a["cpa"] is not None), key=lambda a: a["cpa"])
+        for ad, label in ((best_roas, "ROAS"), (best_cpa, "CPA")):
+            pills = {l: (attrs, text) for l, attrs, text in self.pills(panels.ad_card(self.ctx, {"ad": ad["ad_id"], "ad_name": ad["ad_name"]}))}
+            self.assertIn("--heat:rgb(34 197 94 / 0.60)", pills[label][0], label)
+
+    def test_spend_is_never_tinted(self):
+        for ad in self.ctx.ads[:5]:
+            pills = {l: attrs for l, attrs, _ in self.pills(panels.ad_card(self.ctx, {"ad": ad["ad_id"], "ad_name": ad["ad_name"]}))}
+            self.assertNotIn("--heat", pills["Spend"])
+
+    def test_a_missing_value_reads_n_a_with_its_reason_and_no_tint(self):
+        rows = [{"ad_id": str(n), "ad_name": "x%d | static | bau" % n, "date": "2026-03-01", "spend": 10.0 * n, "impressions": 1000.0} for n in (1, 2, 3)]
+        ctx = panels.Ctx(rows=rows, currency="USD")
+        pills = {l: (attrs, text) for l, attrs, text in self.pills(panels.ad_card(ctx, {"ad": "1", "ad_name": "x1 | static | bau"}))}
+        attrs, text = pills["ROAS"]
+        self.assertEqual(text, "n/a")
+        self.assertNotIn("--heat", attrs)
+        self.assertIn("missing", attrs)
+
+    def test_an_ad_that_is_not_in_the_data_reads_n_a_everywhere(self):
+        pills = self.pills(panels.ad_card(panels.Ctx(), {"ad": "9", "ad_name": "x"}))
+        self.assertTrue(pills)
+        self.assertTrue(all(text == "n/a" and "--heat" not in attrs for _, attrs, text in pills))
+
+
 class LogoTest(Fixture):
     def lockup_spans(self, region, label):
         return re.findall(r'<span class="logo-(light|dark)" role="img" aria-label="%s">(.*?)</span>' % label, region, re.S)
