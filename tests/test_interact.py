@@ -420,6 +420,45 @@ class AllAdsViewTest(Fixture):
             self.assertIn(text, script)
 
 
+class TableDesignTest(Fixture):
+    def test_the_header_row_stays_in_view_and_reads_small_uppercase_and_spaced(self):
+        head = css_rule("thead th")
+        for text in ("position: sticky", "top: 0", "font: 600 11px", "letter-spacing: 0.06em", "text-transform: uppercase", "color-mix(in srgb, var(--text) 80%, transparent)"):
+            self.assertIn(text, head)
+
+    def test_rows_are_13px_with_a_soft_divider_a_hover_tint_and_right_aligned_tabular_numbers(self):
+        self.assertIn("font-size: 13px", css_rule("table"))
+        self.assertIn("border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent)", css_rule("th, td"))
+        self.assertIn("background: var(--surface-muted)", css_rule("tbody tr:hover td"))
+        numbers = css_rule("td.num, th.num")
+        self.assertIn("text-align: right", numbers)
+        self.assertIn("tabular-nums", numbers)
+        self.assertIn("text-align: left", css_rule("th, td"))
+
+    def test_a_long_table_scrolls_inside_its_frame_so_the_sticky_header_works_and_a_short_one_does_not(self):
+        self.assertIn("max-height: 70vh", css_rule(".scroll.tall"))
+        short = panels.table([("A", False)], ["<tr><td>x</td></tr>"] * panels.TALL_ROWS)
+        long = panels.table([("A", False)], ["<tr><td>x</td></tr>"] * (panels.TALL_ROWS + 1))
+        self.assertIn('<div class="scroll">', short)
+        self.assertIn('<div class="scroll tall">', long)
+
+    def test_printing_unfreezes_a_tall_table(self):
+        self.assertIn(".scroll, .scroll.tall { overflow: visible; max-height: none;", template_text())
+
+    def test_the_gap_list_is_a_table_with_the_numbers_the_heatmap_uses(self):
+        mix = run_json("creative-mix", "mix.py")
+        ctx = panels.Ctx(rows=self.rows, verdicts=self.verdicts, grade=self.grade, mix=mix, currency="USD")
+        html, _ = panels.gap_list(ctx)
+        self.assertIn('<th>Gap</th><th>Why test it</th>', html)
+        self.assertEqual(len(re.findall(r'<tr class="gap" data-gap="\d+">', html)), len(mix["gaps"]))
+        self.assertNotIn("<li", html)
+
+    def test_the_scorecards_and_ways_to_improve_use_the_same_table(self):
+        for html, _ in (panels.ways_to_improve(self.ctx), panels.format_scorecard(panels.Ctx(rows=self.rows, mix=run_json("creative-mix", "mix.py"), currency="USD"))):
+            self.assertIn('<div class="scroll', html)
+            self.assertIn("<thead>", html)
+
+
 class DialogDesignTest(Fixture):
     def test_the_dialog_is_wide_scrolls_inside_and_has_a_header_with_the_name_the_chip_and_close(self):
         dialog = css_rule("dialog.ad-dialog")

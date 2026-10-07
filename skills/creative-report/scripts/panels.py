@@ -72,11 +72,14 @@ def section(eyebrow: str, heading: str, inner: str) -> str:
     return '<section class="card"><p class="eyebrow">%s</p><h2>%s</h2>%s</section>' % (esc(eyebrow), esc(heading), inner)
 
 
+TALL_ROWS = 16  # arbitrary: a table with more rows than this scrolls inside its own frame so its header stays in view
+
+
 def table(header: Sequence[Tuple[str, bool]], body: Sequence[str], stack: bool = False) -> str:
-    """A scrolling table; `stack` turns each row into a card on a narrow screen."""
+    """A scrolling table with a header that stays in view; `stack` turns each row into a card on a narrow screen."""
     head = "".join('<th%s>%s</th>' % (' class="num"' if num else "", esc(text)) for text, num in header)
-    return '<div class="scroll"><table%s><thead><tr>%s</tr></thead><tbody>%s</tbody></table></div>' % (
-        ' class="stack"' if stack else "", head, "".join(body))
+    return '<div class="scroll%s"><table%s><thead><tr>%s</tr></thead><tbody>%s</tbody></table></div>' % (
+        " tall" if len(body) > TALL_ROWS else "", ' class="stack"' if stack else "", head, "".join(body))
 
 
 def empty_state(why: str, how: str) -> Tuple[str, str]:
@@ -1824,37 +1827,36 @@ def gap_list(ctx: Ctx) -> Tuple[str, str]:
         return empty_state("creative-mix found no gap worth testing: no empty or single-ad cell sits beside a proven top-quarter concept or format.",
                            "Widen the window, lower the minimum proven spend in creative-mix, or add more concepts and formats to compare.")
 
-    def item(number: int, gap: Dict[str, Any]) -> str:
-        return ('<li class="gap" data-gap="%d"><b>#%d %s</b><p>%s</p></li>'
+    def row(number: int, gap: Dict[str, Any]) -> str:
+        return ('<tr class="gap" data-gap="%d"><td data-label="Gap"><b>#%d %s</b></td><td data-label="Why test it">%s</td></tr>'
                 % (number, number, esc(briefing.gap_label(_plain(gap["concept"]), _plain(gap["format"]))), esc(gap_reason(ctx, gap))))
-    items = [item(n, g) for n, g in enumerate(ctx.gaps, 1)]
+    rows = [row(n, g) for n, g in enumerate(ctx.gaps, 1)]
+    head = [("Gap", False), ("Why test it", False)]
     rest = ""
-    if len(items) > ctx.top_n:
-        rest = '<details class="rest"><summary>%d more gaps</summary><ol class="gaps" start="%d">%s</ol></details>' % (
-            len(items) - ctx.top_n, ctx.top_n + 1, "".join(items[ctx.top_n:]))
-    lead = ('<p class="lead">%d gap%s worth testing, strongest first. A hypothesis to test, not a result.</p>' % (len(items), "" if len(items) == 1 else "s"))
+    if len(rows) > ctx.top_n:
+        rest = '<details class="rest"><summary>%d more gaps</summary>%s</details>' % (len(rows) - ctx.top_n, table(head, rows[ctx.top_n:], stack=True))
+    lead = ('<p class="lead">%d gap%s worth testing, strongest first. A hypothesis to test, not a result.</p>' % (len(rows), "" if len(rows) == 1 else "s"))
     floor = ctx.mix.get("min_proven_spend")
     note = ('<p class="muted">A gap is an empty or single-ad cell beside a concept or format in the top quarter of your own ROAS, with at least %s of always-on '
             'spend behind it (an arbitrary default, set in creative-mix). The top %d show here (N=%d); the numbers match the outlines on the heatmap.</p>'
             % (esc(ctx.money(floor)) if floor is not None else "the proven spend", ctx.top_n, ctx.top_n))
-    return lead + '<ol class="gaps">%s</ol>%s%s' % ("".join(items[:ctx.top_n]), rest, note), "data"
+    return lead + table(head, rows[:ctx.top_n], stack=True) + rest + note, "data"
 
 
 # ----- Briefing -----
 
-def _neighbour_ads(ctx: Ctx, gap: Dict[str, Any]) -> List[Dict[str, Any]]:
-    pools = []
-    con = next((r for r in ctx.mix["by_concept"] if r["concept"] == gap["concept"]), None)
-    if "top concept" in gap["why"] and con:
-        ids = set(str(i) for i in con.get("ad_ids") or [])
-        pools.append([a for a in ctx.ads if _ad_key(a) in ids])
-    if "top format" in gap["why"]:
-        pools.append([a for a in ctx.ads if (a.get("format") or "unknown") == gap["format"]])
+def _by_roas(ads: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return sorted((a for a in ads if a.get("roas") is not None), key=lambda a: -a["roas"])
+
+
+def _reference_ads(ctx: Ctx, gap: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """What to look at before briefing a gap: the concept's best ads by ROAS in other formats, then the format's best ad; each ad once."""
+    fmt = lambda a: a.get("format") or "unknown"
+    own = _by_roas([a for a in ctx.ads if a.get("concept") == gap["concept"] and fmt(a) != gap["format"]])[:STRIP_ADS - 1]
     chosen: List[Dict[str, Any]] = []
-    for pool in pools:
-        for ad in _by_spend(pool)[:2]:
-            if ad not in chosen:
-                chosen.append(ad)
+    for ad in own + _by_roas([a for a in ctx.ads if fmt(a) == gap["format"]])[:1]:
+        if _ad_key(ad) not in [_ad_key(c) for c in chosen]:
+            chosen.append(ad)
     return chosen[:STRIP_ADS]
 
 
@@ -1867,24 +1869,50 @@ def _judged_on(ctx: Ctx, entry: Optional[Dict[str, Any]] = None) -> str:
 
 
 def _starters(ctx: Ctx) -> List[Dict[str, Any]]:
-    out = []
+    """Brief starters: the top coverage gaps, then the top Iterate ads, at most STARTERS_PER_FORMAT in any one format.
+
+    A gap or ad whose format is already full is skipped and the next one takes its place, so each quota still fills when it can.
+    """
+    out: List[Dict[str, Any]] = []
+    per_format: Dict[str, int] = {}
+
+    def room(fmt: Any) -> bool:
+        key = str(fmt or "unknown")
+        if per_format.get(key, 0) >= briefing.STARTERS_PER_FORMAT:
+            return False
+        per_format[key] = per_format.get(key, 0) + 1
+        return True
+
     if ctx.mix:
-        for gap in ctx.gaps[:briefing.STARTER_GAPS]:
+        taken = 0
+        for gap in ctx.gaps:
+            if taken >= briefing.STARTER_GAPS:
+                break
+            if not room(gap["format"]):
+                continue
+            taken += 1
             beside = " and ".join("one of the account's best %ss (%s)" % (kind, _plain(gap[kind]))
                                   for kind in ("format", "concept") if "top %s" % kind in gap["why"])
             plain = "it sits beside %s with %s of its own" % (beside, "no ad" if gap["ads"] == 0 else "only one ad")
             reason = gap_reason(ctx, gap)
             subject = briefing.gap_label(_plain(gap["concept"]), _plain(gap["format"]))
-            out.append({"title": "Test " + subject, "make": subject, "why": reason, "refs": [_ad_key(a) for a in _neighbour_ads(ctx, gap)],
+            out.append({"title": "Test " + subject, "make": subject, "why": reason, "format": str(gap["format"]), "refs": [_ad_key(a) for a in _reference_ads(ctx, gap)],
                         "judged": _judged_on(ctx), "prompt": briefing.starter_prompt(subject, plain + ".")})
     iterate = sorted((e for e in (ctx.verdicts or {}).get("ads") or [] if e.get("verdict_id") == "iterate"), key=lambda e: -_stake(e))
-    for entry in iterate[:briefing.STARTER_ITERATE]:
+    taken = 0
+    for entry in iterate:
+        if taken >= briefing.STARTER_ITERATE:
+            break
         key = str(entry.get("ad"))
         rec = ctx.record_index.get(key)
+        if not room((rec or {}).get("format") or entry.get("format")):
+            continue
+        taken += 1
         label = rec["label"] if rec else str(entry.get("ad_name") or key)
         fix = interact.improvement(ctx.grade_index.get(key), entry)
         why = " ".join(t for t in (fix["lead"], fix["fix"]) if t) or "Marked Iterate by keep-or-kill."
-        out.append({"title": "A new version of " + label, "make": "A new version of %s, keeping the concept." % label, "why": why, "refs": [key],
+        out.append({"title": "A new version of " + label, "make": "A new version of %s, keeping the concept." % label, "why": why,
+                    "format": str((rec or {}).get("format") or entry.get("format") or "unknown"), "refs": [key],
                     "judged": _judged_on(ctx, entry), "prompt": briefing.starter_prompt("a new version of %s, keeping the concept" % label, why)})
     return out
 
@@ -1899,14 +1927,21 @@ def _dl(pairs: Sequence[Tuple[str, str]]) -> str:
     return '<dl class="brief-dl">%s</dl>' % "".join("<dt>%s</dt><dd>%s</dd>" % (esc(k), v) for k, v in pairs)
 
 
+def _says_title(make: str, title: str) -> bool:
+    """True when the make line adds nothing the title does not already say."""
+    norm = lambda text: re.sub(r"[^a-z0-9 ]", "", text.lower()).strip()
+    return norm(make) in norm(title)
+
+
 def _starter_card(ctx: Ctx, number: int, s: Dict[str, Any]) -> str:
+    pairs = [("What to make", esc(s["make"]))] if not _says_title(s["make"], s["title"]) else []
     return ('<article class="brief-card"><p class="eyebrow">Brief starter %d</p><h4>%s</h4>%s'
             '<p class="hooks-note">%s. The prompt below asks for them.</p>'
             '<div class="prompt-scope"><details><summary>Show the prompt</summary><pre class="prompt">%s</pre></details>'
             '<button type="button" class="btn" data-action="copy-prompt">Write the full brief</button></div></article>'
-            % (number, esc(s["title"]), _dl([("What to make", esc(s["make"])), ("Why", esc(s["why"])),
-                                              ("Reference ads", _refs_html(ctx, s["refs"]) or "n/a (no neighbouring ad found)"),
-                                              ("How it will be judged", esc(s["judged"]))]),
+            % (number, esc(s["title"]), _dl(pairs + [("Why", esc(s["why"])),
+                                                     ("Reference ads", _refs_html(ctx, s["refs"]) or "n/a (no neighbouring ad found)"),
+                                                     ("How it will be judged", esc(s["judged"]))]),
                esc(briefing.HOOKS_PLACEHOLDER), esc(s["prompt"])))
 
 
