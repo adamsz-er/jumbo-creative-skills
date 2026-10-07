@@ -1363,13 +1363,14 @@ def read_settings(path: Any) -> Dict[str, str]:
 
     Each line reads "- name: value" (or "name: value"), for example
     "- key-map: PX=concept,6=tone" or "- target: cpa=40". A blank value, or
-    "unknown", is skipped. The block ends at the next heading. {} when the file
-    has no such block.
+    "unknown", is skipped, and so is anything inside an HTML comment. The block
+    ends at the next heading. {} when the file has no such block.
     """
     settings: Dict[str, str] = {}
     inside = False
     with open(path, encoding="utf-8-sig") as handle:
-        for line in handle:
+        text = re.sub(r"<!--.*?-->", "", handle.read(), flags=re.S)
+        for line in text.splitlines():
             heading = re.match(r"^#{1,6}\s+(.*?)\s*$", line)
             if heading:
                 inside = heading.group(1).strip().lower() == SETTINGS_HEADING
@@ -1466,7 +1467,10 @@ def prepare_run(args: Any, rows: Sequence[Dict[str, Any]]) -> Tuple[List[Dict[st
     """
     notes = []
     if getattr(args, "profile", None):
-        taken = apply_settings(args, args.profile)
+        try:
+            taken = apply_settings(args, args.profile)
+        except OSError as error:
+            raise ValueError("cannot read --profile %s: %s" % (args.profile, error.strerror or error))
         if taken:
             notes.append("from the profile: " + "; ".join(taken))
     set_type_map(parse_type_map(args.type_map) if getattr(args, "type_map", None) else None)
@@ -1489,7 +1493,10 @@ def parse_targets(text: Optional[str]) -> Dict[str, float]:
             raise ValueError("bad --target %s=%s: the target must be a number" % (metric, value))
         if number <= 0:
             raise ValueError("bad --target %s=%s: the target must be above 0" % (metric, value))
-        targets[resolve_metric(metric.lower())] = number
+        try:
+            targets[resolve_metric(metric.lower())] = number
+        except KeyError:
+            raise ValueError("bad --target %s: not a metric id (known: %s)" % (metric, ", ".join(METRICS)))
     return targets
 
 

@@ -8,11 +8,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "shared"))
-for skill in ("creative-report", "creative-grader", "creative-mix", "keep-or-kill", "creative-context"):
+for skill in ("creative-report", "creative-grader", "creative-mix", "keep-or-kill", "creative-context", "creative-brief"):
     sys.path.insert(0, str(ROOT / "skills" / skill / "scripts"))
 
 import creative_metrics as cm  # noqa: E402
 import detect_naming  # noqa: E402
+import evidence  # noqa: E402
 import grade  # noqa: E402
 import mix  # noqa: E402
 import panels  # noqa: E402
@@ -108,6 +109,13 @@ class SettingsTest(TmpCase):
                            "- where: unknown\n\n## Next\n- target: cpa=1\n")
         self.assertEqual(cm.read_settings(profile), {"currency": "USD", "target": "cpa=40"})
 
+    def test_the_blank_template_block_and_its_comment_yield_nothing(self):
+        template = ROOT / "skills" / "creative-context" / "references" / "brand-profile-template.md"
+        block = template.read_text().split("```")[1]
+        profile = self.dir / "t.md"
+        profile.write_text(block + "\n## Script settings\n<!--\n- target: cpa=1\n-->\n")
+        self.assertEqual(cm.read_settings(profile), {})
+
     def test_a_flag_on_the_command_line_beats_the_profile(self):
         profile = self.dir / "p.md"
         profile.write_text("## Script settings\n- target: cpa=40\n- currency: USD\n")
@@ -141,6 +149,24 @@ class WhereTest(TmpCase):
             code, out, err = quiet(fn, [str(self.csv), "--where", "market=CA"] + extra)
             self.assertEqual(code, 0, err)
             self.assertIn("scope: market CA (60 of 120 rows)", out)
+
+    def test_brief_evidence_reads_keyed_names_and_scope(self):
+        code, out, err = quiet(evidence.main, [str(self.csv), "--json", "--key-map", "PX=concept",
+                                               "--where", "market=US"])
+        self.assertEqual(code, 0, err)
+        result = json.loads(out)
+        self.assertTrue(result["available"])
+        self.assertEqual(result["ads"], 6)
+        self.assertEqual(result["run_notes"], ["scope: market US (60 of 120 rows)"])
+
+    def test_bad_input_is_a_message_and_exit_2_never_a_traceback(self):
+        for fn in (grade.main, mix.main, verdicts.main, evidence.main):
+            code, _, err = quiet(fn, [str(self.csv), "--profile", str(self.dir / "missing.md")])
+            self.assertEqual(code, 2, fn)
+            self.assertIn("cannot read --profile", err)
+        code, _, err = quiet(verdicts.main, [str(self.csv), "--target", "nonsense=3"])
+        self.assertEqual(code, 2)
+        self.assertIn("not a metric id", err)
 
     def test_verdicts_json_carries_scope_and_targets(self):
         code, out, _ = quiet(verdicts.main, [str(self.csv), "--json", "--where", "market=US", "--target", "cpa=20"])

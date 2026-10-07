@@ -21,6 +21,7 @@ First matching rule wins. Every verdict lists its reasons, a plain-English sente
 | 2 | No payback measure can be graded (missing data, or too few comparable ads) | Can't judge: missing ... (`cant_judge`). Never iterate, keep or scale. Fatigue is context only. |
 | 3 | Fatiguing and payback is not bottom on every measure | Iterate (`iterate`) |
 | 4 | Payback measures disagree (one top, one bottom) | Check before cutting (`check_mixed`) |
+| 4a | Pause case, a small comparison group and under two `--window`s of delivery days | Check before cutting (`check_immature`) |
 | 5 | Pause case (below) but not bottom account-wide within its objective | Keep (watch it) |
 | 6 | Pause case but one of the biggest sellers | Check before cutting (`check_top_seller`) |
 | 7 | Bottom on every payback measure, in its group and account-wide within its objective, and fatiguing | Pause: fatigued (`pause_fatigued`) |

@@ -299,7 +299,7 @@ class TargetTest(unittest.TestCase):
     def test_parse_targets_reads_aliases_and_refuses_bad_values(self):
         self.assertEqual(cm.parse_targets("CPA=40,roas=3"), {"cpa": 40.0, "roas": 3.0})
         for bad in ("cpa=abc", "cpa=0", "nonsense=3"):
-            with self.assertRaises((ValueError, KeyError)):
+            with self.assertRaises(ValueError):
                 cm.parse_targets(bad)
 
 

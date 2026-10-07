@@ -32,7 +32,10 @@ With data, run:
 python3 -I scripts/evidence.py ads.csv          # ads.csv from the connector: see above
 python3 -I scripts/evidence.py ads.csv --json
 python3 -I scripts/evidence.py ads.csv --include-types bau,promo   # briefing a sale: promo winners seed gaps too
+python3 -I scripts/evidence.py ads.csv --profile creative-profile.md --where market=US   # naming settings and one market
 ```
+
+Pass the same `--profile` (or `--key-map` and `--type-map`) as the analyses, or keyed ad names will not yield concepts and the evidence comes back empty. `--where` keeps one scope, read from a column or the names.
 
 It prints an **Evidence** block: top-quartile ads (every available payback metric top quartile for the ad's format) with the fields parsed from their names, ads that are fatiguing or never worked, and coverage gaps (evergreen concepts behind a winner that have no ad in a winning format). Everything is relative to the account's own ads in the same format, never a benchmark. `--include-types` (default `bau`) picks which ad types seed the gaps, and the header names the ones used. `--window`, `--min-change` and `--max-gaps` are arbitrary defaults: set them from the account. Paste the block into the brief. Hook wording is not in an export, so take the winning hook from the ad itself.
 
