@@ -17,19 +17,22 @@ If there is no `creative-profile.md` yet, suggest running `creative-context` fir
 
 Follow `creative-context/references/data-inputs.md`.
 
-1. **Meta ads connector.** Call read-only tools only: never one that activates, updates or changes anything. Pull an ad-level report with a **daily** breakdown (one row per ad per day) over the window you analyse. Follow the numbered steps in `creative-context/references/data-inputs.md`: field catalogue first, every response saved to a JSON file, then `python3 scripts/from_mcp.py responses.json -o ads.csv --expect-spend <account total> --expect-impressions <account total>` and use `ads.csv` wherever a CSV is named below. A `WARNING` line or exit 3 means the pull does not reconcile: re-fetch or drop duplicates the missing ads and run it again before you analyse. 3-second plays are derived per ad and shown as "(derived)"; say so when you quote a hook rate.
+1. **Meta ads connector.** Call read-only tools only: never one that activates, updates or changes anything. Pull an ad-level report with a **daily** breakdown (one row per ad per day) over the window you analyse. Follow the numbered steps in `creative-context/references/data-inputs.md`: field catalogue first, every response saved to a JSON file, then `python3 -I scripts/from_mcp.py responses.json -o ads.csv --expect-spend <account total> --expect-impressions <account total> --expect-ads ids.txt` (list archived ads that delivered in the window too, step 3 there) and use `ads.csv` wherever a CSV is named below. A `WARNING` line or exit 3 means the pull does not reconcile: re-fetch or drop duplicates the missing ads and run it again before you analyse. 3-second plays are derived per ad and shown as "(derived)"; say so when you quote a hook rate. When the connector's cost per 3-second view is too coarsely rounded they are not derived, and hook and hold rate are n/a: say why and point to an Ads Manager export for them. Read the adapter's connector notes and "fields no row carries" line before you analyse.
 2. **CSV or screenshots.** Ask for an Ads Manager export using `creative-context/references/export-recipe.md`. With screenshots and no code, read the numbers off the image, compute by hand from `creative-context/references/metrics.md`, and say they may contain transcription errors.
 3. **No data.** Say what is needed and offer the export recipe. You may talk about what to look for, but label everything "no performance data" and grade nothing.
 
 ## Run it
 
 ```
-python3 scripts/grade.py ads.csv                 # ads.csv from the connector: see step 1
-python3 scripts/grade.py ads.csv --group-by format,ad_type,market --min-impressions 2000   # default grouping is format,ad_type
-python3 scripts/grade.py ads.csv --json
+python3 -I scripts/grade.py ads.csv                 # ads.csv from the connector: see step 1
+python3 -I scripts/grade.py ads.csv --group-by format,ad_type,market --min-impressions 2000   # default grouping is format,ad_type
+python3 -I scripts/grade.py ads.csv --json
+python3 -I scripts/grade.py ads.csv --profile creative-profile.md --where market=US --json
 ```
 
 `--min-impressions` (default 1000) is an arbitrary default: set it from the account's own spend per ad and tell the user what you chose. The output opens with its basis (date window, grouping, ads per group, which clicks CTR used, which conversions column fed CPA). Read it, do not retype numbers from memory.
+
+`--profile creative-profile.md` fills any flag you leave unset from the profile's `Script settings` (key map, type map, currency), so confirmed answers apply without retyping them. `--where market=US` keeps one scope, read from a column or the ad names: use it when markets must be judged apart, pass the same `--where` to every script in the run, and say the scope the output prints. `--type-map core=bau` reads an account's own ad-type word as one of the six types.
 
 ## What the script does
 

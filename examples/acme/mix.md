@@ -1,6 +1,6 @@
 # Acme creative-mix output
 
-Generated, not hand-written: `python3 skills/creative-mix/scripts/mix.py examples/acme/ads_daily.csv` on the fictional Acme Outdoor Co. fixture.
+Generated, not hand-written: `python3 -I skills/creative-mix/scripts/mix.py examples/acme/ads_daily.csv --profile examples/acme/brand-profile.md` on the fictional Acme Outdoor Co. fixture.
 
 ```text
 Basis: this account's own ads. Window 2026-03-01 to 2026-03-30. Shares are of classified spend (119506); roas and cpa are pooled from summed spend, conversions and value.

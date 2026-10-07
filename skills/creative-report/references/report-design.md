@@ -58,6 +58,10 @@ Industry bands come only from `references/benchmarks.json`, read by `scripts/ben
 
 Arbitrary defaults to set from your own account: the rolling window and its minimum days, the weekly impressions floor (`MIN_WEEK_IMPRESSIONS`), and the ad-age bucket edges (`AGE_EDGES`). The footer names them.
 
+Key numbers that no ad in the pull can show (every ad n/a) are named once at the top of the Overview's first panel, in a "Not in this pull" notice with the reason and how to get them (`missing_everywhere`). The cells keep their own `n/a (missing ...)` text: the notice adds the explanation, it never replaces the label.
+
+`report.py --check page.html` validates a built page's structure (tabs and panels in order, panel states, badge, Scope line, outside requests, inline scripts, n/a never shown as 0, size). Run it after a change and in any environment where you cannot open a browser; it does not replace looking at the page.
+
 ## Adding a panel
 
 Write `def my_panel(ctx) -> (html, state)` in `panels.py`, add it to `TABS` in the position the spec gives it, and send any new missing-data phrase through `collect_notes` in `report.py` so it reaches the footer. Use the chart helpers in `charts.py`: every bar and dot needs a label, a unit and a title. Add a test with the data state and the empty state in `tests/test_dashboard_panels.py`.

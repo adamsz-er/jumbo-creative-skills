@@ -242,11 +242,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--min-impressions", type=int, default=1000,
                         help="ads below this are not graded (arbitrary default; set from your own account)")
     parser.add_argument("--json", action="store_true", help="print JSON instead of a table")
+    cm.add_run_arguments(parser)
     args = parser.parse_args(argv)
-    explicit = tuple(g.strip() for g in args.group_by.split(",") if g.strip()) if args.group_by else None
-    rows = cm.load_rows(args.path)
     try:
-        key_map = cm.parse_key_map(args.key_map) if args.key_map else None
+        rows, key_map, run_notes = cm.prepare_run(args, cm.load_rows(args.path))
+        explicit = tuple(g.strip() for g in args.group_by.split(",") if g.strip()) if args.group_by else None
         group_by, group_note = cm.default_group_by(cm.aggregate_by_ad(rows, key_map=key_map), explicit)
         results = grade_ads(rows, group_by=group_by, min_impressions=args.min_impressions, key_map=key_map)
     except (cm.GroupColumnError, ValueError) as exc:
@@ -254,9 +254,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 2
     if args.json:
         print(json.dumps({"basis": basis_header(rows, results, group_by, args.min_impressions, group_note),
-                          "ads": results}, indent=2))
+                          "run_notes": run_notes, "ads": results}, indent=2))
     else:
-        print(render(rows, results, group_by, args.min_impressions, group_note))
+        print("\n".join(run_notes + [render(rows, results, group_by, args.min_impressions, group_note)]))
     return 0
 
 

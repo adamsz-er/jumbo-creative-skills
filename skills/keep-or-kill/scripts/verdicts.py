@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """A pause / check / iterate / scale / keep verdict per ad, with confidence, a plain-English sentence and fatigue trend.
 
-Usage: python3 verdicts.py ads.csv [--young-days 5] [--window 6] [--min-change 8] [--top-n 3] [--group-by format,ad_type] [--key-map PX=concept] [--json]
+Usage: python3 verdicts.py ads.csv [--young-days 5] [--window 6] [--min-change 8] [--top-n 3] [--group-by format,ad_type]
+           [--key-map PX=concept] [--target cpa=40,roas=3] [--where market=US] [--profile creative-profile.md] [--json]
 
 Standard library only. Needs daily rows (one row per ad per day) for fatigue.
 --young-days, --window, --min-impressions, --min-change, --top-n, --protect-top
@@ -9,6 +10,10 @@ and the minimum group size are arbitrary defaults: set them from your own
 account (how long ads take to stabilise, how much a week-to-week wobble moves
 your numbers). --min-change is a materiality size, not a fatigue benchmark.
 Every grade is relative to the account's own ads of the same campaign objective.
+Being in the bottom quartile only says an ad is weaker than its neighbours, so a
+"never worked" pause needs the user's own target (--target, or `target:` in the
+profile's Script settings) and an ad that misses it; without one it is "Check
+before cutting".
 """
 from __future__ import annotations
 
@@ -32,6 +37,8 @@ LABELS = {
     "check_top_seller": "Check before cutting",
     "check_immature": "Check before cutting",
     "check_feeds": "Check before cutting",
+    "check_no_target": "Check before cutting",
+    "check_meets_target": "Check before cutting",
     "iterate": "Iterate: refresh the hook or creator, keep the concept",
     "pause_fatigued": "Pause: fatigued",
     "pause_never_worked": "Pause: never worked",
@@ -136,6 +143,15 @@ def _clause(metric: str, value: Optional[float], currency: Optional[str]) -> str
     return "has an engagement rate of %.2f%%" % value
 
 
+def _against_target(metric: str, value: Optional[float], target: float, currency: Optional[str]) -> str:
+    """The ad's number beside the user's target: "cpa: it costs USD 59.56 per sale, target USD 40.00"."""
+    shown = _money(target, currency) if metric in ("cpa", "cpc", "cpm", "cost_per_lead", "cost_per_add_to_cart") else \
+        ("%.2f" % target if metric == "roas" else "%.2f%%" % target)
+    if value is None:
+        return "%s: n/a for this ad (nothing to divide by), target %s" % (metric, shown)
+    return "%s: it %s, target %s" % (metric, _clause(metric, value, currency), shown)
+
+
 def _versus(metric: str, band: str, pool_word: str) -> str:
     """A plain comparison with the ad's own comparison group, never a benchmark."""
     worse = band == BOTTOM
@@ -198,6 +214,13 @@ def _sentence(vid: str, ad: Dict[str, Any], ctx: Dict[str, Any]) -> str:
     elif vid == "check_top_seller":
         text = ("Check before cutting: it looks weak, but it is one of your account's biggest sellers. "
                 "Find out why before touching it.")
+    elif vid == "check_no_target":
+        text = ("Check before cutting: it %s, but that is only weak next to your other ads. Set a target for "
+                "%s to decide whether it actually loses money." % (_compare(metric, value, BOTTOM, pool_word, cur),
+                                                                   " or ".join(pb["graded"])))
+    elif vid == "check_meets_target":
+        text = ("Check before cutting: it is weaker than most of your %s ads, but it still meets your %s target."
+                % (pool_word, " and ".join(ctx["met"])))
     elif vid == "check_feeds":
         text = ("Check before cutting: it catches attention (%s) but pays back weakly. "
                 "See whether it feeds your other ads first." % " and ".join(ctx["strong"]))
@@ -236,13 +259,16 @@ def judge_ads(rows: Sequence[Dict[str, Any]], young_days: int = 5, window: int =
               min_impressions: int = 1000, min_change: float = 8.0,
               group_by: Optional[Sequence[str]] = None,
               key_map: Optional[Dict[str, str]] = None, protect_top: int = PROTECT_TOP,
-              currency: Optional[str] = None) -> List[Dict[str, Any]]:
+              currency: Optional[str] = None, targets: Optional[Dict[str, float]] = None) -> List[Dict[str, Any]]:
     """One verdict per ad, first matching rule wins, every verdict lists its reasons.
 
     Each ad is judged on the payback measures of its campaign objective, against
     ads of the same objective, in the narrowest group (default format then ad
-    type) with enough comparable ads.
+    type) with enough comparable ads. `targets` are the user's own payback
+    targets ({"cpa": 40}); a never-worked ad is paused only when it misses every
+    target set for its payback measures, and is a check when none is set.
     """
+    targets = targets or {}
     ads = cm.aggregate_by_ad(rows, key_map=key_map)
     group_by, _ = cm.default_group_by(ads, group_by)
     first_ads = cm.window_aggregate(rows, window, "first", key_map=key_map)
@@ -366,10 +392,29 @@ def judge_ads(rows: Sequence[Dict[str, Any]], young_days: int = 5, window: int =
                 reasons.append("would be paused, but it is one of the account's top %d by purchases or purchase "
                                "value (one of the account's biggest sellers)" % protect_top)
             else:
-                vid = pause
-                reasons.append("payback is bottom quartile on every measure, in its group and account-wide within "
-                               "its objective" + (", and was bottom in the first %d delivery days too" % window
-                                                  if pause == "pause_never_worked" else ", and it is fatiguing"))
+                relevant = {m: t for m, t in targets.items() if m in metrics}
+                met = [m for m, t in relevant.items() if cm.meets_target(ad, m, t)]
+                if pause == "pause_never_worked" and not relevant:
+                    vid = "check_no_target"
+                    reasons.append("bottom quartile on every measure, but no target is set for %s, so it is only weak "
+                                   "relative to your other ads: set --target to allow a pause" % " or ".join(metrics))
+                elif pause == "pause_never_worked" and met:
+                    vid = "check_meets_target"
+                    ctx["met"] = met
+                    reasons.append("bottom quartile on every measure, but it meets your target: %s" % "; ".join(
+                        _against_target(m, ad.get(m), relevant[m], currency) for m in met))
+                else:
+                    vid = pause
+                    reasons.append("payback is bottom quartile on every measure, in its group and account-wide within "
+                                   "its objective" + (", and was bottom in the first %d delivery days too" % window
+                                                      if pause == "pause_never_worked" else ", and it is fatiguing"))
+                    missed = [m for m in relevant if m not in met]
+                    if missed:
+                        reasons.append("it misses your target: %s" % "; ".join(
+                            _against_target(m, ad.get(m), relevant[m], currency) for m in missed))
+                    if met:
+                        reasons.append("it still meets your target (%s), but it is wearing out" % "; ".join(
+                            _against_target(m, ad.get(m), relevant[m], currency) for m in met))
         elif pb["all_top"] and fatigue["status"] == "ok" and not fatiguing:
             vid = "scale"
             reasons.append("payback is top quartile and the ad is not fatiguing; "
@@ -515,25 +560,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help="the account's top N ads by purchases or purchase value are never paused "
                              "unchecked (arbitrary default)")
     parser.add_argument("--currency", help="three-letter currency code for money; default: read from the export's spend header")
+    parser.add_argument("--target", help="your own payback targets, e.g. cpa=40,roas=3 or cpc=0.5: a never-worked ad is "
+                                         "paused only when it misses them (never a benchmark)")
     parser.add_argument("--json", action="store_true", help="print JSON instead of text")
+    cm.add_run_arguments(parser)
     args = parser.parse_args(argv)
-    rows = cm.load_rows(args.path)
-    explicit = tuple(g.strip() for g in args.group_by.split(",") if g.strip()) if args.group_by else None
-    currency = args.currency or cm.detect_currency(args.path)
     try:
-        key_map = cm.parse_key_map(args.key_map) if args.key_map else None
+        rows, key_map, run_notes = cm.prepare_run(args, cm.load_rows(args.path))
+        explicit = tuple(g.strip() for g in args.group_by.split(",") if g.strip()) if args.group_by else None
+        currency = args.currency or cm.detect_currency(args.path)
+        targets = cm.parse_targets(args.target)
         group_by, group_note = cm.default_group_by(cm.aggregate_by_ad(rows, key_map=key_map), explicit)
         results = judge_ads(rows, args.young_days, args.window, args.min_impressions, args.min_change,
-                            group_by, key_map, args.protect_top, currency)
+                            group_by, key_map, args.protect_top, currency, targets)
     except (cm.GroupColumnError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
     if args.json:
         print(json.dumps({"summary": summarise(results, args.top_n),
-                          "settings": dict(vars(args), group_by=",".join(group_by), currency=currency),
-                          "group_note": group_note, "ads": results}, indent=2))
+                          "settings": dict(vars(args), group_by=",".join(group_by), currency=currency, targets=targets),
+                          "group_note": group_note, "run_notes": run_notes, "ads": results}, indent=2))
     else:
-        print(render(results, args, rows, group_by, group_note, currency))
+        print("\n".join(run_notes + [render(results, args, rows, group_by, group_note, currency)]))
     return 0
 
 

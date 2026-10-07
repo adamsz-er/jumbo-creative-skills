@@ -39,6 +39,15 @@ KPI_ORDER = (
     ("conversions", "Purchases", "int"), ("cpa", "CPA", "money2"), ("conversion_value", "Purchase value", "money0"),
     ("roas", "ROAS", "x2"), ("hook_rate", "Hook rate", "pct"), ("hold_rate", "Hold rate", "pct"),
 )
+NEEDS_ACCOUNT = "n/a (needs account-level reach)"
+# field -> how to get it, for the banner that names metrics no ad in the pull can show
+HOW_TO_GET = {
+    "video_views_3s": "an Ads Manager export with the 3-second video plays column (the connector has no exact per-ad count)",
+    "video_thruplay": "ThruPlays in the pull",
+    "conversions": "purchases in the pull (Purchases in an export, omni_purchase from the connector)",
+    "conversion_value": "purchase value in the pull (Purchases conversion value, or omni_purchase_values)",
+    "link_clicks": "link clicks in the pull",
+}
 FUNNEL_COLUMNS = {
     "landing_page_views": ("landingpageviews", "landingpageview", "omnilandingpageview", "websitelandingpageviews"),
     "checkouts": ("checkoutsinitiated", "initiatedcheckout", "omniinitiatedcheckout", "websitecheckoutsinitiated", "checkouts"),
@@ -84,9 +93,9 @@ class Ctx:
                  currency: Optional[str] = None, top_n: int = TOP_N_CARDS, pareto_share: float = PARETO_SHARE,
                  account: Optional[Dict[str, float]] = None, prior: Optional[Sequence[Dict[str, Any]]] = None,
                  previews: Optional[Previews] = None, breakdowns: Optional[Sequence[Dict[str, Any]]] = None,
-                 briefs: Optional[Any] = None) -> None:
+                 briefs: Optional[Any] = None, key_map: Optional[Dict[str, str]] = None) -> None:
         self.rows = list(rows or [])
-        self.ads = cm.aggregate_by_ad(self.rows) if self.rows else []
+        self.ads = cm.aggregate_by_ad(self.rows, key_map=key_map) if self.rows else []
         self.ad_index = {str(a.get("ad_id") or a.get("ad_name")): a for a in self.ads}
         self.verdicts, self.grade, self.mix = verdicts, grade, mix
         self.currency, self.top_n, self.pareto_share = currency, top_n, pareto_share
@@ -273,6 +282,9 @@ def ad_card(ctx: Ctx, entry: Dict[str, Any], driver: str = "", next_step: bool =
     chip = ('<span class="badge %s">%s</span>' % (cls, esc(VERDICT_LABEL[cls]))) if cls else ""
     conf = ('<span class="conf" title="%s">%s</span>' % (esc(entry.get("confidence_reason") or ""), esc(entry["confidence"]))
             if entry.get("confidence") else "")
+    if entry.get("group_size"):
+        conf += '<span class="conf group%s">vs %d similar ads%s</span>' % (
+            " thin" if entry.get("thin") else "", entry["group_size"], ": small group" if entry.get("thin") else "")
     sentence = ('<p class="sentence">%s</p>' % say(strip_confidence(str(entry["sentence"]), entry.get("confidence")))
                 if entry.get("sentence") else "")
     if judged and not recognised(entry):
@@ -403,7 +415,7 @@ LOWER_IS_BETTER = ("cpm", "cpa")
 ACCOUNT_KPIS = ("reach", "frequency")
 
 
-def missing_everywhere(ctx: Ctx) -> List[str]:
+def gone_metrics(ctx: Ctx) -> List[str]:
     """Overview metrics no ad can give, in tile order: video rates when no ad has the plays, reach and frequency without an account-level figure."""
     if not ctx.ads:
         return []
@@ -413,23 +425,39 @@ def missing_everywhere(ctx: Ctx) -> List[str]:
 
 INFO_ICON = ('<svg class="ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" '
              'stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>')
+REACH_NOTE = ("Reach and frequency don't add up across ads, so they need an account-level figure for this window; none was supplied. "
+              "Pull account-level reach and frequency for the same window and add them when you rebuild this report.")
 
 
-def overview_banner(ctx: Ctx) -> str:
-    """One banner for every metric that is missing for all ads, so the tiles can read a plain n/a; "" when nothing is missing everywhere."""
-    gone = missing_everywhere(ctx)
-    lines = []
-    if "hook_rate" in gone:
-        lines.append("Hook and hold rate are unavailable in this pull: no ad reports 3-second video plays. "
-                     "Add the 3-second plays and ThruPlays columns to the export, or pull them through the connector.")
-    elif "hold_rate" in gone:
-        lines.append("Hold rate is unavailable in this pull: no ad reports ThruPlays. Add the ThruPlays column to the export, or pull it through the connector.")
-    if "reach" in gone:
-        lines.append("Reach and frequency don't add up across ads, so they need an account-level figure for this window; none was supplied. "
-                     "Pull account-level reach and frequency for the same window and add them when you rebuild this report.")
-    if not lines:
+def missing_everywhere(ctx: Ctx) -> str:
+    """One banner at the top of Overview naming the key numbers no ad can show in this pull, why, and how to get them; "" when none.
+
+    Each tile reads a plain n/a (or its own reason); this says it once, up front. Reach and frequency are named here too
+    when no account-level figure was supplied.
+    """
+    if not ctx.ads:
         return ""
-    return '<div class="banner" role="note">%s<div>%s</div></div>' % (INFO_ICON, "".join("<p>%s</p>" % esc(line) for line in lines))
+    gone: Dict[str, List[str]] = {}
+    for key, name, _ in KPI_ORDER:
+        if key in ("reach", "frequency") or key not in cm.METRICS or any(a.get(key) is not None for a in ctx.ads):
+            continue
+        num, den, _ = cm.METRICS[key]
+        field = next((f for f in num + den if all(a.get(f) is None for a in ctx.ads)), None)
+        if field:
+            gone.setdefault(field, []).append(name)
+    refused = next((a["video_views_3s_source"] for a in ctx.ads
+                    if str(a.get("video_views_3s_source") or "").startswith("not derived")), None)
+    items = []
+    for field, names in gone.items():
+        why = refused if field == "video_views_3s" and refused else "missing %s" % interact.FIELD_WORDS.get(field, field)
+        items.append("<li><b>%s</b>: %s. To get it: %s.</li>" % (
+            esc(" and ".join(names)), esc(why), esc(HOW_TO_GET.get(field, "add %s to the pull" % interact.FIELD_WORDS.get(field, field)))))
+    parts = ['<p><b>Not in this pull</b>, so these read n/a for every ad:</p><ul>%s</ul>' % "".join(items)] if items else []
+    if "reach" in gone_metrics(ctx):
+        parts.append("<p>%s</p>" % esc(REACH_NOTE))
+    if not parts:
+        return ""
+    return '<div class="banner" role="note">%s<div>%s</div></div>' % (INFO_ICON, "".join(parts))
 
 
 def _tile_value(text: str) -> Tuple[str, str]:
@@ -453,7 +481,7 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
     series = daily(ctx.rows)
     ctr_basis = cm.metric_basis(total, "ctr")["numerator"]
     derived = total.get("video_views_3s_source") == "derived"
-    gone = missing_everywhere(ctx)
+    gone = gone_metrics(ctx)
     tiles = []
     needs = {"spend": ("spend",), "impressions": ("impressions",), "conversions": ("conversions",), "conversion_value": ("conversion_value",),
              "cpm": ("spend", "impressions"), "ctr": (ctr_basis or "link_clicks", "impressions"), "cpa": ("spend", "conversions"),

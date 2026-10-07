@@ -55,7 +55,8 @@ def ad_row(ad_id, name, spend, value, day="2026-03-01", **extra):
 
 
 def acme_verdicts():
-    out = subprocess.run([sys.executable, str(ROOT / "skills" / "keep-or-kill" / "scripts" / "verdicts.py"), str(FIXTURE), "--json"],
+    out = subprocess.run([sys.executable, str(ROOT / "skills" / "keep-or-kill" / "scripts" / "verdicts.py"), str(FIXTURE), "--json",
+                          "--profile", str(ROOT / "examples" / "acme" / "brand-profile.md")],
                          capture_output=True, text=True)
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout)
@@ -344,7 +345,7 @@ class KpiTest(unittest.TestCase):
 
     def test_hook_rate_is_marked_derived_when_three_second_plays_were_derived(self):
         rows = cm.load_rows([{"ad_name": "a | video | c | bau | p | t | 2026-03-01", "ad_id": "1", "date": "2026-03-01", "spend": 100.0,
-                              "impressions": 10000.0, "cost_per_action_type:video_view": 0.5}])
+                              "impressions": 10000.0, "cost_per_action_type:video_view": 0.5123}])
         self.assertEqual(rows[0]["video_views_3s_source"].split(":")[0], "derived")
         derived, _ = panels.kpi_strip(panels.Ctx(rows=rows, currency="USD"))
         self.assertIn("Hook rate (derived)", derived)
@@ -728,7 +729,9 @@ class OverviewBannerTest(unittest.TestCase):
         self.assertEqual(tab.count(BANNER), 1)
         self.assertLess(tab.index(BANNER), tab.index('id="panel-kpis"'))
         text = reader_text(tab)
-        self.assertIn("Hook and hold rate are unavailable in this pull", text)
+        self.assertIn("Not in this pull", text)
+        self.assertIn("Hook rate : missing 3-second plays. To get it:", text)
+        self.assertIn("Hold rate : missing ThruPlays. To get it:", text)
         self.assertIn("Reach and frequency don't add up across ads, so they need an account-level figure for this window; none was supplied.", text)
         tiles = dict(re.findall(r'<p class="kpi-name">([^<]*)</p><p class="kpi-value">([^<]*)</p>', tab))
         for name in ("Hook rate", "Hold rate", "Reach", "Frequency"):
@@ -743,8 +746,8 @@ class OverviewBannerTest(unittest.TestCase):
         tab = self.overview(rows=rows, account=self.account)
         self.assertEqual(tab.count(BANNER), 1)
         text = reader_text(tab)
-        self.assertIn("Hold rate is unavailable in this pull", text)
-        self.assertNotIn("Hook and hold rate are unavailable", text)
+        self.assertIn("Hold rate : missing ThruPlays. To get it:", text)
+        self.assertNotIn("Hook rate : missing", text)
         self.assertNotIn("Reach and frequency don't add up", text)
 
     def test_partly_missing_data_shows_no_banner_and_keeps_the_per_tile_note(self):
@@ -764,7 +767,7 @@ class OverviewBannerTest(unittest.TestCase):
     def test_the_banner_is_the_only_place_that_says_why_everywhere(self):
         tab = self.overview(rows=NO_VIDEO)
         outside = tab.replace(re.search(r'<div class="banner".*?</div>', tab, re.S).group(0), "")
-        self.assertNotIn("unavailable in this pull", reader_text(outside))
+        self.assertNotIn("Not in this pull", reader_text(outside))
         self.assertNotIn("none was supplied", reader_text(outside))
 
 
@@ -929,7 +932,7 @@ class ShellTest(unittest.TestCase):
     def test_the_scope_bar_reads_window_currency_source_and_attribution(self):
         bar = re.search(r'<div class="scope-bar".*?</div>\s*</header>', self.header, re.S).group(0)
         segments = re.findall(r'<div class="scope-seg"><span class="scope-label">([^<]*)</span> <b>([^<]*)</b></div>', bar)
-        self.assertEqual(segments, [("Window", "1 Mar – 30 Mar 2026"), ("Currency", "USD"), ("Source", "Meta ads connector"), ("Attribution", "7-day click")])
+        self.assertEqual(segments, [("Window", "1 Mar – 30 Mar 2026"), ("Scope", "all ads in the data"), ("Currency", "USD"), ("Source", "Meta ads connector"), ("Attribution", "7-day click")])
         self.assertRegex(self.css, r"\.scope-bar \{[^}]*background: var\(--bar\)[^}]*border-radius: 12px")
         self.assertRegex(self.css, r"\.scope-seg \{[^}]*border-right: 1px solid var\(--bar-border\)")
         self.assertRegex(self.css, r"\.scope-bar \{[^}]*flex-wrap: wrap")
