@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A keep / kill / iterate / scale verdict per ad, with age, a learning flag and fatigue trend.
 
-Usage: python3 verdicts.py ads.csv [--young-days 5] [--window 7] [--min-change 8] [--top-n 3] [--json]
+Usage: python3 verdicts.py ads.csv [--young-days 5] [--window 6] [--min-change 8] [--top-n 3] [--json]
 
 Standard library only. Needs daily rows (one row per ad per day) for fatigue.
 --young-days, --window, --min-impressions and --min-change are arbitrary
@@ -70,7 +70,7 @@ def _pct(value: Optional[float]) -> str:
     return "n/a" if value is None else "%+.0f%%" % value
 
 
-def judge_ads(rows: Sequence[Dict[str, Any]], young_days: int = 5, window: int = 7,
+def judge_ads(rows: Sequence[Dict[str, Any]], young_days: int = 5, window: int = 6,
               min_impressions: int = 1000, min_change: float = 8.0,
               group_by: Sequence[str] = ("format",)) -> List[Dict[str, Any]]:
     """One verdict per ad, first matching rule wins, every verdict lists its reasons."""
@@ -207,7 +207,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("path", help="Ads Manager CSV with daily rows, or a .json file of rows")
     parser.add_argument("--young-days", type=int, default=5,
                         help="ads younger than this are still learning (arbitrary default)")
-    parser.add_argument("--window", type=int, default=7,
+    parser.add_argument("--window", type=int, default=6,
                         help="days compared at the start and end of an ad's life (arbitrary default)")
     parser.add_argument("--min-impressions", type=int, default=1000,
                         help="ads below this are still learning (arbitrary default)")

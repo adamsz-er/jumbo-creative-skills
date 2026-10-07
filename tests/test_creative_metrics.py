@@ -240,12 +240,12 @@ class FatigueTest(unittest.TestCase):
         self.assertEqual(cm.fatigue_trend(self.rows, make_fixture.SPECIAL["young"])["status"], "insufficient_data")
 
     def test_exactly_two_windows_is_enough(self):
-        rows = [{"ad_id": "z", "date": "2026-01-%02d" % d, "impressions": 100.0, "link_clicks": 2.0 if d <= 7 else 1.0}
-                for d in range(1, 15)]
+        rows = [{"ad_id": "z", "date": "2026-01-%02d" % d, "impressions": 100.0, "link_clicks": 2.0 if d <= 6 else 1.0}
+                for d in range(1, 13)]
         trend = cm.fatigue_trend(rows, "z")
         self.assertEqual(trend["status"], "ok")
         self.assertAlmostEqual(trend["pct_change"], -50.0)
-        self.assertEqual(cm.fatigue_trend(rows[:13], "z")["status"], "insufficient_data")
+        self.assertEqual(cm.fatigue_trend(rows[:11], "z")["status"], "insufficient_data")
 
     def test_other_ads_rows_are_ignored(self):
         self.assertEqual(cm.fatigue_trend(self.rows, "no-such-ad")["status"], "insufficient_data")

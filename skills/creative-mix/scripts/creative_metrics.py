@@ -357,10 +357,10 @@ def _pct_change(first: Optional[float], last: Optional[float]) -> Optional[float
 
 
 def fatigue_trend(rows: Sequence[Dict[str, Any]], ad_key: str, metric: str = "ctr",
-                  window: int = 7) -> Dict[str, Any]:
+                  window: int = 6) -> Dict[str, Any]:
     """Compare an ad's first `window` delivery days with its last `window`.
 
-    The default window of 7 days is arbitrary: set it from your own account's
+    The default window of 6 days is arbitrary: set it from your own account's
     typical time to stabilise, not from this default.
 
     `ad_key` is the ad id or ad name. Returns the metric in each window, its
@@ -502,13 +502,13 @@ def data_window(rows: Sequence[Dict[str, Any]]) -> Tuple[Optional[str], Optional
     return (min(days).isoformat(), max(days).isoformat()) if days else (None, None)
 
 
-def window_aggregate(rows: Sequence[Dict[str, Any]], window: int = 7,
+def window_aggregate(rows: Sequence[Dict[str, Any]], window: int = 6,
                      which: str = "first") -> List[Dict[str, Any]]:
     """Aggregate each ad over its first or last `window` delivery days.
 
     `which` is "first" or "last". An ad with fewer than `window` delivery days
     is left out, so it is never graded on a window it does not have. The default
-    window of 7 days is arbitrary: set it from your own account.
+    window of 6 days is arbitrary: set it from your own account.
     """
     if which not in ("first", "last"):
         raise ValueError("which must be 'first' or 'last'")

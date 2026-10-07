@@ -39,7 +39,7 @@ STEPS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
 VERDICT_ORDER = ("iterate", "kill", "scale", "check", "keep", "early")
 VERDICT_LABEL = {"iterate": "Iterate", "kill": "Kill", "scale": "Scale", "check": "Check before cutting",
                  "keep": "Keep", "early": "Too early to judge"}
-FATIGUE_WINDOW = 7  # arbitrary default, as in keep-or-kill: set it from your own account
+FATIGUE_WINDOW = 6  # arbitrary default, as in keep-or-kill: set it from your own account
 TOP_N = 3  # arbitrary default, as in keep-or-kill: how many top-spend ads the concentration line counts
 MAX_ACTIONS = 3
 MAX_GAPS_MARKED = 8  # arbitrary default, the same number creative-mix lists: how many of the strongest gaps the grid marks
