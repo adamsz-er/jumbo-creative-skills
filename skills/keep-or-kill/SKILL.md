@@ -25,11 +25,11 @@ Follow `creative-context/references/data-inputs.md`.
 
 ```
 python3 scripts/verdicts.py ads.csv                    # or ads.json from the connector
-python3 scripts/verdicts.py ads.csv --young-days 7 --window 7 --min-change 8 --top-n 3
+python3 scripts/verdicts.py ads.csv --young-days 5 --window 6 --min-change 8 --top-n 3
 python3 scripts/verdicts.py ads.csv --json
 ```
 
-`--young-days` (5), `--window` (7), `--min-impressions` (1000) and `--min-change` (8) are arbitrary defaults, as is `--top-n` (3, how many top-spend ads the concentration line counts), and so is the minimum of 5 comparable ads needed to grade within a group. Set them from the account: how long its ads take to settle, how many days make a fair comparison, and how much ctr, frequency and hook rate move from one week to the next when nothing is wrong. `--min-change` is a materiality size, not a fatigue benchmark. The output states the values used. The rules are in `references/verdict-rules.md`.
+`--young-days` (5), `--window` (6), `--min-impressions` (1000) and `--min-change` (8) are arbitrary defaults, as is `--top-n` (3, how many top-spend ads the concentration line counts), and so is the minimum of 5 comparable ads needed to grade within a group. Set them from the account: how long its ads take to settle, how many days make a fair comparison, and how much ctr, frequency and hook rate move from one week to the next when nothing is wrong. `--min-change` is a materiality size, not a fatigue benchmark. The output states the values used. The rules are in `references/verdict-rules.md`.
 
 ## Present the result
 

@@ -72,7 +72,7 @@ First step to move: the hook (the grade names it as the first broken step for th
 ```text
 Evidence
 Basis: this account's own ads, 2026-03-01 to 2026-03-30, each graded against ads of the same format. Never a benchmark.
-Settings (arbitrary defaults, set them from your own account): window=7 days, min-change=8%, min-impressions=1000. Ad types used to seed gaps: bau.
+Settings (arbitrary defaults, set them from your own account): window=6 days, min-change=8%, min-impressions=1000. Ad types used to seed gaps: bau.
 Hook wording is not in an ad export: take the opening line from the ad itself.
 
 Top-quartile ads (top quartile when all available payback metrics (cpa, roas) are top quartile for the ad's format; fields from the ad name, confirm them before relying on them):
@@ -83,16 +83,16 @@ Top-quartile ads (top quartile when all available payback metrics (cpa, roas) ar
   120000000024  sale-bundle | carousel | house | promo | camp-stove | polished  (roas 8.13, cpa 17.55)
   120000000019  sale-last-chance | ugc-video | creator-08 | promo | rain-shell | lofi  (roas 5.57, cpa 26.79)
 
-Fatiguing ads (ctr down and frequency or hook rate moving the wrong way, first vs last 7 delivery days):
-  120000000001  durability-test | ugc-video | creator-01 | bau | trail-boot | lofi  (roas 3.39, cpa 30.72)  ctr -51%, frequency +116%, hook rate -30%
+Fatiguing ads (ctr down and frequency or hook rate moving the wrong way, first vs last 6 delivery days):
+  120000000001  durability-test | ugc-video | creator-01 | bau | trail-boot | lofi  (roas 3.39, cpa 30.72)  ctr -52%, frequency +122%, hook rate -31%
 
-Never worked (payback bottom quartile from the first 7 delivery days and still is; rule out tracking, site and audience first):
+Never worked (payback bottom quartile from the first 6 delivery days and still is; rule out tracking, site and audience first):
   120000000010  weather-ready | ugc-video | creator-04 | bau | rain-shell | lofi  (roas 2.70, cpa 38.03)
+  120000000014  comparison | static | house | bau | headlamp | polished  (roas 4.46, cpa 27.78)
   120000000017  guarantee | static | house | bau | water-bottle | polished  (roas 0.00, cpa n/a)
   120000000018  before-after | ugc-video | creator-07 | bau | day-pack | lofi  (roas 2.72, cpa 44.91)
   120000000005  gift-guide | carousel | house | promo | headlamp | polished  (roas 3.87, cpa 32.24)
   120000000012  sale-percent-off | static | house | promo | sleeping-bag | polished  (roas 1.63, cpa 43.95)
-  120000000013  new-drop-two | carousel | house | launch | water-bottle | polished  (roas 3.59, cpa 22.33)
   120000000015  unboxing | ugc-video | creator-05 | launch | camp-stove | lofi  (roas 2.94, cpa 46.03)
   120000000020  founder-note | founder-video | founder | launch | headlamp | lofi  (roas 2.55, cpa 59.56)
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """An "Evidence" block for a creative brief, from the account's own ads.
 
-Usage: python3 evidence.py ads.csv [--include-types bau,promo] [--window 7] [--min-change 8] [--max-gaps 8] [--json]
+Usage: python3 evidence.py ads.csv [--include-types bau,promo] [--window 6] [--min-change 8] [--max-gaps 8] [--json]
 
 Standard library only. Lists the account's top-quartile ads with the fields
 parsed from their names, the ads that are fatiguing or never worked, and
@@ -58,7 +58,7 @@ def _fatiguing(rows: Sequence[Dict[str, Any]], key: str, window: int, min_change
             "ctr_change": ctr_change, "frequency_change": freq_change, "hook_change": hook_change}
 
 
-def build_evidence(rows: Sequence[Dict[str, Any]], window: int = 7, min_change: float = 8.0,
+def build_evidence(rows: Sequence[Dict[str, Any]], window: int = 6, min_change: float = 8.0,
                    min_impressions: int = 1000, max_gaps: int = 8,
                    include_types: Sequence[str] = ("bau",)) -> Dict[str, Any]:
     """Top-quartile ads, fatiguing and never-worked ads, and coverage gaps."""
@@ -157,7 +157,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--include-types", default="bau",
                         help="comma-separated ad types whose top-quartile concepts seed coverage gaps "
                              "(default: bau; add promo or launch when briefing a sale or a drop)")
-    parser.add_argument("--window", type=int, default=7,
+    parser.add_argument("--window", type=int, default=6,
                         help="days compared at the start and end of an ad's life (arbitrary default)")
     parser.add_argument("--min-change", type=float, default=8.0,
                         help="percent move that counts as real (arbitrary default)")
