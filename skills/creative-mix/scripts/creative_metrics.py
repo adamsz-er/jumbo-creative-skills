@@ -14,6 +14,7 @@ import argparse
 import csv
 import datetime as dt
 import json
+import math
 import re
 import statistics
 import sys
@@ -160,12 +161,13 @@ def _num(value: Any) -> Optional[float]:
     if isinstance(value, dict):
         return _num(value.get("value"))
     if isinstance(value, (int, float)):
-        return float(value)
+        return float(value) if math.isfinite(value) else None
     text = re.sub(r"[,$€£%\s]", "", str(value))
     try:
-        return float(text)
+        number = float(text)
     except ValueError:
         return None
+    return number if math.isfinite(number) else None
 
 
 def _list_value(items: Any) -> Optional[float]:
