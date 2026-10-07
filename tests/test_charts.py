@@ -765,6 +765,94 @@ class ReviewVisualFixesTest(unittest.TestCase):
         self.assertIn("--series-other:", TEMPLATE.read_text())
 
 
+def group_bodies(html):
+    """The inner html of every data-series group, found by depth so a nested group does not end it early."""
+    bodies = []
+    for start in re.finditer(r'<g data-series="[^"]*"[^>]*>', html):
+        depth, pos = 1, start.end()
+        for token in re.finditer(r"<g\b|</g>", html[pos:]):
+            depth += 1 if token.group(0) == "<g" else -1
+            if depth == 0:
+                bodies.append(html[pos:pos + token.start()])
+                break
+    return bodies
+
+
+class ZeroDenominatorTest(unittest.TestCase):
+    def two_ads(self):
+        rows = []
+        for i in range(7):
+            day = "2026-03-%02d" % (i + 1)
+            rows.append({"ad_id": "a", "ad_name": name_of("static", 1), "date": day, "spend": 100.0, "impressions": 1000.0, "link_clicks": 10.0,
+                         "conversions": 1.0, "conversion_value": 300.0})
+            rows.append({"ad_id": "b", "ad_name": name_of("static", 2), "date": day, "spend": 100.0, "impressions": 1000.0, "link_clicks": 10.0,
+                         "conversions": 0.0, "conversion_value": 0.0})
+        return rows
+
+    def test_cpa_keeps_the_spend_of_an_ad_with_no_purchases_in_the_day_and_the_rolling_average(self):
+        cal = panels.calendar(self.two_ads())
+        self.assertEqual(panels.day_values(cal, "cpa")[3], 200.0)
+        self.assertAlmostEqual(panels.rolling_values(cal, "cpa")[6], 200.0)
+
+    def test_a_zero_impression_row_stays_in_ctr_and_a_missing_one_does_not(self):
+        rows = self.two_ads()
+        rows.append({"ad_id": "c", "ad_name": name_of("static", 3), "date": "2026-03-01", "spend": 50.0, "impressions": 0.0, "link_clicks": 0.0})
+        rows.append({"ad_id": "d", "ad_name": name_of("static", 4), "date": "2026-03-01", "spend": 50.0, "link_clicks": 400.0})
+        used = panels._measure_rows([r for r in rows if r["date"] == "2026-03-01"], "ctr")
+        self.assertEqual(sorted(r["ad_id"] for r in used), ["a", "b", "c"])
+        self.assertAlmostEqual(panels.day_values(panels.calendar(rows), "ctr")[0], 20 / 2000 * 100)
+
+    def test_a_zero_spend_row_stays_in_roas(self):
+        rows = self.two_ads() + [{"ad_id": "e", "ad_name": name_of("static", 5), "date": "2026-03-01", "spend": 0.0, "conversion_value": 40.0}]
+        self.assertAlmostEqual(panels.day_values(panels.calendar(rows), "roas")[0], 340 / 200)
+
+
+class ReviewTwoFixesTest(unittest.TestCase):
+    def test_no_axis_or_row_label_sits_inside_any_series_group_on_any_chip_chart(self):
+        ctx = acme()
+        for html in (panels.format_benchmarks(ctx)[0], panels.formats_over_time(ctx)[0], panels.launches(ctx)[0], panels.ad_age(ctx)[0],
+                     panels.over_time(ctx)[0], panels.spend_by_format(ctx)[0]):
+            bodies = group_bodies(html)
+            self.assertTrue(bodies)
+            for body in bodies:
+                self.assertNotRegex(body, r'class="(tk|count|lbl)[ "]')
+
+    def test_the_group_walker_sees_through_a_nested_group(self):
+        bodies = group_bodies('<g data-series="a"><g class="thin"><text class="count">x</text></g><text class="lbl">y</text></g>')
+        self.assertIn('class="lbl"', bodies[0])
+
+    def test_small_steps_never_print_the_same_tick_twice(self):
+        for kind in ("x", "pct"):
+            fmt = charts.axis_format(kind)
+            for high in (0.0156, 0.0007, 0.9, 1.56):
+                labels = [fmt(t) for t in charts.nice_scale(0, high)[2]]
+                self.assertEqual(len(labels), len(set(labels)), (kind, high, labels))
+
+    def test_a_vanishing_domain_still_has_a_top_and_draws(self):
+        lo, hi, ticks = charts.nice_scale(0, 1e-12)
+        self.assertGreater(hi, lo)
+        self.assertGreaterEqual(len(ticks), 2)
+        days = ["2026-03-01", "2026-03-02"]
+        self.assertIn("<svg", charts.line_chart(days, [{"name": "a", "values": [1e-12, 0.0]}], "t", str, "u"))
+        self.assertGreater(charts.nice_scale(0, 0.0)[1], 0)
+
+    def test_an_unknown_definition_is_refused_loudly(self):
+        entry = dict(BenchmarkDefinitionRuleTest.ENTRY, definition="not stated")
+        with self.assertRaises(ValueError) as caught:
+            benchmarks.lookup("ctr", "video", "USD", [entry])
+        self.assertIn("matches", str(caught.exception))
+        self.assertIn("not stated", str(caught.exception))
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = Path(tmp) / "bad.json"
+            bad.write_text(json.dumps([entry]))
+            with self.assertRaises(ValueError):
+                benchmarks.load(bad)
+            no_field = dict(BenchmarkDefinitionRuleTest.ENTRY)
+            bad.write_text(json.dumps([no_field]))
+            with self.assertRaises(ValueError):
+                benchmarks.load(bad)
+
+
 HARNESS = r"""
 function Node(tag, attrs) {
   this.tag = tag; this.attrs = attrs || {}; this.children = []; this.parent = null; this.handlers = {}; this.hidden = false;

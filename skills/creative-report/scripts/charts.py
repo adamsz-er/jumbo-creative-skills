@@ -156,6 +156,9 @@ ZERO_DECIMAL_CURRENCIES = frozenset(("JPY", "KRW", "VND", "CLP", "ISK", "UGX", "
 
 
 def _trim(value: float) -> str:
+    """Two decimals, trimmed; a value under 0.1 keeps its significant digits so neighbouring small ticks never read the same."""
+    if value and abs(value) < 0.1:
+        return "%.6g" % value
     return ("%.2f" % value).rstrip("0").rstrip(".")
 
 
@@ -497,8 +500,11 @@ def nice_scale(low: float, high: float, intervals: int = 4) -> Tuple[float, floa
             lo, hi = math.floor(low / step + 1e-9) * step, math.ceil(high / step - 1e-9) * step
             count = round((hi - lo) / step)
             if count <= intervals:
-                return round(lo, 10), round(hi, 10), [round(lo + i * step, 10) for i in range(count + 1)]
-    return low, high, [low, high]
+                digits = max(0, 3 - math.floor(math.log10(step)))
+                if hi <= lo:
+                    hi, count = lo + step, 1
+                return round(lo, digits), round(hi, digits), [round(lo + i * step, digits) for i in range(count + 1)]
+    return low, low + 1.0, [low, low + 1.0]
 
 
 def chips(names: Sequence[Tuple[str, str]]) -> str:
@@ -702,9 +708,11 @@ def benchmark_rows(rows: Sequence[Dict[str, Any]], median: Optional[float], fmt:
     if median is not None:
         parts.append('<line class="guide" x1="%.1f" y1="%d" x2="%.1f" y2="%d"%s/>' % (px(median), top, px(median), height - 38, tip("Median across your formats: %s" % say(median))))
         parts.append('<text x="%.1f" y="%d" text-anchor="middle">Your median %s</text>' % (min(max(px(median), left + 50), width - 60), height - 6, esc(say(median))))
+    names: List[str] = []
     for i, r in enumerate(shown):
         y = top + i * row + row / 2 + 6
-        inner = '<text class="lbl" x="%d" y="%.1f" text-anchor="end">%s</text>' % (left - 10, y + 4, esc(_short(r["name"], 14)))
+        names.append('<text class="lbl" x="%d" y="%.1f" text-anchor="end">%s</text>' % (left - 10, y + 4, esc(_short(r["name"], 14))))
+        inner = ""
         band = r.get("band")
         if band:
             lo, hi = px(band["low"]), px(band["high"])
@@ -720,6 +728,7 @@ def benchmark_rows(rows: Sequence[Dict[str, Any]], median: Optional[float], fmt:
             inner += ('<circle class="pt" style="fill:%s" cx="%.1f" cy="%.1f" r="6" tabindex="0"%s/><text x="%.1f" y="%.1f">%s</text>'
                       % (r["colour"], px(r["value"]), y, tip("%s: %s" % (r["name"], say(r["value"]))), min(px(r["value"]) + 11, width - right + 4), y + 4, esc(say(r["value"]))))
         parts.append('<g data-series="%s">%s</g>' % (esc(r["name"]), inner))
+    parts.append('<g class="axis-labels">%s</g>' % "".join(names))
     parts.append('<line class="axis" x1="%d" y1="%d" x2="%d" y2="%d"/>' % (left, top, left, height - 38))
     key = '<p class="chart-key">Dot = your value &middot; bar or band = industry figure &middot; dashed line = your median</p>'
     return _figure("".join(parts) + "</svg>", esc(label), chips([(r["name"], r["colour"]) for r in shown]), fit=True, key_html=key)

@@ -563,10 +563,11 @@ def calendar(rows: Sequence[Dict[str, Any]]) -> List[Tuple[str, List[Dict[str, A
 
 
 def _measure_rows(rows: Sequence[Dict[str, Any]], key: str) -> List[Dict[str, Any]]:
-    """Rows that carry every operand the measure needs: a day or ad missing one is not a zero and does not dilute the rest."""
+    """Rows that carry every operand the measure needs. A missing operand (None) drops the row; a zero is a real value and stays in the sum."""
     if key in cm.NUMERIC_FIELDS:
         return [r for r in rows if r.get(key) is not None]
-    return [r for r in rows if cm.describe_missing(r, key) is None]
+    num, den, _ = cm.METRICS[cm.resolve_metric(key)]
+    return [r for r in rows if any(r.get(f) is not None for f in num) and any(r.get(f) is not None for f in den)]
 
 
 def day_values(cal: Sequence[Tuple[str, List[Dict[str, Any]]]], key: str) -> List[Optional[float]]:

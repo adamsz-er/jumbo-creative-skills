@@ -22,8 +22,20 @@ NOT_COVERED = "no public figure for this format"
 GUIDE = "A guide, not a target: other accounts, attribution and products."
 
 
+DEFINITIONS = ("matches", "not_stated", "differs")
+
+
+def check_definition(entry: Dict[str, Any]) -> None:
+    if entry.get("definition") not in DEFINITIONS:
+        raise ValueError("benchmark entry for %r (%s): definition must be one of %s, got %r"
+                         % (entry.get("metric"), entry.get("source"), ", ".join(DEFINITIONS), entry.get("definition")))
+
+
 def load(path: Optional[Path] = None) -> List[Dict[str, Any]]:
-    return json.loads((path or DATA).read_text(encoding="utf-8"))
+    entries = json.loads((path or DATA).read_text(encoding="utf-8"))
+    for entry in entries:
+        check_definition(entry)
+    return entries
 
 
 def source_key(fmt: Any, available: Sequence[str]) -> Optional[str]:
@@ -55,6 +67,7 @@ def lookup(metric: str, fmt: Any, currency: Optional[str], entries: Optional[Seq
     entry = entry_for(metric, entries)
     if entry is None:
         return None, NO_SOURCE
+    check_definition(entry)
     if entry["definition"] == "differs":
         return None, "the source's definition differs from ours, so there is no band"
     needs = entry.get("currency")
