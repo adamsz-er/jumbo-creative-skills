@@ -55,3 +55,21 @@ python3 -I scripts/grade.py ads.csv --profile creative-profile.md --where market
 - Say `n/a` when data is missing. Never turn a missing value into 0.
 - Ad age matters: a very young ad has not settled. For a keep or kill call, use `keep-or-kill`.
 - Read only. Do not change anything in the ad account.
+
+## How to use
+
+Have ready: a daily Ads Manager CSV or a connector pull (`ads.csv`). The objective column makes grading fairer.
+
+Try:
+
+- "Grade my ads and tell me what to fix first."
+- "Why is this ad not converting?"
+- "Grade only my US ads."
+
+## Common questions
+
+- **Why is an ad not graded?** It is under `--min-impressions`; the number is shown but not placed in a quartile.
+- **What does early read mean?** The comparison group is small; treat the grade as a lead.
+- **Is there a good hook rate?** No universal value; each ad is placed against your own account.
+- **Why is hook rate derived?** The connector gives 3-second plays only above ad level.
+- More: creative-context/references/faq.md

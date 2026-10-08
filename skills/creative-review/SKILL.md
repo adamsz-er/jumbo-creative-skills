@@ -61,3 +61,21 @@ Anything else prints "Something unexpected went wrong" with a one-line error; re
 - A missing field is "n/a (missing <field>)", never 0.
 - Say the numbers' currency, and say when a figure is an arbitrary default the user should set from their own account.
 - A different account under the same fallback name is not compared with the last run: the summary says so.
+
+## How to use
+
+Have ready: a daily Ads Manager CSV or a connected Meta ads connector. A brand profile is optional; the skill drafts one from your data.
+
+Try:
+
+- "Review my Meta ads for the last 28 days."
+- "Show me a sample review."
+- "What changed since my last review?"
+
+## Common questions
+
+- **Does it change my ads?** These skills never call a tool that changes your ad account. Your agent could, if you asked it to directly, through the Meta connector's own tools.
+- **Where is the report?** In the run folder under `./creative-review-runs/`; the reply gives the path.
+- **What if the pull is short?** It stops with E-RECONCILE and the exact fix; see the troubleshooting table.
+- **Can I review one market?** Yes: add `--where market=US` (any column or name field).
+- More: creative-context/references/faq.md

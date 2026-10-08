@@ -60,3 +60,21 @@ Change one choice at a time when you want to learn something.
 - Regulated categories (health, finance, alcohol, weight loss and similar): flag the idea and tell the user to check the platform's ad policies and local advertising law before making it.
 - Promo concepts need the offer and dates from the user. Never invent a discount or a deadline.
 - Read only: only read data, and never call a tool that changes ads, budgets or status. Do not touch the ad account.
+
+## How to use
+
+Have ready: a brand profile helps; the mix or verdicts aim ideas at the gaps. No data is fine.
+
+Try:
+
+- "Give me nine ad concepts that fill the gaps in my mix."
+- "Concepts for a spring launch."
+- "Ideas for people who have never heard of us."
+
+## Common questions
+
+- **Do I need data?** No; ideas without data are labelled as craft, not proof.
+- **Will it invent a discount?** No; offers and dates come from you.
+- **Are the ideas guaranteed to win?** No; each carries reasoning, not a result.
+- **Regulated category?** It flags the idea and asks you to check platform policy and local law.
+- More: creative-context/references/faq.md

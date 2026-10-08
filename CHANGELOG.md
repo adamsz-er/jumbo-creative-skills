@@ -15,3 +15,4 @@
 - keep-or-kill pauses a never-worked ad only when it misses the user's own `--target`; without a target it is "Check before cutting" and asks for one.
 - The report takes `--key-map`, `--type-map`, `--where` and `--scope`; `--title` now wins over the profile's brand; every judged card shows its comparison-group size; a "Not in this pull" notice explains metrics that are n/a for every ad; `report.py --check` validates a built page without a browser.
 - Documented commands run under `python3 -I`.
+- Docs: the README is rewritten as the front door (install, quick start, a diagram of how the skills fit, a which-skill table, known limits). New `docs/how-it-works.md` (with every command-line flag, kept in step with the scripts by a test), `docs/faq.md` and `docs/troubleshooting.md`; every skill gains "How to use" and "Common questions" sections, and `creative-context` carries an agent-facing FAQ so a single installed skill can still answer how-do-I questions.

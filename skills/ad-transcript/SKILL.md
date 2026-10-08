@@ -62,3 +62,21 @@ For each rewrite give the spoken script, the on-screen text for every beat (read
 - Never invent testimonials, reviews, statistics or results. A rewrite may only use proof the user supplied.
 - Regulated categories (health, finance, alcohol, weight loss and similar): flag the claims and tell the user to check platform ad policies and local advertising law.
 - Read only. Do not touch the ad account.
+
+## How to use
+
+Have ready: the script as .txt, .srt or .vtt, and the product name.
+
+Try:
+
+- "Break this script into beats and tighten it."
+- "Is my proof early enough in this ad?"
+- "Which claims in this script need sign-off?"
+
+## Common questions
+
+- **How does it find beats?** A keyword heuristic: a first pass, not a verdict.
+- **Is there an ideal length?** No; the checks are craft checks on your script.
+- **Will the rewrite add proof?** Only proof you supplied.
+- **Can it read a video?** No; paste or export the transcript.
+- More: creative-context/references/faq.md

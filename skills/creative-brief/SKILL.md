@@ -70,3 +70,21 @@ For a creator, also fill `references/creator-brief-template.md`.
 - Regulated categories (health, finance, alcohol, weight loss and similar): flag them and tell the user to check the platform's ad policies and local advertising law before production.
 - Creator work: usage rights, paid-use permission and the disclosure label must be written down before the ad runs; the platform's rules decide the label.
 - Read only. Do not touch the ad account.
+
+## How to use
+
+Have ready: the chosen concept, who will make it, and ideally your ads data for the evidence block.
+
+Try:
+
+- "Write a production brief for the boot test with a new opening."
+- "Brief a creator for this concept."
+- "Write a one-change brief for my first Iterate ad."
+
+## Common questions
+
+- **Where does the evidence come from?** `evidence.py` on your CSV: winners, faders and gaps, with the same profile settings as the analyses.
+- **Why is the evidence empty?** Names were not parsed; pass the same `--profile` or `--key-map` as the analyses.
+- **Who signs off claims?** Claims needing approval are marked, and the brief names who approves if the profile says.
+- **Creator work?** Usage rights and disclosure are written down before the ad runs.
+- More: creative-context/references/faq.md

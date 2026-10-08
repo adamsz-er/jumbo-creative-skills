@@ -55,3 +55,21 @@ python3 -I scripts/verdicts.py ads.csv --target cpa=40,roas=3   # the user's own
 - Never pause, edit or scale anything in the account. These are recommendations. If the connector offers write tools, do not call them unless the user asks for that action in this conversation.
 - Step size for a scale-up and the age a creative needs before it is judged come from the user's own history, not from this skill.
 - Promo ads: a strong payback can be existing demand being harvested. Check new-customer share and the sale end date.
+
+## How to use
+
+Have ready: daily rows (fatigue needs them) and, if you can, your own cost per sale or return target.
+
+Try:
+
+- "Which ads should I pause, refresh or scale this week?"
+- "Pause nothing unless it misses a cost per sale of 40."
+- "Which ads are fatiguing?"
+
+## Common questions
+
+- **Why Check before cutting?** A weakness is not proven: mixed payback, small group, top seller or no target set.
+- **Why is an ad too early?** It is younger than `--young-days` or under `--min-impressions`.
+- **Will it pause ads?** These skills never call a tool that changes your ad account. Your agent could, if you asked it to directly, through the Meta connector's own tools. It recommends.
+- **Can I set targets?** Yes: `--target cpa=40,roas=3` or in the profile.
+- More: creative-context/references/faq.md

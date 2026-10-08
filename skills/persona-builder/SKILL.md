@@ -57,3 +57,21 @@ After the personas, give a table: persona, stage, concept angles to test (from `
 - No promise that a persona will convert.
 - Regulated categories (health, finance, alcohol, weight loss and similar): do not build personas around a sensitive personal condition, and flag the category. Tell the user to check the platform's ad policies and local advertising law, including limits on targeting by sensitive traits.
 - Read only: only read data, and never call a tool that changes ads, budgets or status. Do not touch the ad account.
+
+## How to use
+
+Have ready: the brand profile, and any customer words you have (reviews, support notes).
+
+Try:
+
+- "Who am I really talking to? Build me personas for this brand."
+- "Map these personas to my concepts."
+- "What objections does each persona have?"
+
+## Common questions
+
+- **Demographics?** Personas are built from starting state and awareness, not age or gender.
+- **Statistics?** None invented; no audience-size claims.
+- **Real customers?** Use real quotes only with permission; examples here are illustrative.
+- **What next?** Hand the personas to creative-ideation and hook-writer.
+- More: creative-context/references/faq.md
