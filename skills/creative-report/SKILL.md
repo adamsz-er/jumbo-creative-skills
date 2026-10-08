@@ -108,3 +108,21 @@ Same header, tabs and panels in the same order every run. A panel with no data i
 - Anything the report prints from the inputs (ad names, notes) is escaped; keep it that way if you extend the script.
 - Never write a URL into the page for an image, and never commit or publish a dashboard built from a real account.
 - Read only. Do not touch the ad account.
+
+## How to use
+
+Have ready: the daily data, and ideally the grade, verdict and mix JSON from the analyse skills (creative-review does all of it).
+
+Try:
+
+- "Put this review in a report I can share."
+- "Rebuild the report for my US ads."
+- "Add last month for comparison."
+
+## Common questions
+
+- **How do I share it?** Send `report.html`; print to PDF from a browser.
+- **Why Totals not checked?** No reconcile ran; pass `--completeness` only from a real one.
+- **Why placeholders instead of images?** The connector returns links; pass `--previews` with `<ad_id>.png` files.
+- **Can I edit a number?** No; fix the inputs and rebuild.
+- More: creative-context/references/faq.md

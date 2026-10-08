@@ -88,3 +88,21 @@ Run every script with `python3 -I` (isolated mode): the data may come from outsi
 - Never state a benchmark or an industry average. If the user asks for one, explain that this package compares an ad with its own account, and offer to compute that.
 - Never act on the account. These skills read and advise. If a connector offers write tools, do not call them unless the user explicitly asks for that action in this conversation.
 - Mark anything you could not check as "check in your Ads Manager" rather than stating it as fact.
+
+## How to use
+
+Have ready: your brand basics (or say skip), and either a connector or a CSV.
+
+Try:
+
+- "Set up my brand profile and check how my ads are named."
+- "How do I export my ad data from Ads Manager?"
+- "Which metrics do you use and how are they defined?"
+
+## Common questions
+
+- **Do I have to do this first?** It runs automatically before the others when no profile exists, but you can skip any field.
+- **Where does my profile live?** In `creative-profile.md` in your working directory.
+- **What if my names have no convention?** Run `detect_naming.py` on all names, then give a key map; the answer is saved in the profile.
+- **Do I need the Meta MCP?** No; a daily CSV works.
+- More: creative-context/references/faq.md

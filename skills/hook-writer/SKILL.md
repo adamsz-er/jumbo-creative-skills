@@ -66,3 +66,21 @@ Run each hook through `references/hook-checklist.md` and show pass or fail. Fix 
 - Regulated categories (health, finance, alcohol, weight loss and similar): flag them and tell the user to check the platform's ad policies and local advertising law. Avoid hooks that imply the viewer has a personal condition or characteristic.
 - Do not cast by stereotype; describe the energy of the person, not their demographic.
 - Read only: only read data, and never call a tool that changes ads, budgets or status. Do not touch the ad account.
+
+## How to use
+
+Have ready: the concept or ad, the product, and the persona if you have one.
+
+Try:
+
+- "Write hooks for my rain shell."
+- "Give me one-change variants of the ad that is fatiguing."
+- "Write the first line of primary text for this ad."
+
+## Common questions
+
+- **What is a one-change variant?** A copy of a winning hook with exactly one thing changed, so you can see what mattered.
+- **Do hooks include testimonials?** Only real ones you supply, with permission.
+- **Is there a best hook length?** No benchmark; the checklist is craft, not a target.
+- **Can it write text hooks?** Yes: video and primary-text openings.
+- More: creative-context/references/faq.md

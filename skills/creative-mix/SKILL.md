@@ -56,3 +56,21 @@ Names that do not match the convention go to an `unclassified` bucket that is co
 - A gap is a place with no evidence, not a place that will win. Say "worth testing". Only gaps beside a proven concept or format (enough spend) are listed.
 - The 60% over-reliance line and the minimum of 5 concepts or formats before ranking are arbitrary defaults, not statistical rules. Ask the user what concentration is normal for their account.
 - Read only. Do not change anything in the ad account.
+
+## How to use
+
+Have ready: a daily CSV or connector pull. Parsed ad names (concept, format, ad type) give the best map.
+
+Try:
+
+- "What creative am I missing, and am I leaning too hard on one thing?"
+- "Show my mix by market."
+- "Which formats have I not tested next to a proven concept?"
+
+## Common questions
+
+- **Why is everything unclassified?** Names did not match a convention; see detect_naming and give a key map.
+- **What is a gap?** A place with no evidence next to a proven concept; worth testing, not a promise.
+- **What counts as proven?** Enough spend, set by `--min-proven-spend` (arbitrary default).
+- **Can I group by market?** Yes: `--group-by market`.
+- More: creative-context/references/faq.md

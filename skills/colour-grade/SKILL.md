@@ -45,3 +45,21 @@ Per image it prints the top colours with their share, average brightness, satura
 - The numbers come from a compressed, shrunk image: treat close values as equal and say when you are guessing.
 - Colour meaning varies by market and category. Offer it as a hypothesis to test, not a rule.
 - Read only. Do not touch the ad account.
+
+## How to use
+
+Have ready: one image, a folder of ads, or exported video frames. PNG works as is; other formats need Pillow.
+
+Try:
+
+- "What does the palette of these ads say, and do they all look alike?"
+- "Check legibility of the text colour on this ad."
+- "Give colour direction for my next brief."
+
+## Common questions
+
+- **JPEG fails?** Install Pillow (`pip install pillow`) or export PNG.
+- **Is the colour reading exact?** No; it comes from a shrunk image, so treat close values as equal.
+- **Does colour meaning carry across markets?** No; treat it as a hypothesis to test.
+- **Video?** Export a few frames as images; nothing leaves your machine.
+- More: creative-context/references/faq.md
