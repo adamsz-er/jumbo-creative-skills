@@ -1,5 +1,6 @@
 import csv
 import json
+import math
 import re
 import shutil
 import subprocess
@@ -8,6 +9,7 @@ import tempfile
 import unittest
 from html.parser import HTMLParser
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "skills" / "creative-report" / "scripts"
@@ -142,8 +144,8 @@ class VerdictChipTest(Fixture):
         card = panels.ad_card(self.ctx, entry)
         self.assertGreaterEqual(card.count(panels.verdict_chip("iterate")), 2)
         board, _ = panels.verdict_board(self.ctx)
-        for cls, name in interact.BOARD:
-            self.assertIn('<span class="badge %s" title="' % cls, board)
+        shown = re.findall(r'<section class="v-row v-row-(\w+)"><h3><span class="badge \w+" title="', board)
+        self.assertGreaterEqual(len(shown), 3)
         tile = panels.preview_tile(self.ctx, entry["ad"])
         self.assertIn(panels.verdict_chip("iterate"), tile)
 
@@ -254,14 +256,20 @@ class CardDesignTest(Fixture):
     def test_the_card_stacks_preview_label_tags_numbers_and_the_verdict_footer(self):
         entry = self.entry_of("iterate")
         card = panels.ad_card(self.ctx, entry)
-        order = [card.index(m) for m in ('class="ad-img"', "<h4>", 'class="ad-tags"', 'class="metrics"', 'class="ad-foot"', '<details class="open-ad">')]
+        order = [card.index(m) for m in ('class="ad-img"', "<h4>", 'class="metrics"', 'class="ad-foot"', '<details class="open-ad">')]
         self.assertEqual(order, sorted(order))
         self.assertIn('<span class="fmt-badge">', card.split("</div>")[0])
         self.assertRegex(card, r'<span class="v-corner"><span class="badge iterate"')
-        self.assertRegex(card, r'<p class="ad-tags"><span class="ad-tag">BAU</span>')
+        self.assertNotIn("ad-tag", card)
+        self.assertTrue(self.ctx.record_index[str(entry["ad"])]["label"].endswith("BAU"))
+        rows = [{"ad_id": str(n), "ad_name": "c | ugc-video | creator-01 | bau | boot | lofi | 2026-03-0%d" % n, "date": "2026-03-01", "spend": 10.0} for n in (1, 2)]
+        twins = panels.Ctx(rows=rows)
+        self.assertFalse(twins.records[0]["label"].endswith("BAU"))
+        self.assertIn('<span class="ad-tag">BAU</span>', panels.ad_card(twins, {"ad": "1", "ad_name": rows[0]["ad_name"]}))
         self.assertEqual(len(re.findall(r'class="m-row"', card)), 5)
         foot = card.split('<div class="ad-foot">')[1]
-        self.assertIn("compared with 6 similar ads", foot)
+        self.assertEqual(foot.count('class="conf'), 1)
+        self.assertIn("Early read · 6 similar ads", foot)
         self.assertIn('class="sentence"', foot)
 
     def test_a_non_judged_ad_has_no_verdict_chip_corner_and_no_tone(self):
@@ -331,10 +339,13 @@ class CardDesignTest(Fixture):
         self.assertIn("container-type: inline-size", css_rule(".ad-img"))
 
     def test_one_card_is_used_in_every_list_and_strips_use_its_compact_form(self):
-        for name in ("do_first", "verdict_board", "all_ads", "head_tail"):
+        for name in ("do_first", "all_ads", "head_tail"):
             html, _ = getattr(panels, name)(self.ctx)
             self.assertIn('<article class="ad-card" ', html, name)
             self.assertNotIn("pv-tile", html, name)
+        board, _ = panels.verdict_board(self.ctx)
+        self.assertIn('<article class="ad-card compact"', board)
+        self.assertNotIn('<article class="ad-card" ', board)
         strip = panels.preview_strip(self.ctx, self.ctx.ads)
         self.assertEqual(strip.count('<article class="ad-card compact"'), 3)
         self.assertNotIn("pv-tile", strip)
@@ -353,8 +364,8 @@ class CardDesignTest(Fixture):
         self.assertIn("repeat(auto-fill, minmax(220px, 1fr))", grid)
         self.assertIn("gap: 12px", grid)
         strip = css_rule(".ad-grid.strip")
-        self.assertIn("minmax(160px, 1fr)", strip)
-        self.assertNotIn("max-width", strip)
+        self.assertIn("repeat(auto-fill, minmax(160px, 200px))", strip)
+        self.assertIn("justify-content: start", strip)
 
 
 class AllAdsViewTest(Fixture):
@@ -399,7 +410,11 @@ class AllAdsViewTest(Fixture):
     def test_the_switch_is_hidden_without_the_script_and_the_other_view_is_hidden(self):
         self.assertIn("display: none", css_rule(".view-switch"))
         self.assertIn("display: inline-flex", css_rule(".js .view-switch"))
-        self.assertRegex(template_text(), r'\.allads\[data-view="grid"\] \.view-table, \.allads\[data-view="table"\] \.view-grid \{ display: none; \}')
+        text = template_text()
+        self.assertIn(".allads .view-table { display: none; }", text)
+        self.assertIn('.js .allads[data-view="table"] .view-table { display: block; }', text)
+        self.assertIn('.js .allads[data-view="table"] .view-grid { display: none; }', text)
+        self.assertNotIn('\n.allads[data-view="table"] .view-grid', text)
 
     def test_the_page_data_carries_the_default_view_for_the_script(self):
         _, data = page_data(report.build_html(rows=self.rows, verdicts=self.verdicts, grade=self.grade, currency="USD"))
@@ -501,6 +516,194 @@ class DialogDesignTest(Fixture):
         script = re.search(r"<script>(.*?)</script>", self.html, re.S).group(1)
         for text in ('data-title', 'data-raw', ".dlg-sub", ".dlg-chip", ".ob-chip", 'event.target === dialog', "opener.focus()", "showModal"):
             self.assertIn(text, script)
+
+
+DIALOG_JS = r'''
+var out = { calls: [] }, listeners = {}, dlgListeners = {};
+var tabNode = { id: "t", hidden: false, closest: function () { return null; }, addEventListener: function () {}, getAttribute: function () { return "#t"; },
+  setAttribute: function () {}, removeAttribute: function () {}, querySelector: function () { return null; } };
+var parent = { removeChild: function (n) { out.calls.push("removed " + n.name); } };
+var chipChild = { name: "chipChild" };
+var chip = { name: "chip", firstElementChild: chipChild, parentNode: parent };
+var raw = { name: "raw", parentNode: parent };
+var clone = { querySelector: function (sel) { return sel === ".ob-chip" ? chip : sel === ".raw-name" ? raw : null; } };
+var body = { getAttribute: function (k) { return { "data-title": "Label X", "data-raw": "raw | name" }[k] || null; }, cloneNode: function () { return clone; } };
+var card = { getAttribute: function () { return "42"; }, querySelector: function (sel) { return sel === ".open-body" ? body : sel === "h4" ? { textContent: "Fallback" } : null; },
+  closest: function () { return null; } };
+var titleEl = {}, sub = {}, slot = { textContent: "x", appendChild: function (n) { out.slot = n.name; } };
+var holder = { textContent: "", appendChild: function (n) { out.holder = n === clone; } };
+var focused = 0;
+var dialog = { showModal: function () { out.calls.push("showModal"); }, close: function () { dlgListeners.close(); },
+  addEventListener: function (t, fn) { dlgListeners[t] = fn; },
+  querySelector: function (sel) { return sel === ".dlg-body" ? holder : sel === ".dlg-sub" ? sub : sel === ".dlg-chip" ? slot : null; } };
+var data = { ads: [], presets: [], names: {}, weak_steps: [], currency: "USD", unit_note: "", top_n: 8, defaults: { group: "none", sort: "stake", view: "grid" }, verdict_labels: {}, verdict_tips: {} };
+var root = { className: "", setAttribute: function () {}, getAttribute: function () { return null; } };
+global.window = { localStorage: null, matchMedia: function () { return { matches: false }; }, addEventListener: function () {}, scrollTo: function () {}, innerWidth: 1200 };
+global.history = { replaceState: function () {} };
+global.location = { hash: "" };
+global.document = { documentElement: root, activeElement: null,
+  querySelectorAll: function (sel) { return sel === "section.tab" ? [tabNode] : []; },
+  querySelector: function (sel) { return sel === "svg" ? { namespaceURI: "" } : null; },
+  getElementById: function (id) {
+    return id === "ad-dialog" ? dialog : id === "ad-data" ? { textContent: JSON.stringify(data) } : id === "ad-dialog-title" ? titleEl
+      : id === "ad-pool" ? { content: { querySelectorAll: function () { return [card]; } } } : null;
+  },
+  addEventListener: function (type, fn) { (listeners[type] = listeners[type] || []).push(fn); }, createElementNS: function () { return {}; } };
+new Function(SCRIPT)();
+function click(target) { listeners.click.forEach(function (fn) { fn({ target: target, preventDefault: function () { out.calls.push("preventDefault"); } }); }); }
+var opener = { focus: function () { focused += 1; }, closest: function (sel) { return sel.indexOf("data-open") >= 0 ? opener : null; }, getAttribute: function () { return "42"; } };
+click(opener);
+out.title = titleEl.textContent; out.sub = sub.textContent;
+dialog.close();
+out.focused = focused;
+var summary = { closest: function (sel) { return sel.indexOf("open-ad > summary") >= 0 ? summary : sel === ".ad-card" ? card : null; }, focus: function () { focused += 1; } };
+out.calls.length = 0;
+click(summary);
+out.summaryCalls = out.calls.slice();
+console.log(JSON.stringify({ title: out.title, sub: out.sub, slot: out.slot, holder: out.holder, focusedAfterClose: out.focused, summaryCalls: out.summaryCalls }));
+'''
+
+
+class ReviewFixTest(Fixture):
+    def all_class_verdicts(self):
+        ids = ("scale", "keep", "iterate", "check_cut", "pause_weak", "too_early", "cant_judge")
+        rows = [{"ad_id": str(n), "ad_name": "c%d | static | bau" % n, "date": "2026-03-01", "spend": 100.0 - n, "impressions": 1000.0,
+                 "conversion_value": 50.0, "conversions": 2.0} for n in range(len(ids))]
+        entries = [{"ad": str(n), "ad_name": rows[n]["ad_name"], "verdict_id": vid, "spend_at_stake": 100.0 - n} for n, vid in enumerate(ids)]
+        return panels.Ctx(rows=rows, verdicts={"ads": entries, "summary": {}}, currency="USD")
+
+    def test_the_board_is_one_strip_per_verdict_money_at_risk_first(self):
+        html, _ = panels.verdict_board(self.all_class_verdicts())
+        order = re.findall(r'<section class="v-row v-row-(\w+)">', html)
+        self.assertEqual(order, ["kill", "iterate", "check", "scale", "keep", "early", "cant"])
+        self.assertEqual(panels.BOARD_ORDER, ("kill", "iterate", "check", "scale", "keep", "early", "cant"))
+
+    def test_a_verdict_with_no_ads_is_one_muted_line_and_no_row(self):
+        ctx = panels.Ctx(rows=self.rows[:3], verdicts={"ads": [dict(self.verdicts["ads"][0], verdict_id="keep")], "summary": {}}, currency="USD")
+        html, _ = panels.verdict_board(ctx)
+        self.assertEqual(re.findall(r'<section class="v-row v-row-(\w+)">', html), ["keep"])
+        self.assertEqual(html.count('class="muted board-none"'), 6)
+        self.assertIn("Pause: no ads.", html)
+
+    def test_the_board_uses_only_compact_cards_so_it_stays_short(self):
+        board, _ = panels.verdict_board(self.ctx)
+        self.assertNotIn('<article class="ad-card" ', board)
+        rows = re.findall(r'<section class="v-row .*?</section>', board, re.S)
+        self.assertLessEqual(len(rows), 7)
+        for row in rows:
+            self.assertLessEqual(row.count('<article class="ad-card compact"'), self.ctx.top_n)
+        strip = css_rule(".v-strip")
+        for text in ("overflow-x: auto", "scroll-snap-type: x mandatory", "display: flex"):
+            self.assertIn(text, strip)
+        self.assertIn("scroll-snap-align: start", css_rule(".v-strip .ad-card"))
+        self.assertIn("flex-direction: column", css_rule(".board"))
+        self.assertIn("flex: 0 0 168px", css_rule(".v-strip .ad-card"))
+        self.assertIn("aspect-ratio: 4 / 3", css_rule(".v-strip .ad-card .ad-img"))
+        tallest = max(r.count('<article class="ad-card compact"') for r in rows)
+        self.assertLessEqual(tallest, self.ctx.top_n)
+
+    def test_a_pause_strip_card_still_carries_its_check_line(self):
+        ctx = self.all_class_verdicts()
+        board, _ = panels.verdict_board(ctx)
+        pause = re.search(r'<section class="v-row v-row-kill">.*?</section>', board, re.S).group(0)
+        self.assertIn("<b>Check first:</b> " + panels.esc(panels.PAUSE_CHECK), pause)
+        self.assertNotIn("Check first:", re.search(r'<section class="v-row v-row-iterate">.*?</section>', board, re.S).group(0))
+
+    def test_a_chip_on_a_preview_is_opaque_in_both_themes_while_inline_chips_stay_tinted(self):
+        self.assertIn("background: var(--surface)", css_rule(".v-corner .badge"))
+        text = template_text()
+        self.assertGreater(text.index(".v-corner .badge {"), text.index(".badge.cant {"))
+        self.assertIn("background: var(--v-scale-bg)", css_rule(".badge.scale"))
+
+    def test_compact_cards_are_small_and_one_line(self):
+        self.assertIn("aspect-ratio: 1 / 1", css_rule(".ad-card.compact .ad-img"))
+        h4 = css_rule(".ad-card.compact .ad-body h4")
+        self.assertIn("min-height: 0", h4)
+        self.assertIn("-webkit-line-clamp: 1", h4)
+        self.assertIn('title="', panels.compact_card(self.ctx, "120000000001"))
+
+    def test_the_dialog_sits_in_the_middle_of_the_screen(self):
+        dialog = css_rule("dialog.ad-dialog")
+        self.assertIn("margin: auto", dialog)
+        self.assertIn("inset: 0", dialog)
+
+    def test_a_verdict_sentence_and_card_spend_driver_do_not_repeat_the_spend_row(self):
+        ad = self.ctx.ads[0]
+        entry = {"ad": ad["ad_id"], "ad_name": ad["ad_name"]}
+        same = panels.ad_card(self.ctx, entry, driver="Spend at stake: %s" % self.ctx.money(ad["spend"]))
+        other = panels.ad_card(self.ctx, entry, driver="Spend at stake: USD 1")
+        cumulative = panels.ad_card(self.ctx, entry, driver="Cumulative spend: 40%")
+        self.assertNotIn('class="driver"', same)
+        self.assertIn('class="driver">Spend at stake: USD 1', other)
+        self.assertIn('class="driver">Cumulative spend: 40%', cumulative)
+
+    def test_the_footer_confidence_and_group_size_are_one_chip(self):
+        entry = {"ad": "1", "ad_name": "a", "verdict_id": "scale", "confidence": "Confident", "confidence_reason": "r", "group_size": 29, "sentence": "S."}
+        card = panels.ad_card(panels.Ctx(verdicts={"ads": [entry]}), entry)
+        self.assertEqual(card.split('<div class="ad-foot">')[1].count('class="conf'), 1)
+        self.assertIn(">Confident · 29 similar ads</span>", card)
+        self.assertEqual(panels._age_text(None, None), "n/a (age is not in the data)")
+
+    def test_the_age_reads_without_nested_brackets(self):
+        text = panels._age_text(29, "first delivery in window (older ads may be understated)")
+        self.assertEqual(text, "29 days, counted from its first delivery in this window (it may be older)")
+        self.assertNotIn("((", text)
+        card = panels.ad_card(self.ctx, self.verdicts["ads"][0])
+        self.assertIn("counted from its first delivery in this window (it may be older)", card)
+        self.assertNotIn("(first delivery in window (", card)
+        self.assertEqual(panels._age_text(5, "its creation date"), "5 days, counted from its creation date")
+        self.assertNotIn("(", panels._age_text(5, "created (as stated)"))
+
+    @unittest.skipUnless(HAS_NODE, "node is not installed")
+    def test_opening_an_ad_fills_the_dialog_header_returns_focus_on_close_and_the_summary_opens_the_dialog_too(self):
+        script = re.search(r"<script>(.*?)</script>", self.html, re.S).group(1)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "dialog.js"
+            path.write_text("var SCRIPT = %s;\n%s" % (json.dumps(script), DIALOG_JS))
+            done = subprocess.run(["node", str(path)], capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        got = json.loads(done.stdout)
+        self.assertEqual((got["title"], got["sub"]), ("Label X", "raw | name"))
+        self.assertEqual((got["slot"], got["holder"]), ("chipChild", True))
+        self.assertEqual(got["focusedAfterClose"], 1)
+        self.assertEqual(got["summaryCalls"], ["preventDefault", "removed chip", "removed raw", "showModal"])
+
+    def test_the_chip_escapes_a_tooltip_with_markup_in_it(self):
+        with mock.patch.dict(interact.VERDICT_TIPS, {"check": 'a <b>"x"</b> & y'}):
+            chip = panels.verdict_chip("check")
+        self.assertNotIn("<b>", chip)
+        self.assertIn('title="a &lt;b&gt;&quot;x&quot;&lt;/b&gt; &amp; y"', chip)
+
+
+class HeatEdgeTest(unittest.TestCase):
+    def test_a_value_two_ads_share_is_never_tinted_and_the_rest_rank_among_themselves(self):
+        self.assertEqual(interact.heat_tints({"a": 1.0, "b": 1.0, "c": 5.0}, False), {"a": None, "b": None, "c": None})
+        self.assertEqual(interact.heat_tints({"a": 0.0, "b": 0.0, "c": 0.0, "d": 9.0}, False), {"a": None, "b": None, "c": None, "d": None})
+        tints = interact.heat_tints({"a": 1.0, "b": 1.0, "c": 5.0, "d": 7.0, "e": 9.0}, False)
+        self.assertEqual((tints["a"], tints["b"], tints["d"]), (None, None, None))
+        self.assertEqual(tints["c"], "rgb(220 38 38 / 0.60)")
+        self.assertEqual(tints["e"], "rgb(34 197 94 / 0.60)")
+
+    def test_a_cost_of_zero_or_less_is_left_out_of_the_heat_not_ranked_best(self):
+        ads = [{"ad_id": "a", "cpa": 0.0, "cpm": -1.0}, {"ad_id": "b", "cpa": 10.0, "cpm": 5.0}, {"ad_id": "c", "cpa": 20.0, "cpm": 9.0}]
+        heat = interact.heat_map(ads)
+        self.assertIsNone(heat["cpa"]["a"])
+        self.assertEqual(heat["cpa"]["b"], "rgb(34 197 94 / 0.60)")
+        self.assertEqual(heat["cpa"]["c"], "rgb(220 38 38 / 0.60)")
+        self.assertIsNone(heat["cpm"]["a"])
+
+    def test_a_number_that_is_not_finite_is_not_ranked(self):
+        tints = interact.heat_tints({"a": math.nan, "b": 1.0, "c": 2.0, "d": math.inf}, False)
+        self.assertEqual((tints["a"], tints["d"]), (None, None))
+        self.assertEqual(tints["b"], "rgb(220 38 38 / 0.60)")
+        self.assertEqual(tints["c"], "rgb(34 197 94 / 0.60)")
+
+
+class DuplicateIdLabelTest(unittest.TestCase):
+    def test_a_repeated_id_does_not_misalign_the_fields_of_the_ads_after_it(self):
+        recs = [record(1, 10, label="x", collection="a"), record(1, 10, label="x", collection="b"), record(2, 10, label="x", collection="c")]
+        got = interact.unique_labels(recs)
+        self.assertEqual(got["2"], "x · c")
 
 
 class LogoTest(Fixture):
@@ -911,7 +1114,7 @@ class StructureTest(Fixture):
         self.assertIn("focus()", script)
 
     def test_every_card_has_an_open_this_ad_details_with_the_full_picture(self):
-        html, _ = panels.verdict_board(self.ctx)
+        html, _ = panels.all_ads(self.ctx)
         cards = re.findall(r'<article class="ad-card" data-ad="[^"]+"[^>]*>.*?</article>', html, re.S)
         self.assertTrue(cards)
         for card in cards:

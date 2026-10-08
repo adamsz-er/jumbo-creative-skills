@@ -361,7 +361,7 @@ ul.legend li { display: flex; align-items: center; gap: 6px; }
 svg .track { fill: var(--chip-bg); }
 .gauge svg { max-width: 300px; }
 .ad-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin: 10px 0; }
-.ad-grid.strip { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin: 4px 0; }
+.ad-grid.strip { grid-template-columns: repeat(auto-fill, minmax(160px, 200px)); justify-content: start; margin: 4px 0; }
 .ad-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; display: flex; flex-direction: column; min-width: 0; transition: border-color .25s ease, box-shadow .25s ease; }
 .ad-card:hover { border-color: var(--hover-border); box-shadow: var(--hover-shadow); }
 .ad-card[data-tone="scale"] { border-color: var(--tone-scale-bd); background: var(--tone-scale-bg); }
@@ -377,18 +377,21 @@ svg .track { fill: var(--chip-bg); }
 @container (max-width: 139px) { .ph-note { display: none; } }
 .fmt-badge { position: absolute; left: 8px; bottom: 8px; z-index: 1; padding: 2px 6px; border-radius: 4px; background: rgb(0 0 0 / .6); color: #ffffff; font: 500 10px/1.5 var(--font-body); text-transform: capitalize; }
 .v-corner { position: absolute; top: 8px; right: 8px; z-index: 1; }
+.v-corner .badge { background: var(--surface); }
+.ad-card.compact .ad-body h4 { min-height: 0; -webkit-line-clamp: 1; }
 .ad-body { padding: 12px; display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0; }
 .ad-body h4 { margin: 0; font: 500 13px/1.35 var(--font-head); color: var(--text); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2lh; }
 .ad-body p { margin: 0; font-size: 13px; }
 .ad-tags { display: flex; flex-wrap: wrap; gap: 4px; }
 .ad-tag { background: var(--surface-muted); color: var(--text-muted); font: 500 10px/1.5 var(--font-body); padding: 0 6px; border-radius: 4px; }
 .ad-foot { display: flex; flex-direction: column; gap: 6px; margin-top: auto; }
-.col .ad-card { margin-bottom: 12px; }
 .view-switch { display: none; }
 .js .view-switch { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--radius); background: var(--surface-muted); margin: 0 0 8px; }
 .seg-btn { padding: 4px 12px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); font: 500 13px/1.3 var(--font-body); cursor: pointer; transition: background-color .2s ease; }
 .seg-btn[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgb(0 0 0 / .06); }
-.allads[data-view="grid"] .view-table, .allads[data-view="table"] .view-grid { display: none; }
+.allads .view-table { display: none; }
+.js .allads[data-view="table"] .view-table { display: block; }
+.js .allads[data-view="table"] .view-grid { display: none; }
 button.link { padding: 0; border: 0; background: none; color: var(--accent); font: 500 13px/1.4 var(--font-body); text-align: left; cursor: pointer; }
 button.link:hover { text-decoration: underline; }
 .open-body .ob-media svg.pv, .open-body .ob-media .ph { display: block; width: 100%; max-width: 480px; height: auto; aspect-ratio: 3 / 4; border-radius: 12px; border: 1px solid var(--border); background-color: var(--surface-muted); }
@@ -398,7 +401,7 @@ dl.ob-dl dt, dl.ob-dl dd { margin: 0; padding: 4px 0; border-bottom: 1px solid v
 dl.ob-dl dt { color: var(--text-muted); }
 dl.ob-dl dd { text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .open-body .raw-name, .open-body .ob-chip { display: block; }
-dialog.ad-dialog { border: 1px solid var(--border); border-radius: var(--radius); padding: 0; max-width: 1024px; width: calc(100% - 32px); max-height: 90vh; overflow: auto; background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+dialog.ad-dialog { margin: auto; inset: 0; border: 1px solid var(--border); border-radius: var(--radius); padding: 0; max-width: 1024px; width: calc(100% - 32px); max-height: 90vh; overflow: auto; background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
 dialog.ad-dialog::backdrop { background: rgba(10, 2, 39, 0.62); }
 .dlg-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: flex-start; gap: 12px; padding: 20px 24px; background: var(--surface); border-bottom: 1px solid var(--border); }
 .dlg-title { flex: 1 1 auto; min-width: 0; }
@@ -422,11 +425,14 @@ svg.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 p.check { border-left: 3px solid var(--error); padding-left: 8px; }
 .empty { border: 1px dashed var(--divider); border-radius: 14px; background: var(--surface-soft); padding: 14px 18px; }
 .empty p { margin: 6px 0; }
-.board { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; align-items: start; }
-.col { min-width: 0; }
-.col h3 { margin: 0 0 8px; display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.board { display: flex; flex-direction: column; gap: 12px; }
+.v-row { min-width: 0; }
+.v-row h3 { margin: 0 0 6px; display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.v-strip { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; }
+.v-strip .ad-card { flex: 0 0 168px; scroll-snap-align: start; }
+.v-strip .ad-card .ad-img { aspect-ratio: 4 / 3; }
+.board-none { margin: 0; }
 .count { font: 700 13px/1 var(--font-head); color: var(--heading); }
-.col .ad-card { margin-bottom: 12px; }
 /* charts: shared legend chips, metric switcher, tooltip, series states */
 .legend-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; }
 .legend-chip { display: inline-flex; align-items: center; gap: 6px; font: 600 12px/1 var(--font-head); padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--heading); cursor: pointer; }
@@ -1281,6 +1287,11 @@ section.panel > h4 { margin-top: 18px; }
       state.weak = b.getAttribute("data-weak");
       show("panel-all-ads");
       sync();
+      return;
+    }
+    if (dialog && typeof dialog.showModal === "function" && (b = t.closest("details.open-ad > summary"))) {
+      event.preventDefault();
+      openCard(b.closest(".ad-card"), b);
       return;
     }
     if ((b = t.closest("[data-open]"))) {

@@ -250,6 +250,17 @@ DETAIL_METRICS = (("Spend", "spend", "money0"), ("Purchases", "conversions", "in
                   ("Hook rate", "hook_rate", "pct"), ("Hold rate", "hold_rate", "pct"), ("Impressions", "impressions", "int"))
 
 
+def _age_text(age: Any, basis: Any) -> str:
+    """The ad's age in words, with where the count starts and no nested brackets."""
+    if age is None:
+        return "n/a (age is not in the data)"
+    if not basis:
+        return "%d days" % age
+    if str(basis).startswith("first delivery"):
+        return "%d days, counted from its first delivery in this window (it may be older)" % age
+    return "%d days, counted from %s" % (age, str(basis).replace("(", "- ").replace(")", ""))
+
+
 def _detail_pairs(ctx: Ctx, key: str, fmt: str, full: Dict[str, Any], base: Dict[str, Any]) -> List[Tuple[str, str]]:
     """What the open view's numbers table shows: the ad's own figures, then its age and id; n/a says why."""
     ad = ctx.ad_index.get(key)
@@ -263,7 +274,7 @@ def _detail_pairs(ctx: Ctx, key: str, fmt: str, full: Dict[str, Any], base: Dict
         pairs.append((label, _kpi_text(ctx, ad, metric, kind)))
     age = full.get("age_days") if full.get("age_days") is not None else base.get("age_days")
     basis = full.get("age_basis") or base.get("age_basis")
-    pairs.append(("Age", "%d days%s" % (age, " (%s)" % basis if basis else "") if age is not None else "n/a (age is not in the data)"))
+    pairs.append(("Age", _age_text(age, basis)))
     pairs.append(("Ad ID", key))
     return pairs
 
@@ -342,6 +353,12 @@ def metric_rows(ctx: Ctx, ad_id: Any, fmt: Any, only: Optional[Sequence[str]] = 
     return '<div class="metrics">%s</div>' % "".join(rows)
 
 
+def _driver_is_spend(ctx: Ctx, key: str, driver: str) -> bool:
+    """True when a "Spend at stake: X" driver only repeats the card's own spend row."""
+    spend = (ctx.ad_index.get(key) or {}).get("spend")
+    return spend is not None and driver.startswith("Spend at stake:") and driver.split(":", 1)[1].strip() == ctx.money(spend)
+
+
 def card_tone(cls: Optional[str], fatiguing: Any) -> str:
     """Which tint a card carries: scale reads green, pause red, and iterate or a tiring ad amber; nothing else is tinted."""
     if cls == "kill":
@@ -374,8 +391,11 @@ def ad_card(ctx: Ctx, entry: Dict[str, Any], driver: str = "", next_step: bool =
     conf = ('<span class="conf" title="%s">%s</span>' % (esc(entry.get("confidence_reason") or ""), esc(entry["confidence"]))
             if entry.get("confidence") else "")
     if entry.get("group_size"):
-        conf += '<span class="conf group%s">compared with %d similar ads%s</span>' % (
-            " thin" if entry.get("thin") else "", entry["group_size"], ": small group" if entry.get("thin") else "")
+        if entry.get("confidence"):
+            conf = '<span class="conf group%s" title="%s">%s \u00b7 %d similar ads</span>' % (
+                " thin" if entry.get("thin") else "", esc(entry.get("confidence_reason") or ""), esc(entry["confidence"]), entry["group_size"])
+        else:
+            conf += '<span class="conf group%s">compared with %d similar ads</span>' % (" thin" if entry.get("thin") else "", entry["group_size"])
     sentence = ('<p class="sentence">%s</p>' % say(strip_confidence(str(entry["sentence"]), entry.get("confidence")))
                 if entry.get("sentence") else "")
     if judged and not recognised(entry):
@@ -384,13 +404,14 @@ def ad_card(ctx: Ctx, entry: Dict[str, Any], driver: str = "", next_step: bool =
     check = ""
     if cls == "kill":
         check = '<p class="check"><b>Check first:</b> %s</p>' % esc(entry.get("check") or PAUSE_CHECK)
-    drive = '<p class="driver">%s</p>' % esc(driver) if driver else ""
+    drive = '<p class="driver">%s</p>' % esc(driver) if driver and not _driver_is_spend(ctx, key, driver) else ""
     full = ctx.verdict_index.get(key) or entry
     full_cls = entry_class(full) if "verdict_id" in full else None
     action = ('<p class="card-actions"><button type="button" class="btn" data-action="copy-prompt">Make the next version</button></p>'
               if full_cls in PROMPT_CLASSES else "")
     rec = ctx.record_index.get(key) or {}
-    tags = "".join('<span class="ad-tag">%s</span>' % esc(t) for t in (interact.humanise(rec.get("ad_type")), rec.get("market")) if t)
+    kind = interact.humanise(rec.get("ad_type"))
+    tags = "".join('<span class="ad-tag">%s</span>' % esc(t) for t in (None if kind and label.endswith(kind) else kind, rec.get("market")) if t)
     attrs, image = _card_frame(ctx, key, name, fmt, cls, _image(ctx, ad_id, label, fmt))
     foot = '<div class="ad-foot">%s%s%s%s%s</div>' % ('<p class="chips">%s</p>' % conf if conf else "", sentence, step, check, action)
     return ('<article class="ad-card"%s>%s<div class="ad-body"><h4>%s</h4>%s%s%s%s%s</div></article>'
@@ -401,7 +422,7 @@ def ad_card(ctx: Ctx, entry: Dict[str, Any], driver: str = "", next_step: bool =
 COMPACT_METRICS = ("spend", "roas")
 
 
-def compact_card(ctx: Ctx, ad_id: Any) -> str:
+def compact_card(ctx: Ctx, ad_id: Any, note: str = "") -> str:
     """The same card in small form for strips: preview, label and two numbers. Clicking it opens the shared ad dialog."""
     key = str(ad_id)
     rec = ctx.record_index.get(key)
@@ -411,8 +432,8 @@ def compact_card(ctx: Ctx, ad_id: Any) -> str:
     verdict = ctx.verdict_index.get(key)
     cls = entry_class(verdict) if verdict and "verdict_id" in verdict else None
     attrs, image = _card_frame(ctx, key, rec.get("name"), fmt, cls, _image(ctx, key, rec["label"], fmt), open_id=True)
-    return ('<article class="ad-card compact"%s>%s<div class="ad-body"><h4>%s</h4>%s</div></article>'
-            % (attrs, image, esc(rec["label"]), metric_rows(ctx, key, fmt, only=COMPACT_METRICS)))
+    return ('<article class="ad-card compact"%s>%s<div class="ad-body"><h4>%s</h4>%s%s</div></article>'
+            % (attrs, image, esc(rec["label"]), metric_rows(ctx, key, fmt, only=COMPACT_METRICS), note))
 
 
 def card_grid(cards: Sequence[str]) -> str:
@@ -936,6 +957,9 @@ def _stake(entry: Dict[str, Any]) -> float:
     return entry.get("spend_at_stake") or entry.get("spend") or 0
 
 
+BOARD_ORDER = ("kill", "iterate", "check", "scale", "keep", "early", "cant")  # money at risk first
+
+
 def verdict_board(ctx: Ctx) -> Tuple[str, str]:
     ads = [dict(e, verdict_id=e.get("verdict_id") or "") for e in (ctx.verdicts or {}).get("ads") or []]
     if not ads:
@@ -951,15 +975,19 @@ def verdict_board(ctx: Ctx) -> Tuple[str, str]:
                 % (esc(", ".join("%s (%s ads)" % (t.get("group"), t.get("ads")) for t in thin)), cm.MIN_GROUP))
     bases = list(dict.fromkeys(e["payback_basis"] for e in ads if e.get("payback_basis")))
     basis = '<p class="muted"><b>Judged on:</b> %s.</p>' % esc("; ".join(bases)) if bases else ""
-    cols = []
-    for cls, name in BOARD:
+    rows = []
+    for cls in BOARD_ORDER:
         ordered = sorted(columns[cls], key=lambda e: -_stake(e))
-        cards = [ad_card(ctx, e, driver="Spend at stake: %s" % ctx.money(e.get("spend_at_stake"))) for e in ordered[:ctx.top_n]]
-        cols.append('<div class="col col-%s"><h3>%s <span class="count">%d</span></h3>%s%s</div>'
-                    % (cls, verdict_chip(cls), len(ordered), "".join(cards) or '<p class="muted">No ads in this column.</p>',
-                       compact_list(ctx, ordered[ctx.top_n:], "%s ads" % name.lower())))
-    lead = '<p class="muted">Each column shows its top %d ads by spend at stake (N=%d, a default you can change when you rebuild the report); the rest are collapsed.</p>' % (ctx.top_n, ctx.top_n)
-    return note + basis + lead + '<div class="board">%s</div>' % "".join(cols), "data"
+        if not ordered:
+            rows.append('<p class="muted board-none">%s: no ads.</p>' % esc(VERDICT_LABEL[cls]))
+            continue
+        check = lambda e: '<p class="check"><b>Check first:</b> %s</p>' % esc(e.get("check") or PAUSE_CHECK) if cls == "kill" else ""
+        cards = "".join(compact_card(ctx, e.get("ad"), check(e)) for e in ordered[:ctx.top_n])
+        rows.append('<section class="v-row v-row-%s"><h3>%s <span class="count">%d</span></h3><div class="v-strip">%s</div>%s</section>'
+                    % (cls, verdict_chip(cls), len(ordered), cards, compact_list(ctx, ordered[ctx.top_n:], "%s ads" % VERDICT_LABEL[cls].lower())))
+    lead = ('<p class="muted">Each verdict has its own strip, money at risk first. Each strip shows its top %d ads by spend at stake (N=%d, a default you can change when you rebuild the report) '
+            'as small cards you can scroll sideways; click one to open it. The rest are collapsed.</p>' % (ctx.top_n, ctx.top_n))
+    return note + basis + lead + '<div class="board">%s</div>' % "".join(rows), "data"
 
 
 def fatigue(ctx: Ctx) -> Tuple[str, str]:

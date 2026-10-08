@@ -6,6 +6,7 @@ render the default (scripts-off) view, so both views come from one source. Stand
 from __future__ import annotations
 
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -184,31 +185,32 @@ def unique_labels(records: Sequence[Dict[str, Any]], fields: Optional[Dict[str, 
     ad id, and the full id when even those collide. `fields` maps an id to its parsed name fields; without it the record
     itself is read.
     """
-    labels = {str(r["id"]): str(r["label"]) for r in records}
-    parsed = {key: (fields or {}).get(key, rec) for key, rec in zip(labels, records)}
+    keys = [str(r["id"]) for r in records]
+    labels = [str(r["label"]) for r in records]
+    parsed = [(fields or {}).get(key, rec) if fields is not None else rec for key, rec in zip(keys, records)]
 
-    def shared() -> Dict[str, List[str]]:
-        groups: Dict[str, List[str]] = {}
-        for key, label in labels.items():
-            groups.setdefault(label, []).append(key)
-        return {label: keys for label, keys in groups.items() if len(keys) > 1}
+    def shared() -> List[List[int]]:
+        groups: Dict[str, List[int]] = {}
+        for n, label in enumerate(labels):
+            groups.setdefault(label, []).append(n)
+        return [members for members in groups.values() if len(members) > 1]
 
-    segments = sorted({k for f in parsed.values() for k in f if _SEGMENT_KEY.match(str(k))}, key=lambda k: int(_SEGMENT_KEY.match(k).group(1)))
+    segments = sorted({k for f in parsed for k in f if _SEGMENT_KEY.match(str(k))}, key=lambda k: int(_SEGMENT_KEY.match(k).group(1)))
     for field in LABEL_EXTENSIONS + tuple(segments):
-        for keys in shared().values():
-            values = {k: parsed[k].get(field) for k in keys}
+        for members in shared():
+            values = {n: parsed[n].get(field) for n in members}
             if len({str(v) for v in values.values()}) < 2:
                 continue
-            for key, value in values.items():
+            for n, value in values.items():
                 if value not in (None, ""):
-                    labels[key] += " · " + _extension_text(field, value)
-    for keys in shared().values():
-        for key in keys:
-            labels[key] += " · …" + key[-4:]
-    for keys in shared().values():
-        for key in keys:
-            labels[key] += " · " + key
-    return labels
+                    labels[n] += " \u00b7 " + _extension_text(field, value)
+    for members in shared():
+        for n in members:
+            labels[n] += " \u00b7 \u2026" + keys[n][-4:]
+    for members in shared():
+        for n in members:
+            labels[n] += " \u00b7 " + keys[n]
+    return dict(zip(keys, labels))
 
 
 # metric -> lower is better; spend is left out on purpose, since a higher spend is neither good nor bad
@@ -220,18 +222,22 @@ HEAT_GOOD, HEAT_BAD = "34 197 94", "220 38 38"
 def heat_tints(values: Dict[str, Optional[float]], lower_is_better: bool) -> Dict[str, Optional[str]]:
     """A CSS colour per key from where its value ranks among the others: green for the better half, red for the worse.
 
+    A value shared by two or more ads is never tinted (a tie is not good or bad); the rest rank among themselves.
     Strength is the distance of the rank from the middle (0 at the middle, 1 at either end), so one extreme value cannot
-    wash the rest to neutral; alpha is HEAT_FLOOR + HEAT_RANGE x strength, capped. A value that is missing, a tie at the
-    middle, all values equal or a single value gets no tint (None).
+    wash the rest to neutral; alpha is HEAT_FLOOR + HEAT_RANGE x strength, capped. A value that is missing or not a
+    finite number, fewer than two distinct values, or the exact middle gets no tint (None).
     """
-    known = {k: v for k, v in values.items() if v is not None}
+    known = {k: v for k, v in values.items() if v is not None and math.isfinite(v)}
     out: Dict[str, Optional[str]] = {k: None for k in values}
-    if len(known) < 2 or len(set(known.values())) < 2:
+    counts: Dict[float, int] = {}
+    for v in known.values():
+        counts[v] = counts.get(v, 0) + 1
+    alone = {k: v for k, v in known.items() if counts[v] == 1}
+    if len(alone) < 2:
         return out
-    ordered = list(known.values())
-    for key, value in known.items():
-        below, same = sum(1 for v in ordered if v < value), sum(1 for v in ordered if v == value)
-        good = (below + (same - 1) / 2) / (len(ordered) - 1)
+    ordered = list(alone.values())
+    for key, value in alone.items():
+        good = sum(1 for v in ordered if v < value) / (len(ordered) - 1)
         good = 1 - good if lower_is_better else good
         if good == 0.5:
             continue
@@ -241,8 +247,10 @@ def heat_tints(values: Dict[str, Optional[float]], lower_is_better: bool) -> Dic
 
 
 def heat_map(ads: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, Optional[str]]]:
-    """{metric: {ad key: tint}} over the ads on the page, for every metric in HEAT_METRICS."""
-    return {metric: heat_tints({str(a.get("ad_id") or a.get("ad_name")): a.get(metric) for a in ads}, lower)
+    """{metric: {ad key: tint}} over the ads on the page. A cost of zero or less (an ad with no spend) is left out, not ranked best."""
+    def usable(value: Any, lower: bool) -> Any:
+        return None if value is None or (lower and value <= 0) else value
+    return {metric: heat_tints({str(a.get("ad_id") or a.get("ad_name")): usable(a.get(metric), lower) for a in ads}, lower)
             for metric, lower in HEAT_METRICS.items()}
 
 
