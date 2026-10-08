@@ -93,7 +93,7 @@ class Ctx:
     def __init__(self, rows: Optional[Sequence[Dict[str, Any]]] = None, verdicts: Optional[Dict[str, Any]] = None,
                  grade: Optional[Dict[str, Any]] = None, mix: Optional[Dict[str, Any]] = None,
                  currency: Optional[str] = None, top_n: int = TOP_N_CARDS, pareto_share: float = PARETO_SHARE,
-                 account: Optional[Dict[str, float]] = None, prior: Optional[Sequence[Dict[str, Any]]] = None,
+                 account: Optional[Dict[str, Any]] = None, prior: Optional[Sequence[Dict[str, Any]]] = None,
                  previews: Optional[Previews] = None, breakdowns: Optional[Sequence[Dict[str, Any]]] = None,
                  briefs: Optional[Any] = None, key_map: Optional[Dict[str, str]] = None) -> None:
         self.rows = list(rows or [])
@@ -102,6 +102,7 @@ class Ctx:
         self.verdicts, self.grade, self.mix = verdicts, grade, mix
         self.currency, self.top_n, self.pareto_share = currency, top_n, pareto_share
         self.account, self.prior = account, list(prior) if prior else None
+        self.scope: Optional[str] = None
         self.previews = previews or Previews()
         self.records = interact.ad_records(self.ads, (verdicts or {}).get("ads"), (grade or {}).get("ads"))
         self.record_index = {r["id"]: r for r in self.records}
@@ -556,6 +557,7 @@ def gone_metrics(ctx: Ctx) -> List[str]:
 
 INFO_ICON = ('<svg class="ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" '
              'stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>')
+ACCOUNT_WIDE = "account-wide figure, not filtered to %s"
 REACH_NOTE = ("Reach and frequency don't add up across ads, so they need an account-level figure for this window; none was supplied. "
               "Pull account-level reach and frequency for the same window and add them when you rebuild this report.")
 
@@ -635,6 +637,8 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
             label = "CTR (all clicks)"
         if key == "hook_rate" and derived:
             label += " (derived)"
+        if key == "frequency" and ctx.account and ctx.account.get("frequency_computed"):
+            label += " (computed)"
         value, reason = ("n/a", "") if key in gone else _tile_value(text)
         if prior_total is None:
             delta = ""
@@ -654,7 +658,9 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
                                '<span class="muted">%s</span>' % ("one day of data" if len(sser) == 1 else "no dates in the data"))
         unit = " (%s)" % (ctx.currency or "account currency") if kind.startswith("money") else ""
         partial = [] if video_note or key in gone else coverage(ctx.ads, needs.get(key, ()))
-        notes = ([reason] if reason else []) + ([video_note] if video_note else []) + partial
+        wide = [ACCOUNT_WIDE % ctx.scope] if key in ACCOUNT_KPIS and ctx.account and ctx.scope and \
+            str(ctx.account.get("scope") or "").strip().lower() != ctx.scope.strip().lower() else []
+        notes = ([reason] if reason else []) + ([video_note] if video_note else []) + partial + wide
         note_html = '<p class="kpi-note">%s</p>' % esc("; ".join(notes)) if notes else ""
         tiles.append('<div class="kpi%s%s"><p class="kpi-name">%s%s</p><p class="kpi-value">%s</p>%s%s<div class="kpi-spark">%s</div></div>'
                      % (" unknown" if value == "n/a" else "", " partial" if partial else "", esc(label), esc(unit), esc(value), note_html, '<p class="kpi-delta">%s</p>' % delta if delta else "", spark_note))
@@ -1719,6 +1725,8 @@ def _gap_cells(ctx: Ctx, rows: Sequence[str]) -> Dict[Tuple[int, int], int]:
 def concept_heatmap(ctx: Ctx) -> Tuple[str, str]:
     if not ctx.mix:
         return empty_state(*NO_MIX)
+    if ctx.mix.get("concepts_unread"):
+        return '<div class="empty"><p>%s</p></div>' % esc(ctx.mix["concepts_unread_message"]), "empty"
     grid = ctx.mix.get("grid") or {}
     families, formats = grid.get("families") or [], grid.get("formats") or []
     if not families or not formats:

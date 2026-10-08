@@ -176,6 +176,12 @@ def _num(value: Any) -> Optional[float]:
     return number if math.isfinite(number) else None
 
 
+def is_spend_key(key: Any) -> bool:
+    """True for a column or field name that holds the amount spent."""
+    norm = _norm(key)
+    return _ALIASES.get(norm) == "spend" or norm.startswith("amountspent")
+
+
 def _list_value(items: Any) -> Optional[float]:
     """Sum the `value` of Meta API action-stat lists; None if there are none."""
     if not isinstance(items, list):
@@ -892,6 +898,30 @@ def learn_names(names: Sequence[str], key_map: Optional[Dict[str, str]] = None) 
                                           for sep, found in by_separator.items()},
         "date_order": order,
     }
+
+
+def most_common_unmapped_key(names: Sequence[str], key_map: Optional[Dict[str, str]] = None,
+                             min_share: float = 60.0) -> Optional[str]:
+    """The KEY used by the most names that no built-in, learned or user key-map entry already maps.
+
+    Only when at least `min_share` percent of the names carry some KEY:value segment (an arbitrary
+    default: set it from how consistent your account's names are). Ties go to the key that sorts first.
+    None when the names are not KEY:value names, or every key they use is mapped.
+    """
+    names = [str(n).strip() for n in names if n is not None and str(n).strip()]
+    known = _merged_key_map(key_map, learn_names(names, key_map))
+    counts: Dict[str, int] = {}
+    keyed = 0
+    for name in names:
+        separator = _pick_separator(name)
+        found = {m.group(1).upper() for m in (_KEYED.match(p) for p in _split(name, separator)) if m} if separator else set()
+        keyed += bool(found)
+        for key in found:
+            counts[key] = counts.get(key, 0) + 1
+    if not names or keyed * 100 < min_share * len(names):
+        return None
+    unmapped = {k: n for k, n in counts.items() if k not in known}
+    return min(unmapped, key=lambda k: (-unmapped[k], k)) if unmapped else None
 
 
 def _shape_field(part: str, position: int, learned: Dict[str, Any],

@@ -83,6 +83,7 @@ def error_samples():
         e.empty_filter_error(["market=ZZ"]),
         e.ReviewError("E-RECONCILE", problems="spend is 3.2% short"),
         e.ReviewError("E-CURRENCY"),
+        e.ReviewError("E-MIXED-CURRENCY", units="EUR, USD"),
         e.ReviewError("E-SKILL", skill="creative-mix"),
         e.ReviewError("E-PROFILE", path="creative-profile.md", reason="line 4 is not key: value"),
         e.ReviewError("E-TARGET", detail="cpa=high is not a number", metrics="cpa, roas, cpc"),

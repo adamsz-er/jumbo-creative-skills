@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import creative_metrics as cm  # noqa: E402
 
 EXIT_SHORT = 3
+EXIT_MIXED = 4
 DEFAULT_TOLERANCE = 0.5
 
 # CSV header -> row field. The headers are the Ads Manager names the loader already reads.
@@ -89,14 +90,40 @@ def absent_fields(rows: Sequence[Dict[str, Any]]) -> List[str]:
     return absent
 
 
+def money_unit(raw: Dict[str, Any]) -> Optional[str]:
+    """The currency code a raw row states for its spend ({"value": ..., "unit": "USD"}), upper-cased; None when it states none."""
+    for key, value in raw.items():
+        if isinstance(value, dict) and cm.is_spend_key(key) and str(value.get("unit") or "").strip():
+            return str(value["unit"]).strip().upper()
+    return None
+
+
+def spend_currency(rows: Sequence[Dict[str, Any]]) -> Optional[str]:
+    """The one currency every spending row states, else None (some row states none, or the units differ)."""
+    spending = [r for r in rows if r.get("spend") is not None]
+    units = {r.get("spend_unit") for r in spending}
+    return next(iter(units)) if len(units) == 1 and None not in units else None
+
+
+def mixed_units(rows: Sequence[Dict[str, Any]]) -> List[str]:
+    """The distinct currency codes the rows state, when there is more than one; [] otherwise."""
+    units = sorted({r["spend_unit"] for r in rows if r.get("spend_unit")})
+    return units if len(units) > 1 else []
+
+
 def merge(raw_rows: Sequence[Dict[str, Any]], level: Optional[str] = "ad") -> List[Dict[str, Any]]:
     """Normalise rows and keep the last copy of each (ad id, date), or (ad id, window end) for undated rows.
+
+    A row whose spend states a currency keeps it as `spend_unit`.
 
     A row with an ad but neither a date nor a window end cannot be told apart from
     a repeat of itself, so it raises ValueError rather than risk double counting.
     """
     merged: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
-    for position, row in enumerate(cm.load_rows(raw_rows, level=level)):
+    for position, (raw, row) in enumerate(zip(raw_rows, cm.load_rows(raw_rows, level=level))):
+        unit = money_unit(raw)
+        if unit:
+            row["spend_unit"] = unit
         ad_id = row.get("ad_id") or row.get("ad_name")
         if not ad_id:
             merged[("row", position)] = row
@@ -117,9 +144,11 @@ def _cell(value: Any) -> str:
 
 
 def write_csv(rows: Sequence[Dict[str, Any]], path: str) -> None:
+    """Write the CSV; the spend header carries the currency ("Amount spent (USD)") when every row states the same one."""
+    currency = spend_currency(rows)
     with open(path, "w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
-        writer.writerow([header for header, _ in COLUMNS])
+        writer.writerow(["%s (%s)" % (header, currency) if field == "spend" and currency else header for header, field in COLUMNS])
         for row in rows:
             writer.writerow([_cell(row.get(field)) for _, field in COLUMNS])
 
@@ -190,6 +219,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except ValueError as error:
         print("ERROR: %s" % error)
         return 2
+    units = mixed_units(rows)
+    if units:
+        print("ERROR: mixed currency: %s" % ", ".join(units))
+        return EXIT_MIXED
     fill_market(rows)
     write_csv(rows, args.output)
     summary = summarise(rows)

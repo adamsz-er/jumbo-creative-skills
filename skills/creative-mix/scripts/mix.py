@@ -32,6 +32,11 @@ OVER_RELIANCE = 60.0  # percent of spend; arbitrary default, set from your own a
 # default, not a statistical rule: set your own from how many concepts you run.
 MIN_FOR_QUARTILES = 5
 MAX_GAPS_SHOWN = 8
+UNREAD_SPEND_SHARE = 80.0  # percent of spend left in concept "unknown" before concepts count as unread; arbitrary default
+KEYED_NAME_SHARE = 60.0  # percent of ad names that must be KEY:value before the message names a key; arbitrary default
+UNREAD_MESSAGE = ("Concepts could not be read from your ad names, so gaps were not checked. "
+                  "Add key-map: %s=concept to the Script settings of creative-profile.md (or pass --key-map).")
+GENERIC_KEY = "your concept key"
 PROVEN_MULTIPLE = 3  # arbitrary default: proven spend is this many times the account's median ad spend
 
 
@@ -193,7 +198,16 @@ def analyse_mix(rows: Sequence[Dict[str, Any]], pattern: Optional[Sequence[str]]
                 if v / scope_total * 100 > OVER_RELIANCE:
                     over.append({"scope": label, "kind": name, "name": k, "share": v / scope_total * 100})
 
+    everything = sum(a.get("spend") or 0 for a in ads)
+    unknown = sum(a.get("spend") or 0 for a in classified if a["concept"] == "unknown") + sum(a.get("spend") or 0 for a in unclassified)
+    unread = everything > 0 and unknown * 100 >= UNREAD_SPEND_SHARE * everything
+    unread_fields: Dict[str, Any] = {"concepts_unread": unread}
+    if unread:
+        key = cm.most_common_unmapped_key([a["ad_name"] for a in ads if a.get("ad_name")], key_map, KEYED_NAME_SHARE)
+        unread_fields.update(concept_key=key, concepts_unread_message=UNREAD_MESSAGE % (key or GENERIC_KEY))
+
     return {
+        **unread_fields,
         "classified": len(classified),
         "unclassified": {"count": len(unclassified),
                          "ads": [str(a.get("ad_name") or a.get("ad_id")) for a in unclassified],

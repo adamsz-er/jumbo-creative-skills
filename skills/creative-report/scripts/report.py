@@ -248,6 +248,7 @@ def build_html(rows: Optional[Sequence[Dict[str, Any]]] = None, grade: Optional[
               pareto_share=pareto_share, account=account, prior=prior, previews=previews, breakdowns=breakdowns, briefs=briefs,
               key_map=key_map)
     ctx.changes = changes
+    ctx.scope = scope
     brand = brand_from_profile(profile)
     heading, page_title = heading_for(title or brand, scope)
     start, end = cm.data_window(ctx.rows)
@@ -287,15 +288,22 @@ def _load_json(path: Optional[str]) -> Optional[Dict[str, Any]]:
         return json.load(handle)
 
 
-def load_account(path: Optional[str]) -> Optional[Dict[str, float]]:
-    """The account-level reach and frequency file: a JSON object with numeric "reach" and "frequency"."""
+def load_account(path: Optional[str]) -> Optional[Dict[str, Any]]:
+    """The account-level file: numeric "reach" and either "frequency" or "impressions" (frequency = impressions / reach), and an optional "scope"."""
     data = _load_json(path)
     if data is None:
         return None
     try:
-        return {"reach": float(data["reach"]), "frequency": float(data["frequency"])}
-    except (KeyError, TypeError, ValueError):
+        reach = float(data["reach"])
+        if "frequency" in data:
+            frequency, computed = float(data["frequency"]), False
+        elif data.get("impressions") is not None and reach > 0:
+            frequency, computed = float(data["impressions"]) / reach, True
+        else:
+            raise ValueError('--account needs "frequency", or "impressions" so frequency can be computed as impressions / reach.')
+    except (KeyError, TypeError):
         raise ValueError('--account must be a JSON object with numeric "reach" and "frequency"')
+    return {"reach": reach, "frequency": frequency, "frequency_computed": computed, "scope": str(data.get("scope") or "").strip() or None}
 
 
 CHECK_MAX_KB = 16 * 1024  # a page past this is too heavy to share as one file (arbitrary)
@@ -361,7 +369,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--source", default="Ads Manager export", help='data source shown in the header (pass "Meta ads connector" for a connector pull)')
     parser.add_argument("--attribution", help="attribution setting shown in the header (default: not stated)")
     parser.add_argument("--completeness", help='what from_mcp printed: "reconciled" or "incomplete:<percent>"; absent reads Totals not checked')
-    parser.add_argument("--account", help='JSON file with account-level "reach" and "frequency" for the window')
+    parser.add_argument("--account", help='JSON file with account-level "reach" and "frequency" (or "impressions") for the window, and optionally the "scope" it covers')
     parser.add_argument("--prior", help="CSV or JSON of the previous equal window, for change against prior period")
     parser.add_argument("--previews", help="folder of rendered ad previews named <ad_id>.<ext>")
     parser.add_argument("--thumbs", help="folder of small thumbnails or video stills named <ad_id>.<ext>")

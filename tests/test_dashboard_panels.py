@@ -663,7 +663,8 @@ class PageStructureTest(unittest.TestCase):
                 report.load_account(str(bad))
             good = Path(tmp) / "b.json"
             good.write_text('{"reach": 1000, "frequency": 1.5}')
-            self.assertEqual(report.load_account(str(good)), {"reach": 1000.0, "frequency": 1.5})
+            self.assertEqual(report.load_account(str(good)),
+                             {"reach": 1000.0, "frequency": 1.5, "frequency_computed": False, "scope": None})
 
 
 if __name__ == "__main__":
