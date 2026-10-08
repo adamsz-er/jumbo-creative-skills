@@ -376,10 +376,10 @@ class FunnelTest(unittest.TestCase):
         ctx = panels.Ctx(rows=rows, currency="USD")
         html, state = panels.funnel(ctx)
         self.assertEqual(state, "data")
-        self.assertIn("n/a (missing landing page views)", html)
-        self.assertIn("n/a (missing checkouts)", html)
-        self.assertIn("not computed across the missing Landing page views step", html)
-        self.assertIn("not computed across the missing Checkouts step", html)
+        self.assertIn('<span class="na" title="missing landing page views">n/a</span>', html)
+        self.assertIn('<span class="na" title="missing checkouts">n/a</span>', html)
+        self.assertIn('title="not computed across the missing Landing page views step"', html)
+        self.assertIn('title="not computed across the missing Checkouts step"', html)
         self.assertEqual(ctx.funnel_headers, {"landing_page_views": None, "checkouts": None})
 
     def test_present_columns_are_summed_and_their_headers_named(self):
@@ -787,7 +787,7 @@ class OverviewBannerTest(unittest.TestCase):
         tab = self.overview(rows=self.rows, account=self.account)
         self.assertEqual(tab.count(BANNER), 0)
         hook = re.search(r'<p class="kpi-name">Hook rate.*?</div></div>', tab, re.S).group(0)
-        self.assertRegex(hook, r"video ads \u00b7 \d+ of \d+")
+        self.assertRegex(hook, r"\(\d+ of \d+ video ads\)")
 
     def test_the_account_file_removes_the_reach_sentence_only(self):
         tab = self.overview(rows=NO_VIDEO, account=self.account)
@@ -1113,7 +1113,7 @@ class ReviewFixesTest(unittest.TestCase):
 
     def test_the_video_sub_label_is_short_and_muted(self):
         html, _ = panels.kpi_strip(panels.Ctx(rows=cm.load_rows(str(FIXTURE)), currency="USD"))
-        self.assertRegex(html, r'<p class="kpi-note">video ads \u00b7 \d+ of \d+</p>')
+        self.assertRegex(html, r'<p class="kpi-note">\(\d+ of \d+ video ads\)</p>')
         self.assertRegex(self.css, r"\.kpi-note \{[^}]*color: var\(--text-muted\)")
 
 

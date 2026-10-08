@@ -126,7 +126,7 @@ def heading_for(label: Optional[str], scope: Optional[str] = None) -> str:
     return (esc(" ".join(words[:-1])) + " " if len(words) > 1 else "") + '<span class="grad">%s</span>' % esc(words[-1]), text
 
 
-MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+MONTHS = panels.MONTHS
 ICON_ATTRS = 'class="ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
 TAB_ICONS = {
     "overview": '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
@@ -160,7 +160,9 @@ def tabs_html(ctx: Ctx) -> str:
     for tab_id, title, tab_panels in panels.TABS:
         inner = []
         for panel_id, eyebrow, heading, fn in tab_panels:
+            ctx.na_reasons = {}
             content, state = fn(ctx)
+            content += panels.na_footnote(ctx)
             inner.append('<section class="card panel" id="panel-%s" data-state="%s"><p class="eyebrow">%s</p><h3>%s</h3>%s</section>'
                          % (panel_id, state, esc(eyebrow), esc(heading), content))
         banner = panels.missing_everywhere(ctx) if tab_id == "overview" else ""

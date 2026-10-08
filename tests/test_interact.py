@@ -506,7 +506,7 @@ class DialogDesignTest(Fixture):
         self.assertIn("<dt>CPM</dt>", body)
         rows = [{"ad_id": "1", "ad_name": "x | static | bau", "date": "2026-03-01", "spend": 5.0, "impressions": 100.0}]
         card = panels.ad_card(panels.Ctx(rows=rows, currency="USD"), {"ad": "1", "ad_name": "x | static | bau"})
-        self.assertIn("<dt>ROAS</dt><dd>n/a (missing purchase value)</dd>", card)
+        self.assertIn('<dt>ROAS</dt><dd><span class="na" title="missing purchase value">n/a</span></dd>', card)
 
     def test_the_open_body_carries_the_title_the_raw_name_and_the_verdict_chip_for_the_header(self):
         card = panels.ad_card(self.ctx, self.verdicts["ads"][0])
@@ -1365,10 +1365,10 @@ class ReviewPythonTest(Fixture):
         tile = re.search(r'<div class="kpi[^"]*"><p class="kpi-name">Hook rate.*?</div></div>', html, re.S).group(0)
         self.assertIn("25.00%", tile)
         self.assertNotIn("12.50%", tile)
-        self.assertIn("video ads \u00b7 1 of 2", tile)
+        self.assertIn("(1 of 2 video ads)", tile)
         hold = re.search(r'<div class="kpi[^"]*"><p class="kpi-name">Hold rate.*?</div></div>', html, re.S).group(0)
         self.assertIn("40.00%", hold)
-        self.assertIn("video ads \u00b7 1 of 2", hold)
+        self.assertIn("(1 of 2 video ads)", hold)
 
     def test_the_funnel_rates_the_video_steps_on_video_impressions(self):
         html, _ = panels.funnel(panels.Ctx(rows=two_ads(), currency="USD"))

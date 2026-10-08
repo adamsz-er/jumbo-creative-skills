@@ -180,7 +180,7 @@ def compare(previous_run_dir: Optional[Any], current: Dict[str, Any]) -> Dict[st
         return {"first_run": True}
     folder = Path(previous_run_dir)
     info = read_run(folder) or {}
-    base = {"first_run": False, "previous_run": folder.name, "previous_at": info.get("created_at")}
+    base = {"first_run": False, "previous_run": folder.name, "previous_at": info.get("created_at"), "previous_window_to": info.get("window_to")}
     if info.get("window_days") != current.get("window_days") or info.get("where") != current.get("where"):
         return dict(base, not_compared=DIFFERENT_SCOPE)
     before_rows = cm.load_rows(str(ads_file(folder)))
