@@ -295,13 +295,20 @@ def load_account(path: Optional[str]) -> Optional[Dict[str, Any]]:
         return None
     try:
         reach = float(data["reach"])
-        if "frequency" in data:
+    except (KeyError, TypeError, ValueError):
+        raise ValueError('--account must be a JSON object with numeric "reach" and "frequency"')
+    if not reach > 0:
+        raise ValueError('--account "reach" must be a positive number.')
+    try:
+        if data.get("frequency") is not None:
             frequency, computed = float(data["frequency"]), False
-        elif data.get("impressions") is not None and reach > 0:
+        elif data.get("impressions") is not None:
             frequency, computed = float(data["impressions"]) / reach, True
         else:
             raise ValueError('--account needs "frequency", or "impressions" so frequency can be computed as impressions / reach.')
-    except (KeyError, TypeError):
+    except (TypeError, ValueError) as error:
+        if "--account needs" in str(error):
+            raise
         raise ValueError('--account must be a JSON object with numeric "reach" and "frequency"')
     return {"reach": reach, "frequency": frequency, "frequency_computed": computed, "scope": str(data.get("scope") or "").strip() or None}
 

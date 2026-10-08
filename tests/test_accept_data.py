@@ -94,6 +94,53 @@ class MoneyUnitTest(unittest.TestCase):
         self.assertEqual(len({v[0] for v in errors.TABLE.values()}), len(errors.TABLE))
 
 
+class UnitEdgeTest(unittest.TestCase):
+    def setUp(self):
+        self.work = Scratch(self).path
+
+    def pull(self, *files):
+        import from_mcp
+        import contextlib
+        import io
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = from_mcp.main([str(f) for f in files] + ["-o", str(self.work / "ads.csv")])
+        return code, out.getvalue()
+
+    def test_some_rows_with_a_unit_and_some_without_warns_with_the_count(self):
+        def strip_first(index, raw):
+            if index == 0:
+                raw["spend"] = raw["spend"]["value"]
+        code, out = self.pull(write_pull(self.work / "a.json", strip_first))
+        self.assertEqual(code, 0, out)
+        self.assertRegex(out, r"WARNING: 1 rows? state no currency")
+        self.assertEqual((self.work / "ads.csv").read_text(encoding="utf-8").splitlines()[0].split(",")[3], "Amount spent")
+
+    def test_a_mixed_currency_hidden_by_deduplication_is_still_caught(self):
+        def eur(index, raw):
+            if index == 0:
+                raw["spend"]["unit"] = "EUR"
+        first = write_pull(self.work / "a.json", eur)
+        second = write_pull(self.work / "b.json")
+        code, out = self.pull(first, second)
+        self.assertEqual(code, 4, out)
+        self.assertIn("mixed currency", out)
+
+    def test_a_unit_that_is_not_a_three_letter_code_counts_as_no_unit(self):
+        def dollar(_, raw):
+            raw["spend"]["unit"] = "US$"
+        code, out = self.pull(write_pull(self.work / "a.json", dollar))
+        self.assertEqual(code, 0, out)
+        self.assertEqual((self.work / "ads.csv").read_text(encoding="utf-8").splitlines()[0].split(",")[3], "Amount spent")
+
+    def test_a_purchase_value_in_another_currency_is_mixed_too(self):
+        def other(index, raw):
+            if index == 0:
+                raw["omni_purchase_values"]["unit"] = "EUR"
+        code, out = self.pull(write_pull(self.work / "a.json", other))
+        self.assertEqual(code, 4, out)
+
+
 class UnreadConceptsTest(unittest.TestCase):
     def setUp(self):
         self.work = Scratch(self).path
@@ -139,6 +186,21 @@ class UnreadConceptsTest(unittest.TestCase):
         self.assertNotIn("Concept by format: ads and spend", page)
         self.assertEqual(done.returncode, 0)
 
+    def test_no_surface_claims_there_is_no_gap_or_names_unknown_as_a_value(self):
+        rows = cm.load_rows(str(keyed_csv(self.work / "ads.csv")))
+        result = mix.analyse_mix(rows)
+        self.assertEqual(result["gaps"], [])
+        self.assertFalse([o for o in result["over_reliance"] if o["name"] == "unknown"])
+        text = mix.render(result)
+        done = run(["run", self.work / "ads.csv"], self.work)
+        folder = next(p for a in (self.work / "creative-review-runs").iterdir() for p in a.iterdir())
+        page = (folder / "report.html").read_text(encoding="utf-8")
+        for surface in (page, text, done.stdout):
+            for phrase in ("no gap", "none found", "unknown in "):
+                self.assertNotIn(phrase, surface.lower())
+        self.assertGreaterEqual(page.count(UNREAD_MESSAGE % "WX"), 3)
+        self.assertIn(UNREAD_MESSAGE % "WX", text)
+
     def test_the_mapped_run_keeps_its_gaps_line(self):
         done = run(["run", keyed_csv(self.work / "ads.csv"), "--key-map", "WX=concept"], self.work)
         self.assertEqual(done.returncode, 0, done.stderr)
@@ -175,6 +237,22 @@ class AccountFigureTest(unittest.TestCase):
         with self.assertRaises(ValueError) as caught:
             report.load_account(self.account(reach=1000))
         self.assertEqual(str(caught.exception), '--account needs "frequency", or "impressions" so frequency can be computed as impressions / reach.')
+
+    def test_a_non_numeric_reach_keeps_the_friendly_message(self):
+        with self.assertRaises(ValueError) as caught:
+            report.load_account(self.account(reach="lots", frequency=2))
+        self.assertEqual(str(caught.exception), '--account must be a JSON object with numeric "reach" and "frequency"')
+
+    def test_reach_that_is_not_positive_has_its_own_error(self):
+        for fields in ({"reach": 0, "impressions": 100}, {"reach": -5, "frequency": 2}):
+            with self.assertRaises(ValueError) as caught:
+                report.load_account(self.account(**fields))
+            self.assertEqual(str(caught.exception), '--account "reach" must be a positive number.')
+
+    def test_a_null_frequency_with_impressions_is_computed(self):
+        loaded = report.load_account(self.account(reach=1000, frequency=None, impressions=3000))
+        self.assertEqual(loaded["frequency"], 3.0)
+        self.assertTrue(loaded["frequency_computed"])
 
     def test_a_computed_frequency_is_labelled_on_the_tile(self):
         loaded = report.load_account(self.account(reach=1000, impressions=2500))

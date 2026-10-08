@@ -176,10 +176,11 @@ def _num(value: Any) -> Optional[float]:
     return number if math.isfinite(number) else None
 
 
-def is_spend_key(key: Any) -> bool:
-    """True for a column or field name that holds the amount spent."""
+def money_field(key: Any) -> Optional[str]:
+    """"spend" or "conversion_value" when a column or field name holds that amount of money, else None."""
     norm = _norm(key)
-    return _ALIASES.get(norm) == "spend" or norm.startswith("amountspent")
+    field = _ALIASES.get(norm) or ("spend" if norm.startswith("amountspent") else None)
+    return field if field in ("spend", "conversion_value") else None
 
 
 def _list_value(items: Any) -> Optional[float]:

@@ -1722,11 +1722,14 @@ def _gap_cells(ctx: Ctx, rows: Sequence[str]) -> Dict[Tuple[int, int], int]:
     return out
 
 
+UNREAD_PANEL = '<div class="empty"><p>%s</p></div>'
+
+
 def concept_heatmap(ctx: Ctx) -> Tuple[str, str]:
     if not ctx.mix:
         return empty_state(*NO_MIX)
     if ctx.mix.get("concepts_unread"):
-        return '<div class="empty"><p>%s</p></div>' % esc(ctx.mix["concepts_unread_message"]), "empty"
+        return UNREAD_PANEL % esc(ctx.mix["concepts_unread_message"]), "empty"
     grid = ctx.mix.get("grid") or {}
     families, formats = grid.get("families") or [], grid.get("formats") or []
     if not families or not formats:
@@ -1865,6 +1868,8 @@ def gap_reason(ctx: Ctx, gap: Dict[str, Any]) -> str:
 def gap_list(ctx: Ctx) -> Tuple[str, str]:
     if not ctx.mix:
         return empty_state(*NO_MIX)
+    if ctx.mix.get("concepts_unread"):
+        return UNREAD_PANEL % esc(ctx.mix["concepts_unread_message"]), "empty"
     if not ctx.gaps:
         return empty_state("creative-mix found no gap worth testing: no empty or single-ad cell sits beside a proven top-quarter concept or format.",
                            "Widen the window, lower the minimum proven spend in creative-mix, or add more concepts and formats to compare.")
@@ -2065,6 +2070,8 @@ def prompts_panel(ctx: Ctx) -> Tuple[str, str]:
         return empty_state(*NO_MIX)
     concepts, formats = list(ctx.mix.get("top_concepts") or []), list(ctx.mix.get("top_formats") or [])
     gaps = [briefing.gap_label(g["concept"], g["format"]) for g in ctx.gaps[:briefing.STARTER_GAPS]]
+    if ctx.mix.get("concepts_unread"):
+        gaps = [ctx.mix["concepts_unread_message"]]
     blocks = (("creative-ideation", "New concepts that fit the gaps", briefing.ideation_prompt(concepts, formats, gaps)),
               ("hook-writer", "Hook options for the gaps", briefing.hook_prompt(concepts, gaps)),
               ("creative-brief", "A full brief for the first gap", briefing.brief_prompt(gaps, formats)))
