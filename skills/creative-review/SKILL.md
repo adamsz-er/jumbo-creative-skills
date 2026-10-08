@@ -17,7 +17,7 @@ If this is the first run (no `creative-profile.md` and no `creative-review-runs/
 
 1. **Get the data, in this order.**
    - **Meta ads connector present:** follow the numbered steps in `creative-context/references/data-inputs.md` (read-only tools only; field catalogue first; every response saved to a file). Choose the account by the name the user gave; ask only if two accounts match. Then merge and check the totals:
-     `python3 -I scripts/review.py pull page1.json page2.json --expect-spend <account total> --expect-impressions <account total> -o ads.csv`
+     `python3 -I scripts/review.py pull page1.json page2.json --expect-spend <account total> --expect-impressions <account total> --expect-ads ids.txt -o ads.csv`
      It prints `completeness: reconciled` or `not checked`; hand that word to `run --completeness`. A short pull stops with E-RECONCILE and the exact fix.
    - **A CSV was given:** use it.
    - **Neither:** say so and offer the sample account ("Want to see it on a sample account first?") and the export recipe (`creative-context/references/export-recipe.md`). If they say yes, run the demo (step 4 with `--demo`).
@@ -46,7 +46,8 @@ Every known failure prints a plain message and its exact fix, and exits with its
 | E-COLUMNS | the CSV lacks a needed column | each missing column and the recipe step that adds it |
 | E-EMPTY | no rows in the window | the window asked for and the dates the file covers |
 | E-RECONCILE | the pull is short | the percent short and "re-run the pull with pagination" |
-| E-CURRENCY | no currency in the header | `--currency XXX` |
+| E-CURRENCY | no currency in the header (a connector pull states it itself) | `--currency XXX` |
+| E-MIXED-CURRENCY | the pull states more than one currency | pull each currency on its own |
 | E-SKILL | a sibling skill is not installed | its name and the install command |
 | E-PROFILE | the profile cannot be read | fix the line it names, or pass a different `--profile` |
 | E-TARGET | a bad `--target` | the script's own message plus the accepted metrics |

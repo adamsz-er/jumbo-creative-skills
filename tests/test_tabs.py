@@ -168,9 +168,9 @@ class FormatTest(Fixture):
     def test_hook_and_hold_are_not_applicable_to_a_format_without_three_second_plays(self):
         html, _ = panels.format_scorecard(self.ctx)
         static = [r for r in self.rows_of(html) if ">Static<" in r][0]
-        self.assertEqual(static.count("n/a (not video)"), 2)
+        self.assertEqual(static.count('title="not a video ad">n/a'), 2)
         video = [r for r in self.rows_of(html) if ">UGC video<" in r][0]
-        self.assertNotIn("n/a (not video)", video)
+        self.assertNotIn('title="not a video ad"', video)
 
     def test_each_format_row_has_a_strip_of_at_most_three_top_spend_ads_that_carry_data_ad(self):
         html, _ = panels.format_scorecard(self.ctx)
@@ -299,7 +299,7 @@ class RetentionTest(Fixture):
         rows = [{k: v for k, v in r.items() if k != "Video average play time"} for r in self.rows]
         without, state = panels.video_retention(self.ctx_with(rows=rows))
         self.assertEqual(state, "data")
-        self.assertIn("n/a (no average play time column in the data)", without)
+        self.assertIn('title="no average play time column in the data">n/a', without)
 
     def test_missing_quartile_columns_are_an_empty_state_that_names_them(self):
         rows = [{k: v for k, v in r.items() if k not in ("Video plays at 75%", "Video plays at 95%")} for r in self.rows]
@@ -452,7 +452,7 @@ class WhiteSpaceTest(Fixture):
     def test_a_segment_with_no_purchases_is_na_not_zero(self):
         rows = cm.load_rows(str(BREAKDOWNS))
         html, _ = panels.segments(self.ctx_with(breakdowns=[r for r in rows if r["Age"] == "35-44" and r["Gender"] == "male"]))
-        self.assertIn("n/a (zero purchases)", html)
+        self.assertIn('title="zero purchases">n/a', html)
 
 
 class BriefingTest(Fixture):

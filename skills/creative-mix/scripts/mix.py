@@ -32,6 +32,11 @@ OVER_RELIANCE = 60.0  # percent of spend; arbitrary default, set from your own a
 # default, not a statistical rule: set your own from how many concepts you run.
 MIN_FOR_QUARTILES = 5
 MAX_GAPS_SHOWN = 8
+UNREAD_SPEND_SHARE = 80.0  # percent of spend left in concept "unknown" before concepts count as unread; arbitrary default
+KEYED_NAME_SHARE = 60.0  # percent of ad names that must be KEY:value before the message names a key; arbitrary default
+UNREAD_MESSAGE = ("Concepts could not be read from your ad names, so gaps were not checked. "
+                  "Add key-map: %s=concept to the Script settings of creative-profile.md (or pass --key-map).")
+GENERIC_KEY = "your concept key"
 PROVEN_MULTIPLE = 3  # arbitrary default: proven spend is this many times the account's median ad spend
 
 
@@ -193,7 +198,20 @@ def analyse_mix(rows: Sequence[Dict[str, Any]], pattern: Optional[Sequence[str]]
                 if v / scope_total * 100 > OVER_RELIANCE:
                     over.append({"scope": label, "kind": name, "name": k, "share": v / scope_total * 100})
 
+    everything = sum(a.get("spend") or 0 for a in ads)
+    unknown = sum(a.get("spend") or 0 for a in classified if a["concept"] == "unknown") + sum(a.get("spend") or 0 for a in unclassified)
+    unread = everything > 0 and unknown * 100 >= UNREAD_SPEND_SHARE * everything
+    unread_fields: Dict[str, Any] = {"concepts_unread": unread}
+    if unread:
+        key = cm.most_common_unmapped_key([a["ad_name"] for a in ads if a.get("ad_name")], key_map, KEYED_NAME_SHARE)
+        unread_fields.update(concept_key=key, concepts_unread_message=UNREAD_MESSAGE % (key or GENERIC_KEY))
+
+    if unread:
+        gaps = []
+        over = [o for o in over if not (o["kind"] == "concept" and o["name"] == "unknown")]
+
     return {
+        **unread_fields,
         "classified": len(classified),
         "unclassified": {"count": len(unclassified),
                          "ads": [str(a.get("ad_name") or a.get("ad_id")) for a in unclassified],
@@ -288,19 +306,22 @@ def render(result: Dict[str, Any]) -> str:
     else:
         out.append("  Performance not read: fewer than %d BAU concepts or formats to rank against each other."
                    % MIN_FOR_QUARTILES)
-    out.append("  Gaps worth testing: empty or single-ad cells beside a proven top-quartile concept or format, "
-               "strongest first. Proven means at least %s of BAU spend (default: %d x the median ad spend, an "
-               "arbitrary default: set it with --min-proven-spend); below it are concepts %s and formats %s, which never "
-               "lead a gap. A hypothesis to test, not a result:" % (
-                   _num(result["min_proven_spend"], 0), PROVEN_MULTIPLE,
-                   _short_list(result["unproven"]["concepts"]), _short_list(result["unproven"]["formats"])))
-    for gap in result["gaps"][:MAX_GAPS_SHOWN]:
-        out.append("    %s in %s: %s (%s)" % (gap["concept"], gap["format"],
-                                              "gap" if gap["ads"] == 0 else "1 ad", " and ".join(gap["why"])))
-    if len(result["gaps"]) > MAX_GAPS_SHOWN:
-        out.append("    ... %d more (see --json)" % (len(result["gaps"]) - MAX_GAPS_SHOWN))
-    if not result["gaps"]:
-        out.append("    none found")
+    if result.get("concepts_unread"):
+        out.append("  Gaps worth testing: %s" % result["concepts_unread_message"])
+    else:
+        out.append("  Gaps worth testing: empty or single-ad cells beside a proven top-quartile concept or format, "
+                   "strongest first. Proven means at least %s of BAU spend (default: %d x the median ad spend, an "
+                   "arbitrary default: set it with --min-proven-spend); below it are concepts %s and formats %s, which never "
+                   "lead a gap. A hypothesis to test, not a result:" % (
+                       _num(result["min_proven_spend"], 0), PROVEN_MULTIPLE,
+                       _short_list(result["unproven"]["concepts"]), _short_list(result["unproven"]["formats"])))
+        for gap in result["gaps"][:MAX_GAPS_SHOWN]:
+            out.append("    %s in %s: %s (%s)" % (gap["concept"], gap["format"],
+                                                  "gap" if gap["ads"] == 0 else "1 ad", " and ".join(gap["why"])))
+        if len(result["gaps"]) > MAX_GAPS_SHOWN:
+            out.append("    ... %d more (see --json)" % (len(result["gaps"]) - MAX_GAPS_SHOWN))
+        if not result["gaps"]:
+            out.append("    none found")
     if result["over_reliance"]:
         out.append("  Over-reliance (more than %g%% of spend; an arbitrary default, set it from your own account):" % OVER_RELIANCE)
         out += ["    %s %s holds %.0f%% of %s" % (o["kind"], o["name"], o["share"], o["scope"]) for o in result["over_reliance"]]

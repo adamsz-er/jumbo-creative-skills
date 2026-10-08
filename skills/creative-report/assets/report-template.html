@@ -213,6 +213,7 @@ section.card > .eyebrow { margin-bottom: 8px; }
 p { margin: 10px 0; }
 .lead { font-size: 16px; color: var(--heading); }
 .muted { font-size: 13px; }
+.na { cursor: help; border-bottom: 1px dotted currentColor; }
 .actions { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 12px; }
 .actions li { border: 1px solid var(--divider); border-left: 4px solid var(--violet-accent); border-radius: 14px; padding: 14px 16px; background: var(--surface-soft); }
 .actions strong { color: var(--heading); font-family: var(--font-head); }
@@ -931,7 +932,7 @@ section.panel > h4 { margin-top: 18px; }
   }
   var CR = { total: total, summary: summary, groupAds: groupAds, subtotals: subtotals, emptyState: emptyState, presetState: presetState,
              active: active, activeCount: activeCount, sameFilters: sameFilters, visible: visible, facetCount: facetCount, sortAds: sortAds, toHash: toHash,
-             fromHash: fromHash, setLabels: function (labels, weak, names, tips) { VERDICT_LABELS = labels || {}; WEAK = weak || null; NAMES = names || {}; VERDICT_TIPS = tips || {}; } };
+             fromHash: fromHash, naReason: naReason, setLabels: function (labels, weak, names, tips) { VERDICT_LABELS = labels || {}; WEAK = weak || null; NAMES = names || {}; VERDICT_TIPS = tips || {}; } };
   if (typeof module === "object" && module && module.exports) { module.exports = CR; return; }
 
   var root = document.documentElement;
@@ -1087,6 +1088,15 @@ section.panel > h4 { margin-top: 18px; }
     td.setAttribute("data-label", label);
     return td;
   }
+  function naReason(a, name) {
+    if (metric(a, name) !== null) { return null; }
+    if (name === "hook") {
+      if (/video|reel/i.test(a.format || "") === false && present(a.format)) { return "not a video ad"; }
+      return "missing 3-second plays";
+    }
+    if (name === "cpa") { return present(a.conversions) ? "zero purchases" : "missing purchases"; }
+    return name === "roas" ? "missing purchase value" : name === "ctr" ? "missing clicks" : "missing " + name;
+  }
   function adsTable(list) {
     var wrap = el("div", "scroll"), table = el("table", "stack"), thead = el("thead"), head = el("tr"), body = el("tbody");
     TABLE_HEAD.forEach(function (c) { head.appendChild(el("th", c[1], c[0])); });
@@ -1110,7 +1120,14 @@ section.panel > h4 { margin-top: 18px; }
        ["cpa", "CPA", function (v) { return money(v, 2); }], ["ctr", "CTR", function (v) { return fmt(v, 2) + "%"; }],
        ["hook", "Hook rate", function (v) { return fmt(v, 2) + "%"; }]].forEach(function (c) {
         var v = metric(a, c[0]);
-        tr.appendChild(cell(v === null ? "n/a" : c[2](v), c[1], "num"));
+        var td = cell(v === null ? "n/a" : c[2](v), c[1], "num");
+        if (v === null) {
+          td.textContent = "";
+          var why = el("span", "na", "n/a");
+          why.title = naReason(a, c[0]);
+          td.appendChild(why);
+        }
+        tr.appendChild(td);
       });
       body.appendChild(tr);
     });

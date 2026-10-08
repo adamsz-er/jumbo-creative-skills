@@ -58,8 +58,17 @@ FUNNEL_STEPS = (
 )
 
 
+MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
 def esc(value: Any) -> str:
     return charts.esc(value)
+
+
+def short_day(iso: str) -> str:
+    """"8 Oct" from an ISO date or timestamp."""
+    day = dt.date.fromisoformat(str(iso)[:10])
+    return "%d %s" % (day.day, MONTHS[day.month - 1])
 
 
 def say(text: Any) -> str:
@@ -82,6 +91,27 @@ def table(header: Sequence[Tuple[str, bool]], body: Sequence[str], stack: bool =
         " tall" if len(body) > TALL_ROWS else "", ' class="stack"' if stack else "", head, "".join(body))
 
 
+_NA_REASON = re.compile(r"n/a \((.*?)\)\Z", re.S)
+
+
+def na_cell(ctx: "Ctx", text: Any) -> str:
+    """A table cell's content: a missing value reads "n/a" with its reason in a tooltip and collected for the panel's footnote; anything else is escaped."""
+    found = _NA_REASON.fullmatch(str(text))
+    if not found:
+        return esc(text)
+    ctx.na_reasons[found.group(1)] = ctx.na_reasons.get(found.group(1), 0) + 1
+    return '<span class="na" title="%s">n/a</span>' % esc(found.group(1))
+
+
+def na_footnote(ctx: "Ctx") -> str:
+    """One muted line listing each distinct reason a cell read n/a, with its count; "" when none. Clears the tally."""
+    reasons, ctx.na_reasons = ctx.na_reasons, {}
+    if not reasons:
+        return ""
+    parts = ["%s (%d cell%s)" % (esc(why), n, "" if n == 1 else "s") for why, n in sorted(reasons.items(), key=lambda kv: (-kv[1], kv[0]))]
+    return '<p class="muted na-notes">Why a cell reads n/a: %s.</p>' % "; ".join(parts)
+
+
 def empty_state(why: str, how: str) -> Tuple[str, str]:
     return ('<div class="empty"><p><b>Why this is empty:</b> %s</p><p><b>How to get it:</b> %s</p></div>'
             % (esc(why), esc(how)), "empty")
@@ -93,7 +123,7 @@ class Ctx:
     def __init__(self, rows: Optional[Sequence[Dict[str, Any]]] = None, verdicts: Optional[Dict[str, Any]] = None,
                  grade: Optional[Dict[str, Any]] = None, mix: Optional[Dict[str, Any]] = None,
                  currency: Optional[str] = None, top_n: int = TOP_N_CARDS, pareto_share: float = PARETO_SHARE,
-                 account: Optional[Dict[str, float]] = None, prior: Optional[Sequence[Dict[str, Any]]] = None,
+                 account: Optional[Dict[str, Any]] = None, prior: Optional[Sequence[Dict[str, Any]]] = None,
                  previews: Optional[Previews] = None, breakdowns: Optional[Sequence[Dict[str, Any]]] = None,
                  briefs: Optional[Any] = None, key_map: Optional[Dict[str, str]] = None) -> None:
         self.rows = list(rows or [])
@@ -102,6 +132,7 @@ class Ctx:
         self.verdicts, self.grade, self.mix = verdicts, grade, mix
         self.currency, self.top_n, self.pareto_share = currency, top_n, pareto_share
         self.account, self.prior = account, list(prior) if prior else None
+        self.scope: Optional[str] = None
         self.previews = previews or Previews()
         self.records = interact.ad_records(self.ads, (verdicts or {}).get("ads"), (grade or {}).get("ads"))
         self.record_index = {r["id"]: r for r in self.records}
@@ -131,12 +162,19 @@ class Ctx:
             self.format_spend[ad.get("format") or "unknown"] = self.format_spend.get(ad.get("format") or "unknown", 0.0) + (ad.get("spend") or 0.0)
         self.colours = charts.format_colours({f: v for f, v in self.format_spend.items() if f != "unknown"})
         self.heat = interact.heat_map(self.ads)
+        self.na_reasons: Dict[str, int] = {}
 
     def prior_label(self) -> str:
-        """What the prior period is called: the last review's date when a run compared itself with it, else "prior period"."""
+        """What the prior period is called: the last review's run day and data end when a run compared itself with it, else "prior period"."""
         info = self.changes or {}
         made = str(info.get("previous_at") or "")
-        return "last review (%s)" % made[:10] if made and info.get("prior_is_previous_run") else "prior period"
+        if not (made and info.get("prior_is_previous_run")):
+            return "prior period"
+        ended = info.get("previous_window_to")
+        try:
+            return "last review (run %s, data to %s)" % (short_day(made), short_day(ended)) if ended else "last review (%s)" % made[:10]
+        except ValueError:
+            return "last review (%s)" % made[:10]
 
     def label(self, key: Any, fields: Optional[Dict[str, Any]] = None, name: Optional[str] = None) -> str:
         """The label an ad has everywhere on the page: the record's own, which is unique among the ads here."""
@@ -239,8 +277,8 @@ def entry_for(ctx: Ctx, rec: Dict[str, Any]) -> Dict[str, Any]:
     return ctx.verdict_index.get(rec["id"]) or {"ad": rec["id"], "ad_name": rec["name"]}
 
 
-def _table_of(rows: Sequence[Sequence[str]], header: Sequence[Tuple[str, bool]]) -> str:
-    body = ["<tr>%s</tr>" % "".join('<td%s data-label="%s">%s</td>' % (' class="num"' if num else "", esc(head), esc(cell))
+def _table_of(ctx: Ctx, rows: Sequence[Sequence[str]], header: Sequence[Tuple[str, bool]]) -> str:
+    body = ["<tr>%s</tr>" % "".join('<td%s data-label="%s">%s</td>' % (' class="num"' if num else "", esc(head), na_cell(ctx, cell))
                                     for (head, num), cell in zip(header, row)) for row in rows]
     return table(header, body, stack=True)
 
@@ -280,6 +318,17 @@ def _detail_pairs(ctx: Ctx, key: str, fmt: str, full: Dict[str, Any], base: Dict
 
 
 def ad_detail(ctx: Ctx, key: str, label: str, fmt: str, full: Dict[str, Any], base: Dict[str, Any], name: Any = None) -> str:
+    """The "Open this ad" view, with its own footnote of why any cell reads n/a."""
+    outer, ctx.na_reasons = ctx.na_reasons, {}
+    try:
+        html = _ad_detail(ctx, key, label, fmt, full, base, name)
+    finally:
+        note, ctx.na_reasons = na_footnote(ctx), outer
+    end = "</div></details>"
+    return html[:-len(end)] + note + end if html.endswith(end) else html + note
+
+
+def _ad_detail(ctx: Ctx, key: str, label: str, fmt: str, full: Dict[str, Any], base: Dict[str, Any], name: Any = None) -> str:
     """The "Open this ad" view: preview beside the numbers, the verdict and how to improve it; graded metrics, the funnel and the technical reasons below."""
     grade = ctx.grade_index.get(key)
     judged = "verdict_id" in full
@@ -291,11 +340,11 @@ def ad_detail(ctx: Ctx, key: str, label: str, fmt: str, full: Dict[str, Any], ba
     why = '<ul class="reasons">%s</ul>' % "".join("<li>%s</li>" % say(r) for r in reasons) if reasons else '<p class="muted">n/a (no verdict reasons supplied)</p>'
     conf = ("%s (%s)" % (full["confidence"], full.get("confidence_reason") or "no reason given")) if full.get("confidence") else "n/a (no verdict supplied)"
     bands = interact.band_rows(grade, ctx.money, fmt)
-    metrics = (_table_of([(b["label"], b["value"], b["band"]) for b in bands], [("Metric", False), ("Value", True), ("Against your own ads", False)])
+    metrics = (_table_of(ctx, [(b["label"], b["value"], b["band"]) for b in bands], [("Metric", False), ("Value", True), ("Against your own ads", False)])
                if bands else '<p class="muted">not graded: no grade data for this ad. Run the creative-grader skill and add its grades when you rebuild this report.</p>')
     funnel_rows = interact.ad_funnel(ctx.ad_index.get(key), fmt)
-    funnel_table = _table_of([(f["step"], f["count"], f["share"]) for f in funnel_rows], [("Step", False), ("Count", True), ("Share of impressions", True)])
-    numbers = '<dl class="ob-dl">%s</dl>' % "".join("<dt>%s</dt><dd>%s</dd>" % (esc(k), esc(v)) for k, v in _detail_pairs(ctx, key, fmt, full, base))
+    funnel_table = _table_of(ctx, [(f["step"], f["count"], f["share"]) for f in funnel_rows], [("Step", False), ("Count", True), ("Share of impressions", True)])
+    numbers = '<dl class="ob-dl">%s</dl>' % "".join("<dt>%s</dt><dd>%s</dd>" % (esc(k), na_cell(ctx, v)) for k, v in _detail_pairs(ctx, key, fmt, full, base))
     lines = []
     if fix["lead"]:
         lines.append('<p><b>First:</b> %s</p>' % esc(fix["lead"]))
@@ -537,8 +586,20 @@ def video_rows(rows: Optional[Sequence[Dict[str, Any]]], key: str) -> List[Dict[
     return [r for r in rows or [] if all(r.get(f) is not None for f in VIDEO_KPIS[key])]
 
 
-def video_ads(ads: Sequence[Dict[str, Any]], key: str) -> int:
-    return sum(1 for a in ads if all(a.get(f) is not None for f in VIDEO_KPIS[key]))
+def video_basis(ctx: "Ctx", key: str) -> str:
+    """The one coverage statement for a video rate: "(derived, N of M video ads)" or "(N of M video ads)", N ads having days with the plays the
+    rate needs and M the ads in a video format (or with plays). With no ad format known there is no M: "(N ads with 3-second plays)"."""
+    used = [(a, video_rows(ctx.rows_by_ad.get(_ad_key(a), []), key)) for a in ctx.ads]
+    have = [rows for _, rows in used if rows]
+    derived = "derived, " if any(_is_derived(rows) for rows in have) else ""
+    if all(interact.is_video(a.get("format")) is None for a in ctx.ads):
+        return "(%s%d ads with 3-second plays)" % (derived, len(have))
+    total = sum(1 for a, rows in used if rows or interact.is_video(a.get("format")))
+    return "(%s%d of %d video ads)" % (derived, len(have), total)
+
+
+def video_ads(ctx: "Ctx", key: str) -> int:
+    return sum(1 for a in ctx.ads if video_rows(ctx.rows_by_ad.get(_ad_key(a), []), key))
 
 
 NEUTRAL_KPIS = ("spend", "impressions", "reach", "frequency")
@@ -550,12 +611,13 @@ def gone_metrics(ctx: Ctx) -> List[str]:
     """Overview metrics no ad can give, in tile order: video rates when no ad has the plays, reach and frequency without an account-level figure."""
     if not ctx.ads:
         return []
-    gone = [key for key in VIDEO_KPIS if not video_ads(ctx.ads, key)]
+    gone = [key for key in VIDEO_KPIS if not video_ads(ctx, key)]
     return gone + ([] if ctx.account else list(ACCOUNT_KPIS))
 
 
 INFO_ICON = ('<svg class="ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" '
              'stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>')
+ACCOUNT_WIDE = "account-wide figure, not filtered to %s"
 REACH_NOTE = ("Reach and frequency don't add up across ads, so they need an account-level figure for this window; none was supplied. "
               "Pull account-level reach and frequency for the same window and add them when you rebuild this report.")
 
@@ -611,7 +673,6 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
     prior_total = totals(ctx.prior) if ctx.prior else None
     series = daily(ctx.rows)
     ctr_basis = cm.metric_basis(total, "ctr")["numerator"]
-    derived = total.get("video_views_3s_source") == "derived"
     gone = gone_metrics(ctx)
     tiles = []
     needs = {"spend": ("spend",), "impressions": ("impressions",), "conversions": ("conversions",), "conversion_value": ("conversion_value",),
@@ -623,7 +684,7 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
             vrows = video_rows(ctx.rows, key)
             tot, sser = totals(vrows), daily(vrows)
             ptot = totals(video_rows(ctx.prior, key)) if ctx.prior else None
-            video_note = "" if key in gone else "video ads \u00b7 %d of %d" % (video_ads(ctx.ads, key), len(ctx.ads))
+            video_note = "" if key in gone else video_basis(ctx, key)
         if key == "reach":
             text = "{:,.0f}".format(ctx.account["reach"]) if ctx.account else "n/a"
         elif key == "frequency":
@@ -633,8 +694,8 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
         label = name
         if key == "ctr" and ctr_basis == "clicks":
             label = "CTR (all clicks)"
-        if key == "hook_rate" and derived:
-            label += " (derived)"
+        if key == "frequency" and ctx.account and ctx.account.get("frequency_computed"):
+            label += " (computed)"
         value, reason = ("n/a", "") if key in gone else _tile_value(text)
         if prior_total is None:
             delta = ""
@@ -654,7 +715,9 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
                                '<span class="muted">%s</span>' % ("one day of data" if len(sser) == 1 else "no dates in the data"))
         unit = " (%s)" % (ctx.currency or "account currency") if kind.startswith("money") else ""
         partial = [] if video_note or key in gone else coverage(ctx.ads, needs.get(key, ()))
-        notes = ([reason] if reason else []) + ([video_note] if video_note else []) + partial
+        wide = [ACCOUNT_WIDE % ctx.scope] if key in ACCOUNT_KPIS and ctx.account and ctx.scope and \
+            str(ctx.account.get("scope") or "").strip().lower() != ctx.scope.strip().lower() else []
+        notes = ([reason] if reason else []) + ([video_note] if video_note else []) + partial + wide
         note_html = '<p class="kpi-note">%s</p>' % esc("; ".join(notes)) if notes else ""
         tiles.append('<div class="kpi%s%s"><p class="kpi-name">%s%s</p><p class="kpi-value">%s</p>%s%s<div class="kpi-spark">%s</div></div>'
                      % (" unknown" if value == "n/a" else "", " partial" if partial else "", esc(label), esc(unit), esc(value), note_html, '<p class="kpi-delta">%s</p>' % delta if delta else "", spark_note))
@@ -815,18 +878,27 @@ def _sum_column(rows: Sequence[Dict[str, Any]], aliases: Sequence[str]) -> Tuple
     return total, header
 
 
-def video_step(rows: Sequence[Dict[str, Any]], field: str, value: float) -> Tuple[str, str]:
-    """Share and step rate of a video step, read on video impressions: static and carousel ads have no plays, so counting their impressions would dilute it."""
-    played = [r for r in rows if r.get("video_views_3s") is not None]
-    base = sum(r.get("impressions") or 0 for r in played)
+INCONSISTENT = "n/a (inconsistent counts)"
+
+
+def video_step(rows: Sequence[Dict[str, Any]], field: str) -> Tuple[Optional[float], str, str]:
+    """Count, share and step rate of a video step. Numerator and denominator come from the same rows (those carrying both the step and impressions),
+    so a share can never pass 100%: static and carousel ads have no plays, and counting their impressions would dilute it."""
+    used = [r for r in rows if r.get(field) is not None and r.get("impressions") is not None]
+    base = sum(r["impressions"] for r in used)
     if not base:
-        return "n/a (no video impressions)", "n/a (no video impressions)"
-    share = "%.2f%% of video impressions" % (value / base * 100)
+        return None, "n/a (no video impressions)", "n/a (no video impressions)"
+    count = sum(r[field] for r in used)
+    ads = len({str(r.get("ad_id") or r.get("ad_name")) for r in used})
+    share = INCONSISTENT if count > base else "%.2f%% of video impressions (on %d video ads)" % (count / base * 100, ads)
     if field == "video_views_3s":
-        return share, share
-    both = [r for r in played if r.get("video_thruplay") is not None]
+        return count, share, share
+    both = [r for r in used if r.get("video_views_3s") is not None]
     plays = sum(r["video_views_3s"] for r in both)
-    return share, "n/a (no 3-second plays)" if not plays else "%.2f%% of 3-second plays" % (sum(r["video_thruplay"] for r in both) / plays * 100)
+    thru = sum(r["video_thruplay"] for r in both)
+    if not plays:
+        return count, share, "n/a (no 3-second plays)"
+    return count, share, INCONSISTENT if thru > plays else "%.2f%% of 3-second plays" % (thru / plays * 100)
 
 
 def funnel(ctx: Ctx) -> Tuple[str, str]:
@@ -840,14 +912,16 @@ def funnel(ctx: Ctx) -> Tuple[str, str]:
     for name, field in FUNNEL_STEPS:
         value = counts.get(field)
         if value is None:
-            rows_html.append('<tr><td>%s</td><td class="num" data-label="Count">n/a (missing %s)</td><td class="num" data-label="Share of impressions">n/a</td>'
-                             '<td class="num" data-label="From the step before">n/a</td></tr>' % (esc(name), esc(interact.FIELD_WORDS.get(field, field))))
+            rows_html.append('<tr><td>%s</td><td class="num" data-label="Count">%s</td><td class="num" data-label="Share of impressions">n/a</td>'
+                             '<td class="num" data-label="From the step before">n/a</td></tr>'
+                             % (esc(name), na_cell(ctx, "n/a (missing %s)" % interact.FIELD_WORDS.get(field, field))))
             gap = gap or name
             continue
         share = "n/a" if not base else "%.2f%%" % (value / base * 100)
-        video_rate = video_step(ctx.rows, field, value) if field in VIDEO_KPIS.get("hold_rate") else None
+        video_rate = video_step(ctx.rows, field) if field in VIDEO_KPIS.get("hold_rate") else None
         if video_rate:
-            share, rate = video_rate
+            used, share, rate = video_rate
+            value = value if used is None else used
         elif previous is None and name != "Impressions":
             rate = "n/a (no earlier step)"
         elif gap:
@@ -858,11 +932,11 @@ def funnel(ctx: Ctx) -> Tuple[str, str]:
             rate = "n/a (step before is zero)" if not previous else "%.2f%%" % (value / previous * 100)
         rows_html.append('<tr><td>%s</td><td class="num" data-label="Count">%s</td><td class="num" data-label="Share of impressions">%s</td>'
                          '<td class="num" data-label="From the step before">%s</td></tr>'
-                         % (esc(name), "{:,.0f}".format(value), esc(share), esc(rate)))
+                         % (esc(name), "{:,.0f}".format(value), na_cell(ctx, share), na_cell(ctx, rate)))
         previous, gap = value, None
     note = ('<p class="muted">Video steps count video ads only, so a step can be larger than the one before it where other formats add '
-            'clicks. 3-second plays and ThruPlays are rated on video impressions (%d of %d ads are video); the other steps on all impressions.</p>'
-            % (video_ads(ctx.ads, "hook_rate"), len(ctx.ads)))
+            'clicks. 3-second plays are rated on video impressions %s and each video step on the ads that carry it; the other steps on all impressions.</p>'
+            % video_basis(ctx, "hook_rate"))
     partial = coverage(ctx.ads, [f for _, f in FUNNEL_STEPS if f in cm.NUMERIC_FIELDS])
     if partial:
         note += '<p class="muted">Partial coverage, so a step may be understated: %s.</p>' % esc("; ".join(partial))
@@ -1068,10 +1142,12 @@ def ads_table(ctx: Ctx, records: Sequence[Dict[str, Any]]) -> str:
         ad = ctx.ad_index.get(key)
         cls = entry_class(ctx.verdict_index[key]) if key in ctx.verdict_index and "verdict_id" in ctx.verdict_index[key] else None
         numbers = [_kpi_text(ctx, ad, m, kind) if ad else "n/a" for m, kind in (("spend", "money0"), ("roas", "x2"), ("cpa", "money2"), ("ctr", "pct"), ("hook_rate", "pct"))]
+        if ad and ad.get("hook_rate") is None and interact.is_video(rec.get("format")) is False:
+            numbers[-1] = "n/a (not a video ad)"
         cells = ['<td class="adname"><button type="button" class="link" data-open="%s">%s</button></td>' % (esc(key), esc(rec["label"])),
                  '<td data-label="Format">%s</td>' % esc(interact.format_label(rec.get("format"))),
                  '<td data-label="Verdict">%s</td>' % (verdict_chip(cls) if cls else "")]
-        cells += ['<td class="num" data-label="%s">%s</td>' % (esc(head), esc(text)) for (head, _), text in zip(TABLE_COLUMNS[3:], numbers)]
+        cells += ['<td class="num" data-label="%s">%s</td>' % (esc(head), na_cell(ctx, text)) for (head, _), text in zip(TABLE_COLUMNS[3:], numbers)]
         body.append('<tr data-ad="%s">%s</tr>' % (esc(key), "".join(cells)))
     return table(TABLE_COLUMNS, body, stack=True)
 
@@ -1320,7 +1396,7 @@ def format_scorecard(ctx: Ctx) -> Tuple[str, str]:
             elif key in VIDEO_KPIS:
                 used = video_rows(_ad_rows(ctx, ads), key)
                 if not used:
-                    value, reason = None, _na("not video")
+                    value, reason = None, _na("not a video ad")
                 else:
                     total = totals(used)
                     value = cm.compute_metrics(total)[key]
@@ -1350,7 +1426,7 @@ def format_scorecard(ctx: Ctx) -> Tuple[str, str]:
             grade = ' <span class="grade">%s</span>' % esc(bands[key][name]) if value is not None and name in bands[key] else ""
             if value is not None and key == "hook_rate" and name in derived_formats:
                 grade = ' <span class="grade">(derived)</span>' + grade
-            tds += '<td class="num" data-label="%s">%s%s</td>' % (esc(head), esc(reason if value is None else _format_value(ctx, key, value)), grade)
+            tds += '<td class="num" data-label="%s">%s%s</td>' % (esc(head), na_cell(ctx, reason) if value is None else esc(_format_value(ctx, key, value)), grade)
         body.append('<tr><td class="fmt-name">%s</td><td class="num" data-label="Ads">%d</td><td class="num" data-label="Spend share">%s</td>%s</tr>'
                     % (esc(_group_name(name, "Format not known")), row["ads"], esc(share), tds))
         body.append('<tr class="strip-row"><td colspan="9">%s</td></tr>' % preview_strip(ctx, ads))
@@ -1360,6 +1436,7 @@ def format_scorecard(ctx: Ctx) -> Tuple[str, str]:
             'Hook and hold rate count video ads only. ROAS and CPA come from creative-mix; the other rates are ratios of summed counts. '
             'Hook and hold rate use only the days that carry 3-second plays. The strips show each format\'s top %d ads by spend (N=%d). An ad with no format in its name is '
             'listed but never graded.</p>' % (MIN_FORMATS, STRIP_ADS, STRIP_ADS))
+    note += '<p class="muted">Hook rate %s; hold rate %s.</p>' % (esc(video_basis(ctx, "hook_rate")), esc(video_basis(ctx, "hold_rate")))
     if derived_seen:
         note += '<p class="muted">%s</p>' % esc(DERIVED_NOTE)
     return table(header, body, stack=True) + note, "data"
@@ -1606,6 +1683,7 @@ def video_hook_hold(ctx: Ctx) -> Tuple[str, str]:
     note = ('<p class="muted">The dashed lines are your own median hook rate (%.2f%%) and hold rate (%.2f%%) across these %d video ads; '
             'an ad on a line counts as high. The %d biggest spenders are named where there is room (N=%d, a default you can change when you rebuild the report); hover any bubble for its name.</p>'
             % (hook_med, hold_med, len(points), min(ctx.top_n, len(points)), ctx.top_n))
+    note += '<p class="muted">Hook rate %s; %d of these also have a hold rate and are plotted.</p>' % (esc(video_basis(ctx, "hook_rate")), len(points))
     if derived:
         note += '<p class="muted">%s It applies to %d of these ads.</p>' % (esc(DERIVED_NOTE), derived)
     return chart + legend + note, "data"
@@ -1664,7 +1742,7 @@ def video_retention(ctx: Ctx) -> Tuple[str, str]:
             % (RETENTION_ADS, RETENTION_ADS,
                " On short videos the 25% point comes before the 3-second mark, so the line can rise." if rises else "",
                " %d ad%s with derived 3-second plays left out." % (left_out, "" if left_out == 1 else "s") if left_out else ""))
-    return chart + _table_of(rows_html, [("Ad", False), ("Average watch time", True), ("Video length", True)]) + note, "data"
+    return chart + _table_of(ctx, rows_html, [("Ad", False), ("Average watch time", True), ("Video length", True)]) + note, "data"
 
 
 def ad_type_split(ctx: Ctx) -> Tuple[str, str]:
@@ -1692,7 +1770,7 @@ def ad_type_split(ctx: Ctx) -> Tuple[str, str]:
             for fmt, group in sorted(by_format.items(), key=lambda kv: -sum(a.get("spend") or 0 for a in kv[1])):
                 part = sum(a.get("spend") or 0 for a in group)
                 lines.append((_group_name(fmt, "Format not known"), str(len(group)), ctx.money(part), "n/a" if not spend else "%.1f%%" % (part / spend * 100)))
-            inside = _table_of(lines, [("Format inside this type", False), ("Ads", True), ("Spend", True), ("Share of this type's spend", True)])
+            inside = _table_of(ctx, lines, [("Format inside this type", False), ("Ads", True), ("Spend", True), ("Share of this type's spend", True)])
         else:
             inside = '<p class="muted">The format mix needs the daily data file.</p>'
         blocks.append('<section class="type-block"><h4>%s</h4>%s%s</section>' % (esc(_group_name(name, "Type not known")), stats, inside))
@@ -1716,9 +1794,14 @@ def _gap_cells(ctx: Ctx, rows: Sequence[str]) -> Dict[Tuple[int, int], int]:
     return out
 
 
+UNREAD_PANEL = '<div class="empty"><p>%s</p></div>'
+
+
 def concept_heatmap(ctx: Ctx) -> Tuple[str, str]:
     if not ctx.mix:
         return empty_state(*NO_MIX)
+    if ctx.mix.get("concepts_unread"):
+        return UNREAD_PANEL % esc(ctx.mix["concepts_unread_message"]), "empty"
     grid = ctx.mix.get("grid") or {}
     families, formats = grid.get("families") or [], grid.get("formats") or []
     if not families or not formats:
@@ -1821,7 +1904,7 @@ def segments(ctx: Ctx) -> Tuple[str, str]:
             total = _sum_field(ctx.breakdowns, "spend")
             lines = [_segment_line(ctx, value, _sum_field(rs, "spend"), _sum_field(rs, "conversions"), _sum_field(rs, "conversion_value"), total)
                      for value, rs in sorted(groups.items(), key=lambda kv: -(_sum_field(kv[1], "spend") or 0))]
-            parts.append("<h4>%s</h4>%s" % (esc(name), _table_of(lines, [(name, False), ("Spend", True), ("Spend share", True), ("ROAS", True), ("CPA", True)])))
+            parts.append("<h4>%s</h4>%s" % (esc(name), _table_of(ctx, lines, [(name, False), ("Spend", True), ("Spend share", True), ("ROAS", True), ("CPA", True)])))
         if ctx.breakdown_dims:
             parts.append('<p class="muted">Each segment adds its own spend, purchases and purchase value, then divides: ROAS and CPA are ratios of sums, never an average of ratios.</p>')
         else:
@@ -1857,6 +1940,8 @@ def gap_reason(ctx: Ctx, gap: Dict[str, Any]) -> str:
 def gap_list(ctx: Ctx) -> Tuple[str, str]:
     if not ctx.mix:
         return empty_state(*NO_MIX)
+    if ctx.mix.get("concepts_unread"):
+        return UNREAD_PANEL % esc(ctx.mix["concepts_unread_message"]), "empty"
     if not ctx.gaps:
         return empty_state("creative-mix found no gap worth testing: no empty or single-ad cell sits beside a proven top-quarter concept or format.",
                            "Widen the window, lower the minimum proven spend in creative-mix, or add more concepts and formats to compare.")
@@ -2031,7 +2116,7 @@ def copy_cta(ctx: Ctx) -> Tuple[str, str]:
         for value, recs in sorted(groups.items(), key=lambda kv: -sum(r.get("spend") or 0 for r in kv[1])):
             t = interact.totals_of(recs, total, ctx.money)
             lines.append([_plain(value), str(t["ads"]), "n/a" if t["share"] is None else "%.1f%%" % t["share"], t["roas_text"]])
-        parts.append("<h4>Calls to action</h4>" + _table_of(lines, [("Call to action", False), ("Ads", True), ("Spend share", True), ("ROAS", True)]))
+        parts.append("<h4>Calls to action</h4>" + _table_of(ctx, lines, [("Call to action", False), ("Ads", True), ("Spend share", True), ("ROAS", True)]))
     else:
         parts.append('<p class="muted">%s</p>' % esc(_na("no call-to-action column in the data")))
     body = values.get("primary text") or {}
@@ -2057,6 +2142,8 @@ def prompts_panel(ctx: Ctx) -> Tuple[str, str]:
         return empty_state(*NO_MIX)
     concepts, formats = list(ctx.mix.get("top_concepts") or []), list(ctx.mix.get("top_formats") or [])
     gaps = [briefing.gap_label(g["concept"], g["format"]) for g in ctx.gaps[:briefing.STARTER_GAPS]]
+    if ctx.mix.get("concepts_unread"):
+        gaps = [ctx.mix["concepts_unread_message"]]
     blocks = (("creative-ideation", "New concepts that fit the gaps", briefing.ideation_prompt(concepts, formats, gaps)),
               ("hook-writer", "Hook options for the gaps", briefing.hook_prompt(concepts, gaps)),
               ("creative-brief", "A full brief for the first gap", briefing.brief_prompt(gaps, formats)))

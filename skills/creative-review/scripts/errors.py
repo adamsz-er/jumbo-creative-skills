@@ -27,6 +27,9 @@ TABLE: Dict[str, Tuple[int, str, str]] = {
     "E-CURRENCY": (14, "The data does not say which currency the money is in.",
                    "Pass --currency followed by your three-letter code (for example --currency USD), or add 'currency: USD' "
                    "to the Script settings of your creative-profile.md."),
+    "E-MIXED-CURRENCY": (20, "The pull mixes currencies: {units}.",
+                        "Pull each currency separately (one ad account per pull), then run the pull and the review on each "
+                        "file on its own."),
     "E-SKILL": (15, "The skill '{skill}' is not installed next to creative-review, and the review needs it.",
                 "Install the whole package: " + INSTALL + "."),
     "E-PROFILE": (16, "The profile {path} could not be read: {reason}.",

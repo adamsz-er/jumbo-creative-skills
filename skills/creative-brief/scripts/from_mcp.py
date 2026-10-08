@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -30,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import creative_metrics as cm  # noqa: E402
 
 EXIT_SHORT = 3
+EXIT_MIXED = 4
 DEFAULT_TOLERANCE = 0.5
 
 # CSV header -> row field. The headers are the Ads Manager names the loader already reads.
@@ -89,14 +91,52 @@ def absent_fields(rows: Sequence[Dict[str, Any]]) -> List[str]:
     return absent
 
 
+CURRENCY_CODE = re.compile(r"^[A-Z]{3}$")
+
+
+def money_units(raw: Dict[str, Any]) -> Dict[str, str]:
+    """{"spend": "USD", ...}: the currency code each money field of a raw row states ({"value": ..., "unit": "USD"}).
+
+    A unit that is not a three-letter code is treated as no unit.
+    """
+    found = {}
+    for key, value in raw.items():
+        field = cm.money_field(key) if isinstance(value, dict) else None
+        unit = str(value.get("unit") or "").strip().upper() if field else ""
+        if CURRENCY_CODE.match(unit):
+            found.setdefault(field, unit)
+    return found
+
+
+def spend_currency(rows: Sequence[Dict[str, Any]]) -> Optional[str]:
+    """The one currency every spending row states, else None (some row states none, or the units differ)."""
+    units = {r.get("spend_unit") for r in rows if r.get("spend") is not None}
+    return next(iter(units)) if len(units) == 1 and None not in units else None
+
+
+def all_units(raw_rows: Sequence[Dict[str, Any]]) -> List[str]:
+    """Every distinct currency code the raw rows state on any money field, sorted."""
+    return sorted({u for r in raw_rows for u in money_units(r).values()})
+
+
+def rows_without_unit(raw_rows: Sequence[Dict[str, Any]]) -> int:
+    """How many raw rows with spend state no currency for it."""
+    return sum(1 for r in raw_rows if any(cm.money_field(k) == "spend" for k in r) and "spend" not in money_units(r))
+
+
 def merge(raw_rows: Sequence[Dict[str, Any]], level: Optional[str] = "ad") -> List[Dict[str, Any]]:
     """Normalise rows and keep the last copy of each (ad id, date), or (ad id, window end) for undated rows.
+
+    A row whose spend states a currency keeps it as `spend_unit`.
 
     A row with an ad but neither a date nor a window end cannot be told apart from
     a repeat of itself, so it raises ValueError rather than risk double counting.
     """
     merged: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
-    for position, row in enumerate(cm.load_rows(raw_rows, level=level)):
+    for position, (raw, row) in enumerate(zip(raw_rows, cm.load_rows(raw_rows, level=level))):
+        unit = money_units(raw).get("spend")
+        if unit:
+            row["spend_unit"] = unit
         ad_id = row.get("ad_id") or row.get("ad_name")
         if not ad_id:
             merged[("row", position)] = row
@@ -117,9 +157,11 @@ def _cell(value: Any) -> str:
 
 
 def write_csv(rows: Sequence[Dict[str, Any]], path: str) -> None:
+    """Write the CSV; the spend header carries the currency ("Amount spent (USD)") when every row states the same one."""
+    currency = spend_currency(rows)
     with open(path, "w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
-        writer.writerow([header for header, _ in COLUMNS])
+        writer.writerow(["%s (%s)" % (header, currency) if field == "spend" and currency else header for header, field in COLUMNS])
         for row in rows:
             writer.writerow([_cell(row.get(field)) for _, field in COLUMNS])
 
@@ -186,10 +228,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     notes: List[str] = []
     try:
-        rows = merge(read_responses(args.inputs, notes), level=args.level)
+        raw_rows = read_responses(args.inputs, notes)
+        units = all_units(raw_rows)
+        if len(units) > 1:
+            print("ERROR: mixed currency: %s" % ", ".join(units))
+            return EXIT_MIXED
+        rows = merge(raw_rows, level=args.level)
     except ValueError as error:
         print("ERROR: %s" % error)
         return 2
+    unlabelled = rows_without_unit(raw_rows) if units else 0
     fill_market(rows)
     write_csv(rows, args.output)
     summary = summarise(rows)
@@ -197,6 +245,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                          _read_ids(args.expect_ads) if args.expect_ads else [], args.tolerance)
 
     out = []
+    if unlabelled:
+        out.append("WARNING: %d row%s state no currency for spend, so the CSV header names none: pass --currency to the review."
+                   % (unlabelled, "" if unlabelled == 1 else "s"))
     if problems:
         out.append("WARNING: the pull does not reconcile, do not analyse it yet: " + "; ".join(problems))
         out.append("If short, re-fetch the missing ads in small batches by id; if over-counted, drop the "

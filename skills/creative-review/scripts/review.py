@@ -177,6 +177,8 @@ def biggest_action(verdicts: Dict[str, Any], currency: Optional[str]) -> str:
 
 
 def biggest_opportunity(mix: Dict[str, Any]) -> str:
+    if mix.get("concepts_unread"):
+        return mix["concepts_unread_message"]
     gaps = mix.get("gaps") or []
     if not gaps:
         return "No clear gap yet in the creative mix."
@@ -204,6 +206,9 @@ def cmd_pull(args: argparse.Namespace) -> int:
     if done.returncode == 3:
         warning = next((l for l in done.stdout.splitlines() if l.startswith("WARNING")), "")
         raise ReviewError("E-RECONCILE", problems=warning.split("yet: ", 1)[-1] or "the totals do not match")
+    if done.returncode == 4:
+        units = next((l.split("mixed currency: ", 1)[1] for l in done.stdout.splitlines() if "mixed currency: " in l), "more than one")
+        raise ReviewError("E-MIXED-CURRENCY", units=units)
     if done.returncode != 0:
         raise ReviewError("E-ANALYSIS", step="pull", detail=last_line(done.stdout + done.stderr), folder=str(Path(args.output).parent.resolve()))
     reconciled = any("reconciled against the expected totals" in l for l in done.stdout.splitlines())
@@ -330,6 +335,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     own_prior = not args.prior and diff.get("account") is not None
     if not diff.get("first_run"):
         diff["prior_is_previous_run"] = own_prior
+    if mix.get("concepts_unread"):
+        diff["concepts_unread"] = info["concepts_unread"] = True
     (folder / "changes.json").write_text(json.dumps(diff, indent=1), encoding="utf-8")
 
     title = who["name"] or brand
