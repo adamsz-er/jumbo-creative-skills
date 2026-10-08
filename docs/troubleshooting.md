@@ -6,9 +6,9 @@ Find the symptom, read the cause, apply the fix. Anything not covered here: ask 
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| The skill does not trigger when you ask | The skills are not installed in this agent, or the session started before the install | Check the install table in the [README](../README.md#install). In Claude Code run `/reload-plugins` or start a new session. Then name the skill outright ("use creative-review") or say "review my Meta ads" |
-| Plugin not showing after install | The plugin list is cached in the running session | Run `/reload-plugins`, or start a new session. If it still does not show, run `claude plugin marketplace add adamsz-er/jumbo-creative-skills` and `claude plugin install jumbo-creative@jumbo-creative-skills` again |
-| `npx skills` says command not found | `npx` comes with Node.js, which is not installed or not on your path | Install Node.js from nodejs.org, open a new terminal and run `npx skills add adamsz-er/jumbo-creative-skills` again. Or install through the Claude Code plugin commands instead |
+| The skill does not trigger when you ask | The skills are not installed in this agent, or the session started before the install | Check the install table in the [README](../README.md#install). In Claude Code, start a new session. Then name the skill outright ("use creative-review") or say "review my Meta ads" |
+| Plugin not showing after install | The plugin list is cached in the running session | Start a new Claude Code session. If it still does not show, run `claude plugin marketplace add adamsz-er/jumbo-creative-skills` and `claude plugin install jumbo-creative@jumbo-creative-skills` again |
+| `npx skills` says command not found | `npx` comes with Node.js, which is not installed or not on your path | Install Node.js from nodejs.org, open a new terminal and run the install command from the README again. Or install through the Claude Code plugin commands instead |
 | A zip is rejected when you upload it to claude.ai or Claude desktop | The upload needs the skill folder at the top of the zip, a `SKILL.md` with `name` matching the folder (lowercase letters, digits and single hyphens) and a `description`, and code execution turned on | Rebuild with `python3 tools/build_zips.py`, which validates every skill first, or download the zips from the latest Release. Turn on code execution in settings, then upload again |
 
 ## Getting your data in
@@ -24,20 +24,21 @@ Find the symptom, read the cause, apply the fix. Anything not covered here: ask 
 
 ## Known failures and their exact fixes
 
-These are the failures `creative-review` stops on. Each prints a plain message and its fix, and exits with its own code.
+These are the failures `creative-review` stops on. Each message and fix below is quoted from the program, with the example values it fills in (a file name, a number of columns, a percent). Each prints with its own exit code.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| E-NODATA: There is no ad data to review yet. | No data file and no connector | Pick one: (1) add --demo to see a sample account first; (2) connect Meta's ads connector and say 'review my Meta ads'; (3) export your ads as a daily CSV (the export recipe, steps 1 to 4: Ads tab, add the columns, Breakdown > By time > Day, Export as CSV), then pass the file |
-| E-COLUMNS: the file is missing a column the review needs. | The CSV lacks a date, ad name, amount spent or impressions column | Re-export with the columns it names (each is added in Customize columns or Breakdown > By time > Day, steps 2 and 3 of the export recipe), or pass the file again once they are in |
-| E-EMPTY: There are no ad rows to review in the window. | The date range does not overlap the file, or a `--where` filter kept nothing | Re-export with a date range that overlaps your window (step 1 of the export recipe), or drop --from and --to. For a filter, check the field and value against your data, or drop --where |
-| E-RECONCILE: The pull is incomplete. | The connector pull is short against the account totals | Re-run the pull with pagination so every ad is fetched (including archived ads that delivered in the window); see data-inputs.md steps 3 to 7. Then run the pull again |
-| E-CURRENCY: The data does not say which currency the money is in. | The spend header has no currency code | Pass --currency followed by your three-letter code (for example --currency USD), or add 'currency: USD' to the Script settings of your creative-profile.md |
-| E-SKILL: A skill is not installed next to creative-review. | Only some of the skills were installed | Install the whole package: claude plugin install jumbo-creative@jumbo-creative-skills (or npx skills add adamsz-er/jumbo-creative-skills) |
-| E-PROFILE: The profile could not be read. | A line in `creative-profile.md` is malformed | Fix the line named in the message, or pass a different --profile |
-| E-TARGET: A `--target` value is not valid. | Targets were not written as metric=number | Write targets as metric=number, for example --target cpa=40,roas=3. The message lists the accepted metrics |
-| E-REPORT: The dashboard did not pass its own structure check. | The built page is missing a part | Run the review again; if it repeats, rerun with --debug and report the line above |
-| E-ANALYSIS: An analysis step stopped. | One step (grade, verdicts, mix or report) hit an error | Fix what the line says and run the review again. Everything before this step is kept in the run folder it names |
+| E-NODATA There is no ad data to review yet. | No data file and no connector | Pick one: (1) add --demo to see a sample account first; (2) connect Meta's ads connector and say 'review my Meta ads'; (3) export your ads as a daily CSV: creative-context/references/export-recipe.md steps 1 to 4 (Ads tab, add the columns, Breakdown > By time > Day, Export as CSV), then pass the file. |
+| E-COLUMNS ads.csv is missing 2 columns the review needs: date, impressions. | The CSV lacks a column the review needs (date, ad name, amount spent or impressions) | Set Breakdown to By time > Day (step 3 of creative-context/references/export-recipe.md). Add Impressions in Customize columns (step 2 of creative-context/references/export-recipe.md). Re-export with those columns, or pass the file again once they are in. |
+| E-EMPTY There are no ad rows to review in 2026-03-01 to 2026-03-30. The file covers 2026-04-01 to 2026-04-28. | The date range does not overlap the file, or a `--where` filter kept nothing | Re-export with a date range that overlaps your window (step 1 of creative-context/references/export-recipe.md), or drop --from and --to. |
+| E-EMPTY Your filter market=ZZ kept no ads. | The date range does not overlap the file, or a `--where` filter kept nothing | Check the field and value against your data, or drop --where. |
+| E-RECONCILE The pull is incomplete: spend is 3.2% short. | The connector pull is short against the account totals | Re-run the pull with pagination so every ad is fetched (including archived ads that delivered in the window); see creative-context/references/data-inputs.md steps 3 to 7. Then run the pull again. |
+| E-CURRENCY The data does not say which currency the money is in. | The spend header has no currency code | Pass --currency followed by your three-letter code (for example --currency USD), or add 'currency: USD' to the Script settings of your creative-profile.md. |
+| E-SKILL The skill 'creative-mix' is not installed next to creative-review, and the review needs it. | Only some of the skills were installed | Install the whole package: claude plugin install jumbo-creative@jumbo-creative-skills (or npx skills add adamsz-er/jumbo-creative-skills). |
+| E-PROFILE The profile creative-profile.md could not be read: line 4 is not key: value. | A line in `creative-profile.md` is malformed | Fix the line named above in creative-profile.md, or pass a different --profile. |
+| E-TARGET cpa=high is not a number | A `--target` value was not written as metric=number | Write targets as metric=number, for example --target cpa=40,roas=3. Accepted metrics: cpa, roas, cpc. |
+| E-REPORT The dashboard was written but did not pass its own structure check: no tabs found. | The built dashboard is missing a part | Run the review again; if it repeats, rerun with --debug and report the line above. |
+| E-ANALYSIS The grade step stopped: no rows. | One step (grade, verdicts, mix or report) hit an error | Fix what that line says and run the review again. Everything before this step is kept in creative-review-runs/acme/latest. |
 
 ## Using the output
 

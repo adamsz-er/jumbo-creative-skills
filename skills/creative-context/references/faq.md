@@ -6,7 +6,7 @@ Answer the user's "how do I..." question from here, in plain words. Longer answe
 
 ### What does this package do?
 
-Reads your ads, grades them against your own account, and helps you make the next batch. Read only.
+Reads your ads, grades them against your own account, and helps you make the next batch. These skills never call a tool that changes your ad account. Your agent could, if you asked it to directly, through the Meta connector's own tools.
 
 ### What do I say first?
 
@@ -96,7 +96,7 @@ Per objective (sales, traffic, awareness, leads, engagement). Without an objecti
 
 ### Will it change my ads for me?
 
-Never. Recommendations only; write tools are not called unless the user asks in that conversation.
+These skills never call a tool that changes your ad account. Your agent could, if you asked it to directly, through the Meta connector's own tools. Recommendations only.
 
 ## Making creative
 
@@ -130,11 +130,11 @@ The latest earlier run folder of the same account.
 
 ### Does my data leave my machine?
 
-Scripts are local and make no network calls. Only your agent and the connector move data. The report requests only Google Fonts.
+The scripts run on your machine and make no network calls. But your AI agent sends what it reads, including your ad data and the results, to its AI provider, the same as anything else you share in a chat. The Meta connector is Meta's own service. The report requests only Google Fonts.
 
 ### Can it make changes in my ad account?
 
-No. Read only.
+These skills never call a tool that changes your ad account. Your agent could, if you asked it to directly, through the Meta connector's own tools.
 
 ### Is it safe to share a report?
 
@@ -144,7 +144,7 @@ It holds real account numbers. Share like account data; never publish one.
 
 ### How do I update?
 
-Claude Code: `/plugin marketplace update`. Others: re-run `npx skills add`. claude.ai: re-download the zips.
+Claude Code: `claude plugin marketplace update jumbo-creative-skills`. Others: re-run the install command you used. claude.ai: re-download the zips.
 
 ### Can I use this for TikTok or Google?
 
@@ -156,7 +156,7 @@ Works in any Agent Skills agent that can run Python. ChatGPT is untested; withou
 
 ### Why does the plugin not show up after installing?
 
-`/reload-plugins` or a new session.
+Start a new Claude Code session.
 
 ### Can I contribute?
 

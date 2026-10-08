@@ -1,4 +1,6 @@
 """The docs cannot drift from the package: skills named, questions mirrored, links resolved, flags listed."""
+import ast
+import importlib.util
 import re
 import sys
 import unittest
@@ -71,6 +73,69 @@ def script_flags():
     return pairs
 
 
+def error_samples():
+    """One rendering of every known failure, built from errors.py itself: (code, message, fix)."""
+    e = errors
+    made = [
+        e.nodata_error(),
+        e.columns_error("ads.csv", ["date", "impressions"]),
+        e.empty_window_error("2026-03-01 to 2026-03-30", "2026-04-01 to 2026-04-28"),
+        e.empty_filter_error(["market=ZZ"]),
+        e.ReviewError("E-RECONCILE", problems="spend is 3.2% short"),
+        e.ReviewError("E-CURRENCY"),
+        e.ReviewError("E-SKILL", skill="creative-mix"),
+        e.ReviewError("E-PROFILE", path="creative-profile.md", reason="line 4 is not key: value"),
+        e.ReviewError("E-TARGET", detail="cpa=high is not a number", metrics="cpa, roas, cpc"),
+        e.ReviewError("E-REPORT", problem="no tabs found"),
+        e.ReviewError("E-ANALYSIS", step="grade", detail="no rows", folder="creative-review-runs/acme/latest"),
+    ]
+    return [(x.code, x.message, x.fix) for x in made]
+
+
+def _load(path):
+    sys.path.insert(0, str(path.parent))
+    try:
+        spec = importlib.util.spec_from_file_location("docs_probe_" + path.parent.parent.name + path.stem, path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path.pop(0)
+
+
+def code_defaults():
+    """{(script, flag): [defaults]} read from each add_argument call, evaluated in its own module."""
+    shared = {p.name for p in (ROOT / "shared").glob("*.py")}
+    paths = list((ROOT / "shared").glob("*.py")) + [p for p in sorted((ROOT / "skills").glob("*/scripts/*.py")) if p.name not in shared]
+    found = {}
+    for path in paths:
+        module = _load(path)
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not (isinstance(node, ast.Call) and getattr(node.func, "attr", "") == "add_argument"):
+                continue
+            flags = [a.value for a in node.args if isinstance(a, ast.Constant) and str(a.value).startswith("--")]
+            kws = {k.arg: k.value for k in node.keywords}
+            action = kws.get("action")
+            value = None
+            if "default" in kws:
+                value = eval(compile(ast.Expression(kws["default"]), str(path), "eval"), module.__dict__)
+            elif isinstance(action, ast.Constant) and action.value == "store_true":
+                value = False
+            for flag in flags:
+                found.setdefault((path.name, flag), []).append(value)
+    return found
+
+
+def table_rows():
+    """{(script, flag): default cell} from the flags table; duplicate rows are collected as a list."""
+    rows = {}
+    for line in read(HOW).splitlines():
+        m = re.match(r"\| `([a-z_]+\.py)` \| `(--[a-z0-9-]+)` \| (.*?) \| .* \|$", line)
+        if m:
+            rows.setdefault((m.group(1), m.group(2)), []).append(m.group(3))
+    return rows
+
+
 class ReadmeTests(unittest.TestCase):
     def test_mermaid_block_names_every_skill(self):
         text = read(README)
@@ -126,14 +191,17 @@ class TroubleshootingTests(unittest.TestCase):
     def test_at_least_twelve_rows(self):
         self.assertGreaterEqual(len(self.rows()) - 1, 12)
 
-    def test_every_error_code_and_fix_is_listed(self):
+    def test_every_error_message_and_fix_is_quoted_verbatim(self):
         text = read(TROUBLE)
-        for code in errors.TABLE:
-            self.assertIn(code, text)
+        samples = error_samples()
+        self.assertEqual({c for c, _, _ in samples}, set(errors.TABLE))
+        for code, message, fix in samples:
+            self.assertIn(message, text, code + " message")
+            self.assertIn(fix, text, code + " fix")
 
     def test_named_symptoms(self):
         text = read(TROUBLE).lower()
-        for needle in ["pillow", "/reload-plugins", "npx", "authenticat", "unclassified", "low volume", "fonts"]:
+        for needle in ["pillow", "new claude code session", "npx", "authenticat", "unclassified", "low volume", "fonts"]:
             self.assertIn(needle, text)
 
 
@@ -165,12 +233,28 @@ class LinkTests(unittest.TestCase):
 
 
 class FlagTableTests(unittest.TestCase):
-    def test_every_flag_is_in_the_table(self):
-        rows = [l for l in read(HOW).splitlines() if l.startswith("|")]
-        self.assertTrue(rows, "no table in how-it-works.md")
-        missing = [(script, flag) for script, flag in sorted(script_flags())
-                   if not any("`%s`" % script in row and "`%s`" % flag in row for row in rows)]
-        self.assertEqual(missing, [])
+    def test_table_and_code_list_the_same_flags(self):
+        in_table, in_code = set(table_rows()), set(script_flags())
+        self.assertEqual(sorted(in_code - in_table), [], "flags the table lacks")
+        self.assertEqual(sorted(in_table - in_code), [], "table rows for flags the code lacks")
+
+    def test_table_defaults_match_the_code(self):
+        defaults, cells = code_defaults(), table_rows()
+        wrong = []
+        for key, cell_list in cells.items():
+            real = [d for d in defaults.get(key, []) if d is not None and not isinstance(d, (bool, list))]
+            if not real:
+                continue
+            for cell in cell_list:
+                for value in real[:1]:
+                    if isinstance(value, (int, float)):
+                        number = re.match(r"[^0-9.]*([0-9]+(?:\.[0-9]+)?)", cell)
+                        ok = bool(number) and float(number.group(1)) == float(value)
+                    else:
+                        ok = str(value) in cell
+                    if not ok:
+                        wrong.append((key, value, cell))
+        self.assertEqual(wrong, [])
 
     def test_synced_copies_have_the_same_flags_as_shared(self):
         for shared in sorted((ROOT / "shared").glob("*.py")):

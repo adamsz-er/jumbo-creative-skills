@@ -41,12 +41,11 @@ It writes a run folder under `./creative-review-runs/` holding `report.html`, `s
 ```mermaid
 flowchart TD
   you["You"] --> agent["Your AI agent"]
-  agent --> front["creative-review: the front door, runs analysis and report in one go"]
-  agent --> make
-  front --> hub["creative-context: the hub (profile and metric definitions)"]
+  agent --> front["creative-review: the front door"]
   front --> analyse
-  front --> present
-  hub -.-> analyse
+  analyse --> present
+  agent --> make
+  hub["creative-context: the hub"] -.-> analyse
   hub -.-> make
   subgraph analyse["Analyse"]
     grader["creative-grader"]
@@ -64,11 +63,11 @@ flowchart TD
   subgraph present["Present"]
     report["creative-report"]
   end
-  analyse --> scripts["Local scripts: Python, standard library, creative_metrics.py"]
+  data[("Data in: Meta Ads MCP, or Ads Manager CSV or screenshots, or nothing")] --> scripts
+  analyse --> scripts
   make --> scripts
   present --> scripts
-  data[("Data in: Meta Ads MCP, or Ads Manager CSV or screenshots, or nothing")] --> scripts
-  scripts --> out["Outputs you read: tables, briefs, report.html"]
+  scripts["Local scripts: Python, standard library, creative_metrics.py"] --> out["Outputs: tables, briefs, report.html"]
 ```
 
 The five moving parts:
@@ -111,7 +110,7 @@ Each analysis skill can also be run on its own (grade, keep or kill, mix, report
 
 The skills read your own numbers. Pick whichever you have:
 
-1. **Meta's official Ads MCP** (recommended). Add the connector at `https://mcp.facebook.com/ads` in your agent and sign in with Meta through OAuth. In Claude Code: `claude mcp add --transport http meta-ads https://mcp.facebook.com/ads`, then authenticate from `/mcp`. It may not be enabled on every ad account yet. It is read-only for these skills: they never call a tool that changes an ad. Some metrics need care (3-second plays are derived, long pulls can stop short): see [Known limits](#known-limits) and the [FAQ](docs/faq.md#data-and-connections).
+1. **Meta's official Ads MCP** (recommended). Add the connector at `https://mcp.facebook.com/ads` in your agent and sign in with Meta through OAuth. In Claude Code: `claude mcp add --transport http meta-ads https://mcp.facebook.com/ads`, then authenticate from `/mcp`. It may not be enabled on every ad account yet. These skills never call a tool that changes your ad account. Your agent could, if you asked it to directly, through the Meta connector's own tools. Some metrics need care (3-second plays are derived, long pulls can stop short): see [Known limits](#known-limits) and the [FAQ](docs/faq.md#data-and-connections).
 2. **A CSV export from Ads Manager** as the fallback. Follow [the export recipe](skills/creative-context/references/export-recipe.md) for the exact columns.
 3. **Nothing.** The skills still work for ideation, and label every grade "no performance data".
 
@@ -119,8 +118,8 @@ The skills read your own numbers. Pick whichever you have:
 
 Every metric id and formula is defined once, in [skills/creative-context/references/metrics.md](skills/creative-context/references/metrics.md). In short:
 
-- **Hook rate**: of the people who saw the ad, how many watched at least 3 seconds. Also called thumb-stop rate.
-- **Hold rate**: of those who watched 3 seconds, how many watched to ThruPlay (Meta's measure for a long watch).
+- **Hook rate**: of the times the ad was shown, how often it was watched for at least 3 seconds. Also called thumb-stop rate.
+- **Hold rate**: of the 3-second watches, how many went on to a ThruPlay (Meta's measure for a long watch).
 - **CTR**: clicks divided by impressions. Each output says whether it counted link clicks or all clicks.
 - **CPA**: cost per purchase (spend divided by purchases).
 - **ROAS**: return on ad spend (purchase value divided by spend).
@@ -137,7 +136,7 @@ A missing field or a zero denominator is shown as `n/a (missing <field>)`, never
 - Small comparison groups give an early read, and the output says so. Very new ads are marked "too early to judge".
 - Reach and frequency do not add up across ads, so they show n/a unless you supply an account-level figure for the same scope.
 - Ad previews: the connector returns links, not image files, so cards show placeholders unless you save screenshots as `<ad_id>.png`. Palette extraction reads PNG without extra software; other image formats need Pillow (optional).
-- The skills read and advise. They never change your account.
+- These skills never call a tool that changes your ad account. Your agent could, if you asked it to directly, through the Meta connector's own tools.
 
 ## Learn more
 
@@ -149,12 +148,12 @@ A missing field or a zero denominator is shown as `n/a (missing <field>)`, never
 
 ## Privacy
 
-The skills run inside your agent. The bundled scripts use only the Python standard library and make no network calls, so your data leaves your machine only through what your agent and the Meta MCP already do. `colour-grade` reads other image formats too if you have Pillow installed, and the report is one local HTML file whose only outside requests are to Google Fonts (the stylesheet and font files).
+The skills run inside your agent. The scripts run on your machine and make no network calls. But your AI agent sends what it reads, including your ad data and the results, to its AI provider, the same as anything else you share in a chat. The Meta connector is Meta's own service. The scripts use only the Python standard library. `colour-grade` reads other image formats too if you have Pillow installed, and the report is one local HTML file whose only outside requests are to Google Fonts (the stylesheet and font files).
 
 ## Updating
 
-- **Claude Code:** `/plugin marketplace update jumbo-creative-skills`, then reinstall or reload the plugin if prompted.
-- **Other agents:** run `npx skills add adamsz-er/jumbo-creative-skills` again.
+- **Claude Code:** `claude plugin marketplace update jumbo-creative-skills`.
+- **Other agents:** re-run the install command you used.
 - **Claude desktop / claude.ai:** download the new zips from the latest Release and upload them again.
 
 ## Contributing

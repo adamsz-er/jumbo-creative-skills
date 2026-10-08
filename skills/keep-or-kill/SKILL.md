@@ -70,6 +70,6 @@ Try:
 
 - **Why Check before cutting?** A weakness is not proven: mixed payback, small group, top seller or no target set.
 - **Why is an ad too early?** It is younger than `--young-days` or under `--min-impressions`.
-- **Will it pause ads?** Never; it recommends.
+- **Will it pause ads?** These skills never call a tool that changes your ad account. Your agent could, if you asked it to directly, through the Meta connector's own tools. It recommends.
 - **Can I set targets?** Yes: `--target cpa=40,roas=3` or in the profile.
 - More: creative-context/references/faq.md

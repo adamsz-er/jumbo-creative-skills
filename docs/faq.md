@@ -6,7 +6,7 @@ Short answers. For the reasoning, see [how it works](how-it-works.md); for fixes
 
 ### What does this package do?
 
-It teaches your AI agent to review your Meta ad creative against your own account, say which ads to keep, fix or pause, and help you make new concepts, hooks and briefs. It reads and advises; it never changes your account.
+It teaches your AI agent to review your Meta ad creative against your own account, say which ads to keep, fix or pause, and help you make new concepts, hooks and briefs. It reads and advises. These skills never call a tool that changes your ad account. Your agent could, if you asked it to directly, through the Meta connector's own tools.
 
 ### What do I say first?
 
@@ -70,7 +70,7 @@ The ad was compared with a small group (fewer than twice the minimum of five com
 
 ### What if my ad names don't follow a convention?
 
-Detection reads positional names (split by `_` or ` | `) and `KEY:value` names, and says what share of all your names it read. Names it cannot read go to "unclassified" and are listed, never dropped. Tell the agent which key is the concept and what any unlabelled segment means (`--key-map 6=tone`), or what your own ad-type words mean (`--type-map core=bau`). The answers live in the `Script settings` of your profile so you are not asked twice. Grading by format and ad type still works from the data columns.
+Detection reads positional names (split on ` | `, `|`, ` _ `, `_` or ` - `) and `KEY:value` names, and says what share of all your names it read. Names it cannot read go to "unclassified" and are listed, never dropped. Tell the agent which key is the concept and what any unlabelled segment means (`--key-map 6=tone`), or what your own ad-type words mean (`--type-map core=bau`). The answers live in the `Script settings` of your profile so you are not asked twice. Grading by format and ad type still works from the data columns.
 
 ### Why is a metric n/a instead of 0?
 
@@ -96,7 +96,7 @@ No. Each ad is judged on its own campaign objective: sales on cost per sale and 
 
 ### Will it change my ads for me?
 
-No. It recommends. It never calls a tool that pauses, edits or scales anything, and if your connector offers one it stays unused unless you explicitly ask for that action.
+No. It recommends. These skills never call a tool that changes your ad account. Your agent could, if you asked it to directly, through the Meta connector's own tools.
 
 ## Making creative
 
@@ -130,11 +130,11 @@ The latest earlier review of the same account: which ads changed verdict, which 
 
 ### Does my data leave my machine?
 
-The scripts use only Python's standard library and make no network calls. Your data goes only where your agent and the Meta connector already send it. The report is one local file whose only outside requests are to Google Fonts.
+The scripts run on your machine and make no network calls. But your AI agent sends what it reads, including your ad data and the results, to its AI provider, the same as anything else you share in a chat. The Meta connector is Meta's own service. The report is one local file whose only outside requests are to Google Fonts.
 
 ### Can it make changes in my ad account?
 
-No. Everything here is read-only advice.
+No. Everything here is advice. These skills never call a tool that changes your ad account. Your agent could, if you asked it to directly, through the Meta connector's own tools.
 
 ### Is it safe to share a report?
 
@@ -144,7 +144,7 @@ A report contains your ad names, spend and results. Share it as you would any ac
 
 ### How do I update?
 
-Claude Code: run `/plugin marketplace update jumbo-creative-skills`. Other agents: run `npx skills add adamsz-er/jumbo-creative-skills` again. Claude desktop or claude.ai: download the new zips from the latest Release and upload them again.
+Claude Code: run `claude plugin marketplace update jumbo-creative-skills`. Other agents: re-run the install command you used. Claude desktop or claude.ai: download the new zips from the latest Release and upload them again.
 
 ### Can I use this for TikTok or Google?
 
@@ -156,7 +156,7 @@ The skills follow the Agent Skills format, so they work in any agent that suppor
 
 ### Why does the plugin not show up after installing?
 
-Run `/reload-plugins` in Claude Code, or start a new session. If you installed with `npx skills add`, check the agent's skills folder for the skill names.
+Start a new Claude Code session. If it still does not show, run the install commands in the README again.
 
 ### Can I contribute?
 

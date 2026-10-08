@@ -12,7 +12,7 @@ Every skill starts by working out which mode it is in and says so out loud. It n
 | **CSV or screenshots** | A daily Ads Manager export ([recipe](../skills/creative-context/references/export-recipe.md)), or screenshots of the table | Every metric, with 3-second plays as Meta reports them. Screenshots are read by hand and may contain transcription errors, which the agent says | Without daily rows there is no fatigue trend or ad age. Without the objective column every ad is judged as a sales ad, and the output says so |
 | **No data** | Nothing | Ideation, hooks, personas, briefs, script breakdown, colour direction | Every grade, ranking and recommendation is labelled "no performance data" |
 
-The skills only read. If the connector offers a tool that changes an ad, a budget or a status, they do not call it.
+These skills never call a tool that changes your ad account. Your agent could, if you asked it to directly, through the Meta connector's own tools.
 
 ## The shared metrics module
 
@@ -37,7 +37,7 @@ There are no "good" values in this package. An ad is compared with other ads in 
 
 A group needs at least 5 comparable ads to stand on its own. A smaller group widens to the next one (format, then the whole objective), and the output says which group each ad was graded in. A group with fewer than twice the minimum is flagged as an early read.
 
-**Worked example (Acme Outdoor Co., made-up data).** Six UGC video ads in the evergreen group have these hold-rate quartiles: p25 29.7%, median 33.4%, p75 34.1%. One of them holds 28.4%. That is at or below p25, so its hold rate is in the bottom quartile of its own group. Run `python3 -I skills/creative-grader/scripts/grade.py examples/acme/ads_daily.csv` to see the same table, or read [examples/acme/grade.md](../examples/acme/grade.md). Because the group has six ads, fewer than twice the minimum of five, the output marks the grade as an early read.
+**Worked example (Acme Outdoor Co., made-up data).** Six UGC video ads in the UGC video / BAU (evergreen) group have these hold-rate quartiles: p25 29.7%, median 33.4%, p75 34.1%. One of them holds 28.4%. That is at or below p25, so its hold rate is in the bottom quartile of its own group. Run `python3 -I skills/creative-grader/scripts/grade.py examples/acme/ads_daily.csv` to see the same table, or read [examples/acme/grade.md](../examples/acme/grade.md). Because the group has six ads, fewer than twice the minimum of five, the output marks the grade as an early read.
 
 Verdicts (`keep-or-kill`) use the same comparison, plus age, a learning flag and a fatigue trend (the first and last few delivery days of an ad compared). The rules are in [verdict-rules.md](../skills/keep-or-kill/references/verdict-rules.md). Two protections matter: an ad that cannot be judged is never told to iterate or pause, and the account's biggest sellers are never paused without a check. A never-worked ad is paused only when it misses a target you set; with no target it reads "Check before cutting" and asks for one.
 

@@ -74,7 +74,7 @@ Try:
 
 ## Common questions
 
-- **Does it change my ads?** No. It only reads and advises.
+- **Does it change my ads?** These skills never call a tool that changes your ad account. Your agent could, if you asked it to directly, through the Meta connector's own tools.
 - **Where is the report?** In the run folder under `./creative-review-runs/`; the reply gives the path.
 - **What if the pull is short?** It stops with E-RECONCILE and the exact fix; see the troubleshooting table.
 - **Can I review one market?** Yes: add `--where market=US` (any column or name field).
