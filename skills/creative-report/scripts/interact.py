@@ -6,6 +6,7 @@ render the default (scripts-off) view, so both views come from one source. Stand
 from __future__ import annotations
 
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -34,6 +35,15 @@ NEXT_STEP = {
     "kill": "Pause it once the check below comes back clean.",
     "early": "Give it more delivery before judging it.",
     "cant": "Add the missing data, then run keep-or-kill again.",
+}
+VERDICT_TIPS = {
+    "scale": "Pays back well against your similar ads, so it can take more budget.",
+    "keep": "Holding up against your similar ads, so leave it running.",
+    "iterate": "The idea has something but this version is weak, so brief a new version.",
+    "check": "Looks weak, but it may feed your other ads, so check before cutting it.",
+    "kill": "Weak against your similar ads, so pause it once tracking and the site are ruled out.",
+    "early": "Too little delivery so far to judge it fairly.",
+    "cant": "The data needed to judge it is missing, so it cannot be graded yet.",
 }
 PAUSE_CHECK = "Rule out tracking, the site and the audience first."
 # What a reader sees in a link, a filter chip or the page data: the board's own words, never the internal class name.
@@ -158,6 +168,92 @@ def readable_label(fields: Dict[str, Any], name: Optional[str], ad_id: Any = Non
     return label or "Ad %s" % (ad_id if ad_id is not None else "(no id)")
 
 
+LABEL_EXTENSIONS = ("collection", "product", "tone", "version", "launch_date")
+_SEGMENT_KEY = re.compile(r"segment_(\d+)$")
+
+
+def _extension_text(field: str, value: Any) -> str:
+    return str(value) if field == "launch_date" else humanise(value)
+
+
+def unique_labels(records: Sequence[Dict[str, Any]], fields: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, str]:
+    """{ad id: label} where no two ads share a label.
+
+    Each record's own `label` is the start. Ads that still share one are extended with the next parsed name fields
+    (collection, product, tone, version, launch date, then segment_N in position order); a field is added only when it
+    differs inside the group it would split. Whatever is still shared ends with "· …" and the last 4 characters of the
+    ad id, and the full id when even those collide. `fields` maps an id to its parsed name fields; without it the record
+    itself is read.
+    """
+    keys = [str(r["id"]) for r in records]
+    labels = [str(r["label"]) for r in records]
+    parsed = [(fields or {}).get(key, rec) if fields is not None else rec for key, rec in zip(keys, records)]
+
+    def shared() -> List[List[int]]:
+        groups: Dict[str, List[int]] = {}
+        for n, label in enumerate(labels):
+            groups.setdefault(label, []).append(n)
+        return [members for members in groups.values() if len(members) > 1]
+
+    segments = sorted({k for f in parsed for k in f if _SEGMENT_KEY.match(str(k))}, key=lambda k: int(_SEGMENT_KEY.match(k).group(1)))
+    for field in LABEL_EXTENSIONS + tuple(segments):
+        for members in shared():
+            values = {n: parsed[n].get(field) for n in members}
+            if len({str(v) for v in values.values()}) < 2:
+                continue
+            for n, value in values.items():
+                if value not in (None, ""):
+                    labels[n] += " \u00b7 " + _extension_text(field, value)
+    for members in shared():
+        for n in members:
+            labels[n] += " \u00b7 \u2026" + keys[n][-4:]
+    for members in shared():
+        for n in members:
+            labels[n] += " \u00b7 " + keys[n]
+    return dict(zip(keys, labels))
+
+
+# metric -> lower is better; spend is left out on purpose, since a higher spend is neither good nor bad
+HEAT_METRICS = {"roas": False, "cpa": True, "ctr": False, "hook_rate": False, "cpm": True}
+HEAT_FLOOR, HEAT_RANGE, HEAT_CAP = 0.10, 0.5, 0.6
+HEAT_GOOD, HEAT_BAD = "34 197 94", "220 38 38"
+
+
+def heat_tints(values: Dict[str, Optional[float]], lower_is_better: bool) -> Dict[str, Optional[str]]:
+    """A CSS colour per key from where its value ranks among the others: green for the better half, red for the worse.
+
+    A value shared by two or more ads is never tinted (a tie is not good or bad); the rest rank among themselves.
+    Strength is the distance of the rank from the middle (0 at the middle, 1 at either end), so one extreme value cannot
+    wash the rest to neutral; alpha is HEAT_FLOOR + HEAT_RANGE x strength, capped. A value that is missing or not a
+    finite number, fewer than two distinct values, or the exact middle gets no tint (None).
+    """
+    known = {k: v for k, v in values.items() if v is not None and math.isfinite(v)}
+    out: Dict[str, Optional[str]] = {k: None for k in values}
+    counts: Dict[float, int] = {}
+    for v in known.values():
+        counts[v] = counts.get(v, 0) + 1
+    alone = {k: v for k, v in known.items() if counts[v] == 1}
+    if len(alone) < 2:
+        return out
+    ordered = list(alone.values())
+    for key, value in alone.items():
+        good = sum(1 for v in ordered if v < value) / (len(ordered) - 1)
+        good = 1 - good if lower_is_better else good
+        if good == 0.5:
+            continue
+        alpha = min(HEAT_CAP, HEAT_FLOOR + HEAT_RANGE * abs(good - 0.5) * 2)
+        out[key] = "rgb(%s / %.2f)" % (HEAT_GOOD if good > 0.5 else HEAT_BAD, alpha)
+    return out
+
+
+def heat_map(ads: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, Optional[str]]]:
+    """{metric: {ad key: tint}} over the ads on the page. A cost of zero or less (an ad with no spend) is left out, not ranked best."""
+    def usable(value: Any, lower: bool) -> Any:
+        return None if value is None or (lower and value <= 0) else value
+    return {metric: heat_tints({str(a.get("ad_id") or a.get("ad_name")): usable(a.get(metric), lower) for a in ads}, lower)
+            for metric, lower in HEAT_METRICS.items()}
+
+
 def metric_label(metric: str) -> str:
     return LABELS.get(metric, metric.replace("_", " "))
 
@@ -188,11 +284,16 @@ def _count(value: Any) -> Any:
     return int(value) if isinstance(value, float) and value.is_integer() else value
 
 
+def _fields_of(base: Dict[str, Any], verdict: Dict[str, Any], grade: Dict[str, Any]) -> Dict[str, Any]:
+    name = base.get("ad_name") or verdict.get("ad_name") or verdict.get("name") or grade.get("name")
+    return dict(base) if base else dict(cm.parse_name(name) if name else {})
+
+
 def _record(key: str, base: Dict[str, Any], verdict: Optional[Dict[str, Any]], grade: Optional[Dict[str, Any]],
             label_of: Callable[..., str]) -> Dict[str, Any]:
     verdict, grade = verdict or {}, grade or {}
     name = base.get("ad_name") or verdict.get("ad_name") or verdict.get("name") or grade.get("name")
-    fields = dict(base) if base else dict(cm.parse_name(name) if name else {})
+    fields = _fields_of(base, verdict, grade)
     fmt = fields.get("format") or verdict.get("format") or grade.get("format")
     fields["format"] = fmt
     cls = entry_class(verdict) if verdict else None
@@ -225,15 +326,20 @@ def ad_records(ads: Sequence[Dict[str, Any]], verdict_entries: Optional[Sequence
     """One record per ad: every ad in the rows, plus any the verdicts or grades name that the rows lack."""
     verdicts = {str(e.get("ad")): e for e in verdict_entries or []}
     grades = {str(e.get("ad")): e for e in grade_entries or []}
-    out, seen = [], set()
+    out, seen, parsed = [], set(), {}
     for ad in ads:
         key = str(ad.get("ad_id") or ad.get("ad_name"))
         out.append(_record(key, ad, verdicts.get(key), grades.get(key), label_of))
+        parsed[key] = _fields_of(ad, verdicts.get(key) or {}, grades.get(key) or {})
         seen.add(key)
     for key in list(verdicts) + list(grades):
         if key not in seen:
             seen.add(key)
             out.append(_record(key, {}, verdicts.get(key), grades.get(key), label_of))
+            parsed[key] = _fields_of({}, verdicts.get(key) or {}, grades.get(key) or {})
+    labels = unique_labels(out, parsed)
+    for rec in out:
+        rec["label"] = labels[rec["id"]]
     return out
 
 
@@ -270,10 +376,11 @@ def display_names(records: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, str]
     return names
 
 
-def payload(records: Sequence[Dict[str, Any]], currency: Optional[str], top_n: int, default_group: str) -> Dict[str, Any]:
+def payload(records: Sequence[Dict[str, Any]], currency: Optional[str], top_n: int, default_group: str, default_view: str = "grid") -> Dict[str, Any]:
     return {"ads": list(records), "presets": list(PRESETS), "names": display_names(records), "weak_steps": WEAK_VALUES, "currency": currency,
             "unit_note": "" if currency else " (account currency)", "top_n": top_n,
-            "defaults": {"group": default_group, "sort": "stake"}, "verdict_labels": PUBLIC_LABEL}
+            "defaults": {"group": default_group, "sort": "stake", "view": default_view}, "verdict_labels": PUBLIC_LABEL,
+            "verdict_tips": {PUBLIC_ID.get(cls, cls): VERDICT_TIPS[cls] for cls, _ in BOARD}}
 
 
 def payload_json(data: Dict[str, Any]) -> str:

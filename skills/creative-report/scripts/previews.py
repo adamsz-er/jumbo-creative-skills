@@ -151,6 +151,11 @@ class Previews:
                         % (key, img["width"], img["height"], img["uri"], img["width"], img["height"]) for key, img in sorted(self.symbols.items()))
         return '<svg class="sprite" aria-hidden="true" width="0" height="0" focusable="false">%s</svg>' % items
 
+    def coverage(self) -> Tuple[int, int]:
+        """(ads with an image, ads resolved so far): each ad counts once, however many cards show it."""
+        shown = self.kinds["preview"] + self.kinds["thumbnail"]
+        return shown, shown + self.kinds["placeholder"]
+
     def summary(self) -> str:
         """The footer sentence: counts by kind (one per ad), each placeholder reason, and the embedded size."""
         reasons = ", ".join("%s: %d" % (name, n) for name, n in sorted(self.reasons.items())) or "none"

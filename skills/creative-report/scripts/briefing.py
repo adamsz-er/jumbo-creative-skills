@@ -21,6 +21,7 @@ LIST_KEYS = ("hooks", "reference_ads", "judged_by")
 NOT_STATED = "not stated"
 STARTER_GAPS = 3  # arbitrary default: how many coverage gaps become a brief starter
 STARTER_ITERATE = 2  # arbitrary default: how many Iterate ads become a brief starter
+STARTERS_PER_FORMAT = 2  # arbitrary default: most brief starters one format gets, so the tab does not read as one idea
 HOOKS_PLACEHOLDER = "Hooks: ask the hook-writer skill"
 
 

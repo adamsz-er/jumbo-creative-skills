@@ -174,7 +174,7 @@ class FormatTest(Fixture):
 
     def test_each_format_row_has_a_strip_of_at_most_three_top_spend_ads_that_carry_data_ad(self):
         html, _ = panels.format_scorecard(self.ctx)
-        strips = re.findall(r'<div class="pv-grid strip">(.*?)</div></td>', html, re.S)
+        strips = re.findall(r'<div class="ad-grid strip">(.*?)</div></td>', html, re.S)
         self.assertEqual(len(strips), len(self.mix["by_format"]))
         ids = set(self.ctx.record_index)
         for strip in strips:
@@ -391,7 +391,7 @@ class WhiteSpaceTest(Fixture):
 
     def test_the_gap_list_keeps_mix_order_shows_top_n_and_folds_the_rest(self):
         html, _ = panels.gap_list(self.ctx_with(top_n=4))
-        self.assertEqual(len(re.findall(r'<li class="gap" data-gap=', html.split("<details")[0])), 4)
+        self.assertEqual(len(re.findall(r'<tr class="gap" data-gap=', html.split("<details")[0])), 4)
         self.assertIn("<details", html)
         self.assertEqual(len(re.findall(r'data-gap="', html)), len(self.mix["gaps"]))
         self.assertIn("hypothesis to test", html)
@@ -491,12 +491,66 @@ class BriefingTest(Fixture):
         self.assertIn("999999999999", html)
         self.assertIn("not in this data", html)
 
+    def test_no_format_gets_more_than_two_starters_and_a_skipped_gap_is_replaced_by_the_next(self):
+        gaps = self.mix["gaps"]
+        self.assertEqual({g["format"] for g in gaps[:3]}, {"carousel"})
+        mixed = gaps[:3] + [dict(gaps[3], format="static")] + gaps[4:]
+        starters = panels._starters(self.ctx_with(mix=dict(self.mix, gaps=mixed)))
+        gap_starters = [s for s in starters if s["title"].startswith("Test ")]
+        self.assertEqual([s["format"] for s in gap_starters], ["carousel", "carousel", "static"])
+        self.assertEqual(len(gap_starters), briefing.STARTER_GAPS)
+        counts = {}
+        for s in starters:
+            counts[s["format"]] = counts.get(s["format"], 0) + 1
+        self.assertLessEqual(max(counts.values()), briefing.STARTERS_PER_FORMAT)
+
+    def test_when_every_gap_is_in_one_format_only_two_gap_starters_are_made(self):
+        starters = panels._starters(self.ctx)
+        self.assertEqual(len([s for s in starters if s["title"].startswith("Test ")]), briefing.STARTERS_PER_FORMAT)
+
+    def test_the_cap_counts_iterate_starters_in_the_same_format(self):
+        iterate_formats = {self.ctx.record_index[str(e["ad"])]["format"] for e in self.verdicts["ads"] if e["verdict_id"] == "iterate"}
+        fmt = sorted(iterate_formats)[0]
+        crowded = [dict(g, format=fmt) for g in self.mix["gaps"][:3]] + self.mix["gaps"][3:]
+        ctx = self.ctx_with(mix=dict(self.mix, gaps=crowded))
+        counts = {}
+        for s in panels._starters(ctx):
+            counts[s["format"]] = counts.get(s["format"], 0) + 1
+        self.assertLessEqual(max(counts.values()), briefing.STARTERS_PER_FORMAT)
+
+    def test_reference_ads_are_the_concepts_best_in_other_formats_plus_the_formats_best(self):
+        ctx = self.ctx
+        for s in panels._starters(ctx):
+            if not s["title"].startswith("Test "):
+                continue
+            gap = next(g for g in self.mix["gaps"] if panels.briefing.gap_label(panels._plain(g["concept"]), panels._plain(g["format"])) == s["make"])
+            ranked = lambda ads: sorted((a for a in ads if a.get("roas") is not None), key=lambda a: -a["roas"])
+            own = ranked(a for a in ctx.ads if a.get("concept") == gap["concept"] and (a.get("format") or "unknown") != gap["format"])[:2]
+            best = ranked(a for a in ctx.ads if (a.get("format") or "unknown") == gap["format"])[:1]
+            expected = []
+            for a in own + best:
+                if panels._ad_key(a) not in expected:
+                    expected.append(panels._ad_key(a))
+            self.assertEqual(s["refs"], expected[:panels.STRIP_ADS], s["title"])
+            self.assertEqual(len(set(s["refs"])), len(s["refs"]))
+            self.assertLessEqual(len(s["refs"]), panels.STRIP_ADS)
+
+    def test_what_to_make_is_dropped_when_the_title_already_says_it(self):
+        ctx = self.ctx
+        card = panels._starter_card(ctx, 1, {"title": "Test calm in static", "make": "calm in static", "why": "w", "refs": [], "judged": "j", "prompt": "p"})
+        self.assertNotIn("What to make", card)
+        card = panels._starter_card(ctx, 1, {"title": "A new version of x", "make": "A new version of x, keeping the concept.", "why": "w", "refs": [], "judged": "j", "prompt": "p"})
+        self.assertIn("What to make", card)
+        html, _ = panels.ready_briefs(ctx)
+        self.assertEqual(html.count("<dt>What to make</dt>"), sum(1 for s in panels._starters(ctx) if not s["title"].startswith("Test ")))
+
     def test_without_a_briefs_file_there_are_starters_from_gaps_and_iterate_ads(self):
         html, state = panels.ready_briefs(self.ctx)
         self.assertEqual(state, "data")
         cards = html.count('<article class="brief-card"')
         iterate = sum(1 for e in self.verdicts["ads"] if e["verdict_id"] == "iterate")
-        self.assertEqual(cards, 3 + min(2, iterate))
+        self.assertEqual(cards, len(panels._starters(self.ctx)))
+        self.assertTrue(briefing.STARTERS_PER_FORMAT < cards <= briefing.STARTER_GAPS + min(briefing.STARTER_ITERATE, iterate))
         self.assertIn("a new version of", html.lower())
         self.assertIn("Write the full brief", html)
 
@@ -607,8 +661,8 @@ class CommandLineTest(Fixture):
 class TemplateTest(unittest.TestCase):
     def test_the_open_ad_preview_column_is_sized_to_the_image(self):
         css = (ROOT / "skills" / "creative-report" / "assets" / "report-template.html").read_text()
-        self.assertIn("grid-template-columns: fit-content(460px) minmax(0, 1fr)", css)
-        self.assertNotIn("grid-template-columns: minmax(0, 460px) minmax(0, 1fr)", css)
+        self.assertIn("grid-template-columns: minmax(0, 480px) minmax(0, 1fr)", css)
+        self.assertNotIn("fit-content(460px)", css)
 
 
 if __name__ == "__main__":

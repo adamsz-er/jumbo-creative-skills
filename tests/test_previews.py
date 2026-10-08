@@ -158,7 +158,7 @@ class CardImageTest(unittest.TestCase):
             with_image = panels.ad_card(ctx, {"ad": "7", "ad_name": "x", "format": "static"})
             again = panels.ad_card(ctx, {"ad": "7", "ad_name": "x", "format": "static"})
             without = panels.ad_card(ctx, {"ad": "8", "ad_name": "x", "format": "static"})
-        self.assertRegex(with_image, r'<svg class="pv" role="img" aria-label="[^"]+\(static\)" viewBox="0 0 2 2" width="2" height="2"><use href="#pv-7" width="2" height="2"/></svg>')
+        self.assertRegex(with_image, r'<svg class="pv" role="img" aria-label="[^"]+\(static\)" viewBox="0 0 2 2" preserveAspectRatio="xMidYMid slice" width="2" height="2"><use href="#pv-7" width="2" height="2"/></svg>')
         self.assertNotIn("data:image", with_image)
         self.assertEqual(ctx.previews.sprite().count("data:image/png"), 1)
         self.assertEqual(with_image, again)
