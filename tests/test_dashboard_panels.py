@@ -29,6 +29,15 @@ BALANCED = ("section", "table", "svg", "div", "ul", "thead", "tbody", "tr", "td"
             "header", "footer", "main", "figure")
 
 
+
+def spacing_px(css):
+    """Resolve the template's spacing tokens (var(--space-*), --pad-*, --gap-cards, --nav-w) to their px values."""
+    tokens = dict(re.findall(r"--((?:space|pad|gap|nav)-[\w-]+): ([^;]+);", css))
+    for _ in range(2):
+        css = re.sub(r"var\(--((?:space|pad|gap|nav)-[\w-]+)\)", lambda m: tokens.get(m.group(1), m.group(0)).strip(), css)
+    return css
+
+
 class Balance(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -849,7 +858,7 @@ class ShellTest(unittest.TestCase):
         cls.verdicts = acme_verdicts()
         cls.html = report.build_html(rows=cls.rows, verdicts=cls.verdicts, grade=acme_grade(), currency="USD", title="Acme",
                                      source="Meta ads connector", attribution="7-day click", completeness="reconciled")
-        cls.css = squash(re.search(r"<style>(.*?)</style>", cls.html, re.S).group(1))
+        cls.css = squash(spacing_px(re.search(r"<style>(.*?)</style>", cls.html, re.S).group(1)))
         cls.header = re.search(r'<header class="top">.*?</header>', cls.html, re.S).group(0)
 
     def block(self, opener):
@@ -967,7 +976,7 @@ class ShellTest(unittest.TestCase):
         bar = re.search(r'<div class="scope-bar".*?</div>\s*(<p class="scope-note">[^<]*</p>\s*)?</header>', self.header, re.S).group(0)
         segments = re.findall(r'<div class="scope-seg"><span class="scope-label">([^<]*)</span> <b>([^<]*)</b></div>', bar)
         self.assertEqual(segments, [("Window", "1 Mar – 30 Mar 2026"), ("Scope", "all ads in the data"), ("Currency", "USD"), ("Source", "Meta ads connector"), ("Attribution", "7-day click")])
-        self.assertRegex(self.css, r"\.scope-bar \{[^}]*background: var\(--bar\)[^}]*border-radius: 12px")
+        self.assertRegex(self.css, r"\.scope-bar \{[^}]*background: var\(--bar\)[^}]*border-radius: var\(--radius-lg\)")
         self.assertRegex(self.css, r"\.scope-seg \{[^}]*border-right: 1px solid var\(--bar-border\)")
         self.assertRegex(self.css, r"\.scope-bar \{[^}]*flex-wrap: wrap")
 
@@ -984,7 +993,7 @@ class ShellTest(unittest.TestCase):
             self.assertRegex(link, r'<svg class="ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"[^>]*stroke="currentColor"')
         self.assertNotIn("<nav", self.header)
         self.assertLess(self.html.index('<nav class="tabs"'), self.html.index('<main'))
-        self.assertRegex(self.css, r"nav\.tabs \{[^}]*position: sticky[^}]*top: 16px")
+        self.assertRegex(self.css, r"nav\.tabs \{[^}]*position: sticky[^}]*top: 0[^}]*padding-top: 12px")
         self.assertRegex(self.css, r"\.shell \{[^}]*grid-template-columns: 208px minmax\(0, 1fr\)")
         self.assertRegex(self.css, r'nav\.tabs a\[aria-current="true"\] \{[^}]*background: var\(--accent-soft\)[^}]*color: var\(--accent\)')
 
@@ -1001,7 +1010,7 @@ class ShellTest(unittest.TestCase):
         self.assertTrue(first.strip().startswith('<section class="card panel"'))
 
     def test_section_cards_use_eyebrow_title_and_the_agreed_padding_and_gap(self):
-        self.assertRegex(self.css, r"section\.card \{[^}]*padding: 20px[^}]*margin: 16px 0")
+        self.assertRegex(self.css, r"section\.card \{[^}]*padding: 20px[^}]*margin: 0 0 16px")
         self.assertRegex(self.css, r"section\.panel > h3:first-of-type \{[^}]*font-size: 20px[^}]*font-weight: 600")
         self.assertRegex(self.css, r"\.eyebrow \{[^}]*font: 600 12px[^}]*text-transform: uppercase[^}]*color: var\(--accent\)")
 
@@ -1040,7 +1049,7 @@ class ShellTest(unittest.TestCase):
         self.assertNotIn("function pin", self.html)
 
     def test_the_kpi_strip_is_an_auto_fill_grid_of_compact_tiles(self):
-        self.assertRegex(self.css, r"\.kpis \{[^}]*grid-template-columns: repeat\(auto-fill, minmax\(180px, 1fr\)\)[^}]*gap: 12px")
+        self.assertRegex(self.css, r"\.kpis \{[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)[^}]*gap: 12px")
         self.assertRegex(self.css, r"\.kpi-name \{[^}]*font: 600 12px[^}]*letter-spacing: \.04em[^}]*text-transform: uppercase[^}]*color: var\(--text-muted\)")
         self.assertRegex(self.css, r"\.kpi-value \{[^}]*font: 700 24px")
         self.assertRegex(self.css, r"svg\.spark \{[^}]*width: 100%[^}]*height: 28px")
@@ -1048,6 +1057,12 @@ class ShellTest(unittest.TestCase):
         self.assertNotRegex(self.css, r"\.kpi\.unknown \{[^}]*dashed")
         for tone in ("up", "down", "flat"):
             self.assertRegex(self.css, r"\.pill\.%s \{[^}]*background: var\(--%s-bg\)[^}]*color: var\(--%s-fg\)" % (tone, tone, tone))
+
+    def test_small_multiples_use_column_counts_that_divide_four_and_eight_charts(self):
+        self.assertRegex(self.css, r"\.multiples \{[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)")
+        self.assertRegex(self.css, r"@media \(max-width: 760px\) \{ \.multiples \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)")
+        self.assertNotIn("auto-fill, minmax(260px", self.css)
+        self.assertRegex(self.block("@media (max-width: 480px) {"), r"\.multiples \{ grid-template-columns: minmax\(0, 1fr\)")
 
     def test_at_390px_nothing_forces_a_sideways_scroll(self):
         phone = self.block("@media (max-width: 480px) {")
@@ -1067,13 +1082,30 @@ class ShellTest(unittest.TestCase):
         self.assertRegex(self.html, r"@media print[^@]*section\.tab\[hidden\]\s*\{\s*display: block !important")
         self.assertEqual(self.css.count("@media print"), 1)
 
+    def test_the_verdict_follows_the_metrics_and_only_the_actions_sit_at_the_card_foot(self):
+        foot = self.block(".ad-foot {")
+        self.assertNotIn("margin-top: auto", foot)
+        self.assertIn("flex: 1", foot)
+        self.assertIn("margin: auto 0 0", self.block(".ad-foot > .card-actions {"))
+
+    def test_wide_charts_fill_their_card_and_keep_their_text_size_on_a_phone(self):
+        self.assertIn("max-height: none", self.block("figure.chart.wide:not(.fit) svg {"))
+        import charts
+        self.assertIn("figure.chart.wide svg { min-width: 720px; }", self.css)
+        self.assertIn("figure.chart.heat svg { min-width: 540px; }", self.css)
+        for build in (lambda: charts.line_chart(["a", "b", "c"], [{"name": "x", "values": [1, 2, 3], "colour": "#000", "kind": "line"}], "t", str, "u"),
+                      lambda: charts.stacked_area(["a", "b"], [("x", [40, 60], "#000"), ("y", [60, 40], "#111")], "t"),
+                      lambda: charts.stacked_bars(["a", "b"], [("x", [1, 2], "#000"), ("y", [2, 1], "#111")], "t", "u"),
+                      lambda: charts.bars_with_dots(["a", "b"], [40.0, 60.0], [1, 2], [1.0, 2.0], str, "d", "t")):
+            self.assertIn('viewBox="0 0 880 300"', build())
+
 
 class ReviewFixesTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.rows = cm.load_rows(str(FIXTURE))
         cls.html = report.build_html(rows=cls.rows, verdicts=acme_verdicts(), grade=acme_grade(), currency="USD", title="Acme")
-        cls.css = squash(re.search(r"<style>(.*?)</style>", cls.html, re.S).group(1))
+        cls.css = squash(spacing_px(re.search(r"<style>(.*?)</style>", cls.html, re.S).group(1)))
 
     def test_every_chart_svg_scales_with_its_card_and_has_no_fixed_size(self):
         svgs = re.findall(r"<figure class=\"chart[^\"]*\"><svg[^>]*>", self.html)

@@ -240,7 +240,15 @@ class MetricPillTest(Fixture):
 
 
 def template_text():
-    return (ASSETS / "report-template.html").read_text()
+    return spacing_px((ASSETS / "report-template.html").read_text())
+
+
+def spacing_px(css):
+    """Resolve the template's spacing tokens (var(--space-*), --pad-*, --gap-cards, --nav-w) to their px values."""
+    tokens = dict(re.findall(r"--((?:space|pad|gap|nav)-[\w-]+): ([^;]+);", css))
+    for _ in range(2):
+        css = re.sub(r"var\(--((?:space|pad|gap|nav)-[\w-]+)\)", lambda m: tokens.get(m.group(1), m.group(0)).strip(), css)
+    return css
 
 
 def css_rule(selector):
@@ -305,19 +313,19 @@ class CardDesignTest(Fixture):
         self.assertIn("var(--surface-muted)", img)
         self.assertIn("height: 100%", css_rule(".ad-img svg.pv"))
         fmt = css_rule(".fmt-badge")
-        for text in ("rgb(0 0 0 / .6)", "font: 500 10px", "padding: 2px 6px", "border-radius: 4px", "text-transform: capitalize", "bottom: 8px", "left: 8px"):
+        for text in ("rgb(0 0 0 / .6)", "font: 500 11px", "padding: 2px 8px", "border-radius: var(--radius-xs)", "text-transform: capitalize", "bottom: 8px", "left: 8px"):
             self.assertIn(text, fmt)
         self.assertIn("top: 8px", css_rule(".v-corner"))
         self.assertIn("right: 8px", css_rule(".v-corner"))
         body = css_rule(".ad-body")
-        self.assertIn("padding: 12px", body)
+        self.assertIn("padding: 16px", body)
         title = css_rule(".ad-body h4")
         for text in ("font: 500 13px", "-webkit-line-clamp: 2", "min-height: 2lh"):
             self.assertIn(text, title)
-        for text in ("font: 500 10px", "border-radius: 4px", "var(--surface-muted)"):
+        for text in ("font: 500 11px", "border-radius: var(--radius-xs)", "var(--surface-muted)"):
             self.assertIn(text, css_rule(".ad-tag"))
         pill = css_rule(".m-pill")
-        for text in ("border-radius: 999px", "var(--heat, transparent)"):
+        for text in ("border-radius: var(--radius-pill)", "var(--heat, transparent)"):
             self.assertIn(text, pill)
         self.assertIn("justify-content: space-between", css_rule(".m-row"))
         self.assertIn("font-size: 12px", css_rule(".m-row"))
@@ -328,7 +336,7 @@ class CardDesignTest(Fixture):
             self.assertIn(token, text)
         self.assertEqual(text.count("--tone-scale-bg: hsl(160 84% 51% / .06);"), 2)
         self.assertEqual(text.count("--tone-warn-bg: hsl(38 92% 50% / .06);"), 2)
-        self.assertIn("border-left: 4px solid var(--danger)", css_rule('.ad-card[data-tone="pause"]'))
+        self.assertIn("background: var(--danger)", css_rule('.ad-card[data-tone="pause"]::after'))
 
     def test_the_placeholder_has_the_gradient_and_hides_its_second_line_in_a_narrow_tile(self):
         ph = css_rule(".ph")
@@ -479,7 +487,7 @@ class DialogDesignTest(Fixture):
         dialog = css_rule("dialog.ad-dialog")
         for text in ("max-width: 1024px", "width: calc(100% - 32px)", "max-height: 90vh", "padding: 0", "overflow: auto"):
             self.assertIn(text, dialog)
-        self.assertIn("padding: 20px 24px", css_rule(".dlg-head"))
+        self.assertIn("padding: 20px 20px", css_rule(".dlg-head"))
         shell = re.search(r"<dialog[^>]*>.*?</dialog>", self.html, re.S).group(0)
         for text in ('id="ad-dialog-title"', 'class="dlg-sub"', 'class="dlg-chip"', 'data-action="close-dialog"'):
             self.assertIn(text, shell)
@@ -496,7 +504,7 @@ class DialogDesignTest(Fixture):
         self.assertLess(main.index("<h5>Verdict</h5>"), main.index("<h5>How to improve</h5>"))
         self.assertRegex(template_text(), r"@media \(min-width: 768px\) \{[^@]*dialog\.ad-dialog \.ob-top \{ display: grid; grid-template-columns: minmax\(0, 480px\) minmax\(0, 1fr\)")
         self.assertIn("max-width: 480px", css_rule(".open-body .ob-media svg.pv, .open-body .ob-media .ph"))
-        self.assertIn("border-radius: 12px", css_rule(".open-body .ob-media svg.pv, .open-body .ob-media .ph"))
+        self.assertIn("border-radius: var(--radius-lg)", css_rule(".open-body .ob-media svg.pv, .open-body .ob-media .ph"))
 
     def test_the_numbers_table_leaves_out_video_rates_for_a_still_and_reads_n_a_with_the_reason(self):
         still = next(a for a in self.ctx.ads if "video" not in str(a["format"]))

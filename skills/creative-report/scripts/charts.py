@@ -417,7 +417,7 @@ def heatmap(row_labels: Sequence[str], col_labels: Sequence[str], cells: Sequenc
     left, head, cw, rh = 156, 46, 84, 28
     width, height = left + cw * len(col_labels) + 8, head + rh * len(row_labels) + 8
     peak = max((spend for line in cells for _, spend in line), default=0) or 1.0
-    parts = ['<figure class="chart wide heat"><svg viewBox="0 0 %d %d" role="img" aria-label="%s">' % (width, height, esc(label))]
+    parts = ['<figure class="chart wide heat"><svg viewBox="0 0 %d %d" width="%d" role="img" aria-label="%s">' % (width, height, width, esc(label))]
     parts.append('<defs><pattern id="hatch-%s" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">'
                  '<line class="hatch-line" x1="0" y1="0" x2="0" y2="7"/></pattern></defs>' % esc(uid))
     for j, name in enumerate(col_labels):
@@ -543,7 +543,7 @@ def _points(values: Sequence[Optional[float]], px: Callable[[int], float], py: C
 def line_chart(labels: Sequence[str], lines: Sequence[Dict[str, Any]], label: str, fmt: Callable[[float], str], unit: str,
                bars: Optional[Sequence[Optional[float]]] = None, bar_fmt: Optional[Callable[[float], str]] = None, bar_name: str = "", bar_unit: str = "",
                tip_fmt: Optional[Callable[[float], str]] = None, bar_tip_fmt: Optional[Callable[[float], str]] = None,
-               x_text: Callable[[str], str] = day_label, width: int = 640, height: int = 280, legend: bool = True, caption: str = "") -> str:
+               x_text: Callable[[str], str] = day_label, width: int = 880, height: int = 300, legend: bool = True, caption: str = "") -> str:
     """Time lines over shared x labels, with optional faint background bars on a second (right) axis.
 
     Each line is {"name", "values", "colour", "kind"}; kind is "line" or "daily" (dots with tips; daily is a light tint), "avg"
@@ -606,7 +606,7 @@ def line_chart(labels: Sequence[str], lines: Sequence[Dict[str, Any]], label: st
 
 
 def stacked_area(labels: Sequence[str], series: Sequence[Tuple[str, Sequence[float], str]], label: str, caption: str = "",
-                 x_text: Callable[[str], str] = day_label, width: int = 640, height: int = 280) -> str:
+                 x_text: Callable[[str], str] = day_label, width: int = 880, height: int = 300) -> str:
     """Share of the whole by day: series are (name, shares in percent that sum to 100 each day, colour). Hover a day for every share."""
     count = len(labels)
     if count < 2 or len(series) < 2:
@@ -645,7 +645,7 @@ def stacked_area(labels: Sequence[str], series: Sequence[Tuple[str, Sequence[flo
 
 
 def stacked_bars(labels: Sequence[str], series: Sequence[Tuple[str, Sequence[float], str]], label: str, unit: str, caption: str = "",
-                 width: int = 640, height: int = 280) -> str:
+                 width: int = 880, height: int = 300) -> str:
     """Counts per x slot stacked by series: series are (name, counts, colour)."""
     count = len(labels)
     totals = [sum(sh[i] for _, sh, _ in series) for i in range(count)]
@@ -738,7 +738,7 @@ MIN_BUCKET_ADS = 3  # arbitrary default: a bucket with fewer ads than this is di
 
 
 def bars_with_dots(labels: Sequence[str], shares: Sequence[Optional[float]], counts: Sequence[int], dots: Sequence[Optional[float]],
-                   dot_fmt: Callable[[float], str], dot_name: str, label: str, caption: str = "", width: int = 640, height: int = 280,
+                   dot_fmt: Callable[[float], str], dot_name: str, label: str, caption: str = "", width: int = 880, height: int = 300,
                    dot_tip_fmt: Optional[Callable[[float], str]] = None) -> str:
     """Bars of spend share per bucket with a dot per bucket on a second, right-hand axis, its value written above it.
 
