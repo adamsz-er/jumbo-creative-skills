@@ -1365,10 +1365,10 @@ class ReviewPythonTest(Fixture):
         tile = re.search(r'<div class="kpi[^"]*"><p class="kpi-name">Hook rate.*?</div></div>', html, re.S).group(0)
         self.assertIn("25.00%", tile)
         self.assertNotIn("12.50%", tile)
-        self.assertIn("(1 of 2 video ads)", tile)
+        self.assertIn("(1 of 1 video ads)", tile)
         hold = re.search(r'<div class="kpi[^"]*"><p class="kpi-name">Hold rate.*?</div></div>', html, re.S).group(0)
         self.assertIn("40.00%", hold)
-        self.assertIn("(1 of 2 video ads)", hold)
+        self.assertIn("(1 of 1 video ads)", hold)
 
     def test_the_funnel_rates_the_video_steps_on_video_impressions(self):
         html, _ = panels.funnel(panels.Ctx(rows=two_ads(), currency="USD"))

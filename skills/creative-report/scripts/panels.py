@@ -91,7 +91,7 @@ def table(header: Sequence[Tuple[str, bool]], body: Sequence[str], stack: bool =
         " tall" if len(body) > TALL_ROWS else "", ' class="stack"' if stack else "", head, "".join(body))
 
 
-_NA_REASON = re.compile(r"n/a \((.*)\)", re.S)
+_NA_REASON = re.compile(r"n/a \((.*?)\)\Z", re.S)
 
 
 def na_cell(ctx: "Ctx", text: Any) -> str:
@@ -587,11 +587,15 @@ def video_rows(rows: Optional[Sequence[Dict[str, Any]]], key: str) -> List[Dict[
 
 
 def video_basis(ctx: "Ctx", key: str) -> str:
-    """The one coverage statement for a video rate, "(derived, N of M video ads)" or "(N of M video ads)": N ads have days with the plays the rate needs."""
-    used = [video_rows(ctx.rows_by_ad.get(_ad_key(a), []), key) for a in ctx.ads]
-    have = [rows for rows in used if rows]
-    derived = any(_is_derived(rows) for rows in have)
-    return "(%s%d of %d video ads)" % ("derived, " if derived else "", len(have), len(ctx.ads))
+    """The one coverage statement for a video rate: "(derived, N of M video ads)" or "(N of M video ads)", N ads having days with the plays the
+    rate needs and M the ads in a video format (or with plays). With no ad format known there is no M: "(N ads with 3-second plays)"."""
+    used = [(a, video_rows(ctx.rows_by_ad.get(_ad_key(a), []), key)) for a in ctx.ads]
+    have = [rows for _, rows in used if rows]
+    derived = "derived, " if any(_is_derived(rows) for rows in have) else ""
+    if all(interact.is_video(a.get("format")) is None for a in ctx.ads):
+        return "(%s%d ads with 3-second plays)" % (derived, len(have))
+    total = sum(1 for a, rows in used if rows or interact.is_video(a.get("format")))
+    return "(%s%d of %d video ads)" % (derived, len(have), total)
 
 
 def video_ads(ctx: "Ctx", key: str) -> int:
@@ -669,7 +673,6 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
     prior_total = totals(ctx.prior) if ctx.prior else None
     series = daily(ctx.rows)
     ctr_basis = cm.metric_basis(total, "ctr")["numerator"]
-    derived = total.get("video_views_3s_source") == "derived"
     gone = gone_metrics(ctx)
     tiles = []
     needs = {"spend": ("spend",), "impressions": ("impressions",), "conversions": ("conversions",), "conversion_value": ("conversion_value",),
@@ -691,8 +694,6 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
         label = name
         if key == "ctr" and ctr_basis == "clicks":
             label = "CTR (all clicks)"
-        if key == "hook_rate" and derived:
-            label += " (derived)"
         if key == "frequency" and ctx.account and ctx.account.get("frequency_computed"):
             label += " (computed)"
         value, reason = ("n/a", "") if key in gone else _tile_value(text)
@@ -880,24 +881,24 @@ def _sum_column(rows: Sequence[Dict[str, Any]], aliases: Sequence[str]) -> Tuple
 INCONSISTENT = "n/a (inconsistent counts)"
 
 
-def video_step(rows: Sequence[Dict[str, Any]], field: str) -> Tuple[str, str]:
-    """Share and step rate of a video step. Numerator and denominator come from the same rows (those carrying both the step and impressions),
+def video_step(rows: Sequence[Dict[str, Any]], field: str) -> Tuple[Optional[float], str, str]:
+    """Count, share and step rate of a video step. Numerator and denominator come from the same rows (those carrying both the step and impressions),
     so a share can never pass 100%: static and carousel ads have no plays, and counting their impressions would dilute it."""
     used = [r for r in rows if r.get(field) is not None and r.get("impressions") is not None]
     base = sum(r["impressions"] for r in used)
     if not base:
-        return "n/a (no video impressions)", "n/a (no video impressions)"
+        return None, "n/a (no video impressions)", "n/a (no video impressions)"
     count = sum(r[field] for r in used)
     ads = len({str(r.get("ad_id") or r.get("ad_name")) for r in used})
     share = INCONSISTENT if count > base else "%.2f%% of video impressions (on %d video ads)" % (count / base * 100, ads)
     if field == "video_views_3s":
-        return share, share
+        return count, share, share
     both = [r for r in used if r.get("video_views_3s") is not None]
     plays = sum(r["video_views_3s"] for r in both)
     thru = sum(r["video_thruplay"] for r in both)
     if not plays:
-        return share, "n/a (no 3-second plays)"
-    return share, INCONSISTENT if thru > plays else "%.2f%% of 3-second plays" % (thru / plays * 100)
+        return count, share, "n/a (no 3-second plays)"
+    return count, share, INCONSISTENT if thru > plays else "%.2f%% of 3-second plays" % (thru / plays * 100)
 
 
 def funnel(ctx: Ctx) -> Tuple[str, str]:
@@ -919,7 +920,8 @@ def funnel(ctx: Ctx) -> Tuple[str, str]:
         share = "n/a" if not base else "%.2f%%" % (value / base * 100)
         video_rate = video_step(ctx.rows, field) if field in VIDEO_KPIS.get("hold_rate") else None
         if video_rate:
-            share, rate = video_rate
+            used, share, rate = video_rate
+            value = value if used is None else used
         elif previous is None and name != "Impressions":
             rate = "n/a (no earlier step)"
         elif gap:
@@ -933,7 +935,7 @@ def funnel(ctx: Ctx) -> Tuple[str, str]:
                          % (esc(name), "{:,.0f}".format(value), na_cell(ctx, share), na_cell(ctx, rate)))
         previous, gap = value, None
     note = ('<p class="muted">Video steps count video ads only, so a step can be larger than the one before it where other formats add '
-            'clicks. 3-second plays and ThruPlays are rated on video impressions %s; the other steps on all impressions.</p>'
+            'clicks. 3-second plays are rated on video impressions %s and each video step on the ads that carry it; the other steps on all impressions.</p>'
             % video_basis(ctx, "hook_rate"))
     partial = coverage(ctx.ads, [f for _, f in FUNNEL_STEPS if f in cm.NUMERIC_FIELDS])
     if partial:
@@ -1140,6 +1142,8 @@ def ads_table(ctx: Ctx, records: Sequence[Dict[str, Any]]) -> str:
         ad = ctx.ad_index.get(key)
         cls = entry_class(ctx.verdict_index[key]) if key in ctx.verdict_index and "verdict_id" in ctx.verdict_index[key] else None
         numbers = [_kpi_text(ctx, ad, m, kind) if ad else "n/a" for m, kind in (("spend", "money0"), ("roas", "x2"), ("cpa", "money2"), ("ctr", "pct"), ("hook_rate", "pct"))]
+        if ad and ad.get("hook_rate") is None and interact.is_video(rec.get("format")) is False:
+            numbers[-1] = "n/a (not a video ad)"
         cells = ['<td class="adname"><button type="button" class="link" data-open="%s">%s</button></td>' % (esc(key), esc(rec["label"])),
                  '<td data-label="Format">%s</td>' % esc(interact.format_label(rec.get("format"))),
                  '<td data-label="Verdict">%s</td>' % (verdict_chip(cls) if cls else "")]
@@ -1392,7 +1396,7 @@ def format_scorecard(ctx: Ctx) -> Tuple[str, str]:
             elif key in VIDEO_KPIS:
                 used = video_rows(_ad_rows(ctx, ads), key)
                 if not used:
-                    value, reason = None, _na("not video")
+                    value, reason = None, _na("not a video ad")
                 else:
                     total = totals(used)
                     value = cm.compute_metrics(total)[key]

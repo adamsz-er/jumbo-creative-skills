@@ -12,6 +12,9 @@ sys.path.insert(0, str(ROOT / "skills" / "creative-report" / "scripts"))
 sys.path.insert(0, str(ROOT / "skills" / "creative-review" / "scripts"))
 
 import creative_metrics as cm  # noqa: E402
+import shutil
+import subprocess
+import tempfile
 import panels  # noqa: E402
 import report  # noqa: E402
 from review_support import FIXTURE, Scratch, run  # noqa: E402
@@ -72,7 +75,7 @@ class CoverageBasisTest(unittest.TestCase):
             {"format": "video", "ads": 5, "share": 90.0, "roas": 3.0, "cpa": 20.0}, {"format": "static", "ads": 1, "share": 10.0, "roas": 3.0, "cpa": 20.0}]})
 
     def test_one_helper_states_the_basis_with_derived_named(self):
-        self.assertEqual(panels.video_basis(self.ctx, "hook_rate"), "(derived, 4 of 6 video ads)")
+        self.assertEqual(panels.video_basis(self.ctx, "hook_rate"), "(derived, 4 of 5 video ads)")
         self.assertEqual(panels.video_basis(panels.Ctx(rows=[video_row("a", 1000, plays=300, thru=90)]), "hook_rate"), "(1 of 1 video ads)")
 
     def test_tiles_funnel_scorecard_and_scatter_state_the_same_basis(self):
@@ -81,11 +84,66 @@ class CoverageBasisTest(unittest.TestCase):
                    "scorecard": panels.format_scorecard(self.ctx)[0], "scatter": panels.video_hook_hold(self.ctx)[0]}
         for name, html in outputs.items():
             self.assertIn(expected, html, name)
-            self.assertEqual({n for n, _ in tracked(html)}, {4}, name)
+            self.assertEqual({(n, m) for n, m in tracked(html)}, {(4, 5)}, name)
 
     def test_the_scatter_says_how_many_of_those_ads_also_have_hold(self):
         html, _ = panels.video_hook_hold(self.ctx)
         self.assertRegex(html, r"\d+ of these also have a hold rate")
+
+
+class ReviewFixesTest(unittest.TestCase):
+    def setUp(self):
+        self.ctx = panels.Ctx(rows=mixed_rows())
+
+    def test_the_total_counts_video_format_ads_not_every_ad(self):
+        self.assertEqual(panels.video_basis(self.ctx, "hook_rate"), "(derived, 2 of 3 video ads)")
+
+    def test_with_no_known_format_it_names_the_ads_with_plays_instead(self):
+        rows = [{k: v for k, v in r.items() if k != "ad_name"} | {"ad_name": "plain %s" % r["ad_id"]} for r in mixed_rows()]
+        self.assertEqual(panels.video_basis(panels.Ctx(rows=rows), "hook_rate"), "(derived, 2 ads with 3-second plays)")
+
+    def test_the_funnel_note_rates_only_the_hook_on_the_hook_basis(self):
+        note = panels.funnel(self.ctx)[0].split("Video steps count")[1]
+        self.assertNotIn("and ThruPlays are rated", note)
+        self.assertIn("3-second plays are rated", note)
+
+    def test_the_funnel_count_is_the_count_the_share_was_read_on(self):
+        rows = [video_row("a", 1000, plays=400, thru=100), video_row("b", 2000, plays=500)]
+        rows[1].pop("impressions")
+        html, _ = panels.funnel(panels.Ctx(rows=rows))
+        plays = next(r for r in html.split("<tr>") if r.startswith("<td>3-second plays"))
+        self.assertIn(">400<", plays)
+
+    def test_the_hook_tile_says_derived_once(self):
+        tile = re.search(r'<p class="kpi-name">Hook rate.*?</div></div>', panels.kpi_strip(self.ctx)[0], re.S).group(0)
+        self.assertEqual(tile.count("derived"), 1)
+        self.assertNotIn("Hook rate (derived)", tile)
+
+    def test_a_static_ad_reads_not_a_video_ad_in_the_table_and_the_detail(self):
+        ctx = panels.Ctx(rows=mixed_rows())
+        static = next(r for r in ctx.records if "static" in str(r["format"]))
+        table = panels.ads_table(ctx, [static])
+        self.assertIn('title="not a video ad">n/a', table)
+        self.assertNotIn("missing 3-second plays", table)
+
+    def test_a_reason_keeps_every_bracket_up_to_the_last_one(self):
+        ctx = panels.Ctx(rows=mixed_rows())
+        self.assertIn('title="missing a (b)"', panels.na_cell(ctx, "n/a (missing a (b))"))
+        self.assertIn('title="x) (y"', panels.na_cell(ctx, "n/a (x) (y)"))
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed")
+    def test_the_client_side_table_gives_a_missing_value_its_reason(self):
+        page = report.build_html(rows=mixed_rows(), currency="USD")
+        script = re.search(r"<script>(.*?)</script>", page, re.S).group(1)
+        body = ("var a = {spend: 10, impressions: 1000, format: 'static'}; var v = {spend: 10, impressions: 1000, format: 'ugc-video', conversions: 0};"
+                "console.log(JSON.stringify([CR.naReason(a, 'hook'), CR.naReason(v, 'hook'), CR.naReason(a, 'roas'), CR.naReason(v, 'cpa'), CR.naReason(a, 'spend')]));")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "run.js"
+            path.write_text("var module = {exports: {}};\n" + script + "\nvar CR = module.exports;\n" + body)
+            done = subprocess.run(["node", str(path)], capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(json.loads(done.stdout), ["not a video ad", "missing 3-second plays", "missing purchase value", "zero purchases", None])
+        self.assertIn("naReason(a, c[0])", script)
 
 
 class QuietNaTest(unittest.TestCase):

@@ -168,9 +168,9 @@ class FormatTest(Fixture):
     def test_hook_and_hold_are_not_applicable_to_a_format_without_three_second_plays(self):
         html, _ = panels.format_scorecard(self.ctx)
         static = [r for r in self.rows_of(html) if ">Static<" in r][0]
-        self.assertEqual(static.count('title="not video">n/a'), 2)
+        self.assertEqual(static.count('title="not a video ad">n/a'), 2)
         video = [r for r in self.rows_of(html) if ">UGC video<" in r][0]
-        self.assertNotIn('title="not video"', video)
+        self.assertNotIn('title="not a video ad"', video)
 
     def test_each_format_row_has_a_strip_of_at_most_three_top_spend_ads_that_carry_data_ad(self):
         html, _ = panels.format_scorecard(self.ctx)

@@ -347,7 +347,8 @@ class KpiTest(unittest.TestCase):
                               "impressions": 10000.0, "cost_per_action_type:video_view": 0.5123}])
         self.assertEqual(rows[0]["video_views_3s_source"].split(":")[0], "derived")
         derived, _ = panels.kpi_strip(panels.Ctx(rows=rows, currency="USD"))
-        self.assertIn("Hook rate (derived)", derived)
+        self.assertIn("(derived, 1 of 1 video ads)", derived)
+        self.assertNotIn("Hook rate (derived)", derived)
         reported, _ = panels.kpi_strip(panels.Ctx(rows=self.rows, currency="USD"))
         self.assertNotIn("(derived)", reported)
 
