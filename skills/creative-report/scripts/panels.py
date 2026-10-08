@@ -981,10 +981,10 @@ def verdict_board(ctx: Ctx) -> Tuple[str, str]:
         if not ordered:
             rows.append('<p class="muted board-none">%s: no ads.</p>' % esc(VERDICT_LABEL[cls]))
             continue
-        check = lambda e: '<p class="check"><b>Check first:</b> %s</p>' % esc(e.get("check") or PAUSE_CHECK) if cls == "kill" else ""
-        cards = "".join(compact_card(ctx, e.get("ad"), check(e)) for e in ordered[:ctx.top_n])
-        rows.append('<section class="v-row v-row-%s"><h3>%s <span class="count">%d</span></h3><div class="v-strip">%s</div>%s</section>'
-                    % (cls, verdict_chip(cls), len(ordered), cards, compact_list(ctx, ordered[ctx.top_n:], "%s ads" % VERDICT_LABEL[cls].lower())))
+        cards = "".join(compact_card(ctx, e.get("ad")) for e in ordered[:ctx.top_n])
+        checks = "".join('<p class="check"><b>Check first:</b> %s</p>' % esc(text) for text in dict.fromkeys(e.get("check") or PAUSE_CHECK for e in ordered)) if cls == "kill" else ""
+        rows.append('<section class="v-row v-row-%s"><h3>%s <span class="count">%d</span></h3>%s<div class="v-strip">%s</div>%s</section>'
+                    % (cls, verdict_chip(cls), len(ordered), checks, cards, compact_list(ctx, ordered[ctx.top_n:], "%s ads" % VERDICT_LABEL[cls].lower())))
     lead = ('<p class="muted">Each verdict has its own strip, money at risk first. Each strip shows its top %d ads by spend at stake (N=%d, a default you can change when you rebuild the report) '
             'as small cards you can scroll sideways; click one to open it. The rest are collapsed.</p>' % (ctx.top_n, ctx.top_n))
     return note + basis + lead + '<div class="board">%s</div>' % "".join(rows), "data"

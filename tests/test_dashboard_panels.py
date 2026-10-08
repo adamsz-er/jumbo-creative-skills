@@ -130,7 +130,7 @@ class PanelStateTest(unittest.TestCase):
             self.assertIn(name, html)
         pauses = [e for e in self.verdicts["ads"] if e["verdict_id"].startswith("pause")]
         self.assertTrue(pauses)
-        self.assertGreaterEqual(html.count("Check first:"), len(pauses))
+        self.assertEqual(html.count("Check first:"), 1)
         self.assertIn(panels.PAUSE_CHECK, panels.ad_card(self.ctx, {"ad": "1", "ad_name": "n", "verdict_id": "pause_fatigued"}))
 
     def test_board_shows_top_n_per_column_and_collapses_the_rest(self):

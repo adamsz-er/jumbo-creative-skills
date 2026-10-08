@@ -602,12 +602,17 @@ class ReviewFixTest(Fixture):
         tallest = max(r.count('<article class="ad-card compact"') for r in rows)
         self.assertLessEqual(tallest, self.ctx.top_n)
 
-    def test_a_pause_strip_card_still_carries_its_check_line(self):
+    def test_the_pause_strip_says_check_first_once_not_on_every_card(self):
         ctx = self.all_class_verdicts()
         board, _ = panels.verdict_board(ctx)
         pause = re.search(r'<section class="v-row v-row-kill">.*?</section>', board, re.S).group(0)
-        self.assertIn("<b>Check first:</b> " + panels.esc(panels.PAUSE_CHECK), pause)
+        self.assertEqual(pause.count("<b>Check first:</b> " + panels.esc(panels.PAUSE_CHECK)), 1)
+        self.assertLess(pause.index("Check first:"), pause.index('class="v-strip"'))
+        self.assertNotIn("Check first:", pause.split('class="v-strip"')[1])
         self.assertNotIn("Check first:", re.search(r'<section class="v-row v-row-iterate">.*?</section>', board, re.S).group(0))
+        many = panels.Ctx(rows=self.rows, verdicts={"ads": [dict(e, verdict_id="pause_x") for e in self.verdicts["ads"][:3]], "summary": {}}, currency="USD")
+        board, _ = panels.verdict_board(many)
+        self.assertEqual(board.count("Check first:"), 1)
 
     def test_a_chip_on_a_preview_is_opaque_in_both_themes_while_inline_chips_stay_tinted(self):
         self.assertIn("background: var(--surface)", css_rule(".v-corner .badge"))
@@ -617,9 +622,10 @@ class ReviewFixTest(Fixture):
 
     def test_compact_cards_are_small_and_one_line(self):
         self.assertIn("aspect-ratio: 1 / 1", css_rule(".ad-card.compact .ad-img"))
-        h4 = css_rule(".ad-card.compact .ad-body h4")
-        self.assertIn("min-height: 0", h4)
-        self.assertIn("-webkit-line-clamp: 1", h4)
+        self.assertNotIn(".ad-card.compact .ad-body h4", template_text())
+        h4 = css_rule(".ad-body h4")
+        self.assertIn("-webkit-line-clamp: 2", h4)
+        self.assertIn("min-height: 2lh", h4)
         self.assertIn('title="', panels.compact_card(self.ctx, "120000000001"))
 
     def test_the_dialog_sits_in_the_middle_of_the_screen(self):
