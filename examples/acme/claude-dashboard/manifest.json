@@ -1,0 +1,119 @@
+{
+  "title": "Acme Outdoor Co. creative review",
+  "datasets": [
+    {
+      "id": "header",
+      "title": "Report header facts",
+      "description": "The report's title, window, scope, currency, source, attribution and whether the totals were reconciled.",
+      "file": "datasets/header.json",
+      "format": "json"
+    },
+    {
+      "id": "sections",
+      "title": "Panel data states",
+      "description": "Whether each panel of the report had its data, and why and how to get it when it did not.",
+      "file": "datasets/sections.json",
+      "format": "json"
+    },
+    {
+      "id": "kpis",
+      "title": "Key numbers",
+      "description": "Account totals for the window, one row per key number, with the change against the prior period when one was supplied.",
+      "file": "datasets/kpis.json",
+      "format": "json"
+    },
+    {
+      "id": "daily",
+      "title": "Daily performance",
+      "description": "Each measure per calendar day as a ratio of that day's sums, with a rolling average; a day with no data is a gap.",
+      "file": "datasets/daily.json",
+      "format": "json"
+    },
+    {
+      "id": "pareto",
+      "title": "Ads ranked by spend",
+      "description": "Every ad with spend, largest first, with the cumulative share of spend and of purchase value.",
+      "file": "datasets/pareto.json",
+      "format": "json"
+    },
+    {
+      "id": "pareto-cut",
+      "title": "Pareto cut and concentration",
+      "description": "How many top-spend ads carry the set share of purchase value, and how concentrated spend is.",
+      "file": "datasets/pareto-cut.json",
+      "format": "json"
+    },
+    {
+      "id": "verdict-board",
+      "title": "Verdict counts",
+      "description": "How many ads got each keep-or-kill verdict and the spend at stake behind them.",
+      "file": "datasets/verdict-board.json",
+      "format": "json"
+    },
+    {
+      "id": "verdicts",
+      "title": "Ad verdicts",
+      "description": "Every ad with its keep-or-kill verdict, confidence, spend at stake and key rates.",
+      "file": "datasets/verdicts.json",
+      "format": "json"
+    },
+    {
+      "id": "formats",
+      "title": "Format scorecard",
+      "description": "One row per format: ads, spend share and each rate, graded only against the account's other formats.",
+      "file": "datasets/formats.json",
+      "format": "json"
+    },
+    {
+      "id": "white-space",
+      "title": "Concept by format grid",
+      "description": "Ads and spend in each concept and format cell, with the numbered gaps worth testing.",
+      "file": "datasets/white-space.json",
+      "format": "json"
+    },
+    {
+      "id": "gaps",
+      "title": "Gaps worth testing",
+      "description": "Empty or single-ad cells beside a concept or format that performs well in this account, strongest first.",
+      "file": "datasets/gaps.json",
+      "format": "json"
+    },
+    {
+      "id": "briefing",
+      "title": "Briefs and starters",
+      "description": "Finished briefs from the briefs file, or brief starters built from the gaps and Iterate verdicts.",
+      "file": "datasets/briefing.json",
+      "format": "json"
+    },
+    {
+      "id": "notes",
+      "title": "Method and caveats",
+      "description": "The basis, every default used, what was read from which column, and what was missing from the inputs.",
+      "file": "datasets/notes.json",
+      "format": "json"
+    }
+  ],
+  "files": [
+    "index.html",
+    "dashboard.css",
+    "dashboard.js"
+  ],
+  "store": [
+    {
+      "doc": "dash/meta",
+      "file": "store/dash-meta.json"
+    },
+    {
+      "doc": "files/index.html",
+      "file": "store/files-index.html.json"
+    },
+    {
+      "doc": "files/dashboard.css",
+      "file": "store/files-dashboard.css.json"
+    },
+    {
+      "doc": "files/dashboard.js",
+      "file": "store/files-dashboard.js.json"
+    }
+  ]
+}

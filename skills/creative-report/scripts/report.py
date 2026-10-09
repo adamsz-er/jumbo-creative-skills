@@ -6,6 +6,8 @@ Usage:
       [--source "Meta ads connector"] [--completeness reconciled] [--where market=US] \\
       [--previews DIR] [--thumbs DIR] [--breakdowns FILE] [--briefs FILE] -o report.html
   python3 report.py --check report.html
+  python3 report.py ads.csv ... -o report.html --claude-dashboard DIR   # also write a Claude dashboard bundle
+  python3 report.py --check-dashboard DIR
 
 Standard library only. The page has the same header, six tabs and panels in the
 same order every run. A panel without its data renders a labelled empty state
@@ -23,11 +25,12 @@ import re
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import creative_metrics as cm  # noqa: E402
+import dashboard  # noqa: E402
 import interact  # noqa: E402
 import panels  # noqa: E402
 from panels import Ctx, esc  # noqa: E402
@@ -58,16 +61,24 @@ def lockup(tag: str) -> str:
 UNCHECKED_TIP = "Pull the account totals for the same window to check nothing is missing"
 
 
-def completeness_badge(value: Optional[str]) -> str:
-    """The reconcile result as a badge: green Reconciled, amber "Totals don't match" when a check ran and fell short, a neutral grey "Totals not checked" when none ran."""
+def completeness_state(value: Optional[str]) -> Tuple[str, str]:
+    """(tone, words) for the reconcile result: ok "Reconciled", warn "Totals don't match (X% short)" when a check ran and fell short,
+    neutral "Totals not checked" when none ran."""
     if value is None:
-        return '<span class="status neutral" title="%s">Totals not checked</span>' % esc(UNCHECKED_TIP)
+        return "neutral", "Totals not checked"
     if value.strip().lower() == "reconciled":
-        return '<span class="status ok">Reconciled</span>'
+        return "ok", "Reconciled"
     found = re.fullmatch(r"incomplete:\s*(\d+(?:\.\d+)?)\s*%?", value.strip(), re.I)
     if not found:
         raise ValueError('--completeness must be "reconciled" or "incomplete:<percent>", got %r' % value)
-    return '<span class="status warn">Totals don\'t match (%s%% short)</span>' % esc(found.group(1))
+    return "warn", "Totals don't match (%s%% short)" % found.group(1)
+
+
+def completeness_badge(value: Optional[str]) -> str:
+    """The reconcile result as a badge: green, amber or a neutral grey with a tip saying how to check it."""
+    tone, words = completeness_state(value)
+    tip = ' title="%s"' % esc(UNCHECKED_TIP) if tone == "neutral" else ""
+    return '<span class="status %s"%s>%s</span>' % (tone, tip, words)
 
 
 def collect_notes(grade, verdicts, mix) -> List[str]:
@@ -162,6 +173,7 @@ def tabs_html(ctx: Ctx) -> str:
         for panel_id, eyebrow, heading, fn in tab_panels:
             ctx.na_reasons = {}
             content, state = fn(ctx)
+            ctx.panel_states.append({"tab": tab_id, "panel": panel_id, "heading": heading, "state": state, "html": content})
             content += panels.na_footnote(ctx)
             inner.append('<section class="card panel" id="panel-%s" data-state="%s"><p class="eyebrow">%s</p><h3>%s</h3>%s</section>'
                          % (panel_id, state, esc(eyebrow), esc(heading), content))
@@ -171,8 +183,9 @@ def tabs_html(ctx: Ctx) -> str:
     return "".join(out)
 
 
-def footer_html(ctx: Ctx, grade, verdicts, mix, brand: Optional[str], completeness: Optional[str], attribution: str,
-                source: str, window: str, generated: str, caps: Dict[str, Any], scope: Optional[str] = None) -> str:
+def method_lines(ctx: Ctx, grade, verdicts, brand: Optional[str], completeness: Optional[str], attribution: str,
+                 source: str, window: str, caps: Dict[str, Any], scope: Optional[str] = None) -> List[str]:
+    """The footer's "Data and method" lines: the basis, every default used, the reconcile and what was read from which column."""
     lines = ["Graded against this account's own ads, never benchmarks.",
              "Metric ids and formulas are defined in creative-context/references/metrics.md."]
     if brand:
@@ -222,6 +235,12 @@ def footer_html(ctx: Ctx, grade, verdicts, mix, brand: Optional[str], completene
     lines.append("Industry figures: %s." % ("; ".join(panels.benchmarks.source_lines(ctx.benchmarks_used)) + ". Shown as context beside your own numbers; they never change a grade, verdict or the order of what to do first"
                                            if ctx.benchmarks_used else "none shown"))
     lines.append(ctx.previews.summary())
+    return lines
+
+
+def footer_html(ctx: Ctx, grade, verdicts, mix, brand: Optional[str], completeness: Optional[str], attribution: str,
+                source: str, window: str, generated: str, caps: Dict[str, Any], scope: Optional[str] = None) -> str:
+    lines = method_lines(ctx, grade, verdicts, brand, completeness, attribution, source, window, caps, scope)
     notes = collect_notes(grade, verdicts, mix)
     notes_html = '<ul class="note-list">%s</ul>' % "".join("<li>%s</li>" % n for n in notes) if notes else "<p>Nothing was missing from the inputs.</p>"
     return ('<footer><details class="method" open><summary>Data and method</summary><div class="basis"><pre>%s</pre></div>'
@@ -231,7 +250,19 @@ def footer_html(ctx: Ctx, grade, verdicts, mix, brand: Optional[str], completene
             % (esc("\n".join(lines)), notes_html, lockup("f"), esc(generated)))
 
 
-def build_html(rows: Optional[Sequence[Dict[str, Any]]] = None, grade: Optional[Dict[str, Any]] = None,
+def header_facts(ctx: Ctx, scope: Optional[str], currency: Optional[str], source: str, attribution: str) -> List[Tuple[str, str]]:
+    """The scope bar under the title, as (label, words) pairs in order."""
+    start, end = cm.data_window(ctx.rows)
+    return [("Window", format_window(start, end)), ("Scope", scope or "all ads in the data"), ("Currency", currency or "account currency (not stated)"),
+            ("Source", source), ("Attribution", attribution)]
+
+
+def build_html(*args: Any, **kwargs: Any) -> str:
+    """Render the dashboard; the arguments are build_report's."""
+    return build_report(*args, **kwargs)[0]
+
+
+def build_report(rows: Optional[Sequence[Dict[str, Any]]] = None, grade: Optional[Dict[str, Any]] = None,
                verdicts: Optional[Dict[str, Any]] = None, mix: Optional[Dict[str, Any]] = None,
                profile: Optional[str] = None, title: Optional[str] = None, generated: Optional[str] = None,
                currency: Optional[str] = None, source: str = "Ads Manager export", attribution: Optional[str] = None,
@@ -240,11 +271,13 @@ def build_html(rows: Optional[Sequence[Dict[str, Any]]] = None, grade: Optional[
                top_n: int = panels.TOP_N_CARDS, pareto_share: float = panels.PARETO_SHARE,
                breakdowns: Optional[Sequence[Dict[str, Any]]] = None, briefs: Optional[Any] = None,
                scope: Optional[str] = None, key_map: Optional[Dict[str, str]] = None,
-               changes: Optional[Dict[str, Any]] = None) -> str:
-    """Render the dashboard. `rows` are normalised ad rows (creative_metrics.load_rows).
+               changes: Optional[Dict[str, Any]] = None) -> Tuple[str, Ctx]:
+    """Render the dashboard and return (html, ctx). `rows` are normalised ad rows (creative_metrics.load_rows).
 
     The title is `title` when given, else the brand from the profile; `scope`
     (for example "market US") is added to it and to the header and footer.
+    The ctx keeps what the page showed outside the panels (title, header facts, the completeness
+    state, the method lines and the caveats) so the Claude dashboard bundle reads the same values.
     """
     ctx = Ctx(rows=rows, verdicts=verdicts, grade=grade, mix=mix, currency=currency, top_n=top_n,
               pareto_share=pareto_share, account=account, prior=prior, previews=previews, breakdowns=breakdowns, briefs=briefs,
@@ -261,13 +294,16 @@ def build_html(rows: Optional[Sequence[Dict[str, Any]]] = None, grade: Optional[
     body = tabs_html(ctx)
     pool, data, bar = panels.pool_html(ctx), panels.data_block(ctx), panels.filter_bar(ctx)
     caps = {"max_kb": ctx.previews.max_kb, "budget_kb": ctx.previews.budget_kb}
-    meta = "".join('<div class="scope-seg"><span class="scope-label">%s</span> <b>%s</b></div>' % (esc(k), esc(v)) for k, v in (
-        ("Window", format_window(start, end)), ("Scope", scope or "all ads in the data"), ("Currency", currency or "account currency (not stated)"), ("Source", source),
-        ("Attribution", attribution)))
+    ctx.page_title, ctx.generated = page_title, generated
+    ctx.header_facts = header_facts(ctx, scope, currency, source, attribution)
+    ctx.completeness = completeness_state(completeness)
+    ctx.method_lines = method_lines(ctx, grade, verdicts, brand, completeness, attribution, source, window, caps, scope)
+    ctx.caveats = collect_notes(grade, verdicts, mix)
+    meta = "".join('<div class="scope-seg"><span class="scope-label">%s</span> <b>%s</b></div>' % (esc(k), esc(v)) for k, v in ctx.header_facts)
     fills = {"title": esc(page_title), "heading": heading, "sprite": ctx.previews.sprite(), "brand": lockup("h"),
              "filterbar": bar, "scope_note": panels.previews_note(ctx), "dialog": panels.DIALOG, "data": data, "pool": pool, "meta": meta, "badge": badge, "nav": nav_html(), "body": body,
              "footer": footer_html(ctx, grade, verdicts, mix, brand, completeness, attribution, source, window, generated, caps, scope)}
-    return re.sub(r"\{\{(\w+)\}\}", lambda m: fills[m.group(1)], TEMPLATE.read_text(encoding="utf-8"))
+    return re.sub(r"\{\{(\w+)\}\}", lambda m: fills[m.group(1)], TEMPLATE.read_text(encoding="utf-8")), ctx
 
 
 def detect_currency(path: Optional[str]) -> Optional[str]:
@@ -374,6 +410,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                                         "default: read from --where")
     parser.add_argument("--key-map", help="extra KEY=field pairs for KEY:value ad names, e.g. PX=concept,6=tone")
     parser.add_argument("--check", metavar="HTML", help="check a built dashboard's structure and exit (no browser needed)")
+    parser.add_argument("--claude-dashboard", metavar="DIR", help="also write the report as a native Claude dashboard bundle into DIR "
+                                                                  "(datasets, page files and manifest.json); the HTML is written as usual")
+    parser.add_argument("--check-dashboard", metavar="DIR", help="check a Claude dashboard bundle offline and exit")
     cm.add_run_arguments(parser, profile=False)
     parser.add_argument("--source", default="Ads Manager export", help='data source shown in the header (pass "Meta ads connector" for a connector pull)')
     parser.add_argument("--attribution", help="attribution setting shown in the header (default: not stated)")
@@ -396,6 +435,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         problems = check_html(Path(args.check).read_text(encoding="utf-8"))
         print("\n".join(["problem: " + p for p in problems] or ["OK: structure checks passed (this is not a visual check)"]))
         return 1 if problems else 0
+    if args.check_dashboard:
+        problems = dashboard.check_bundle(args.check_dashboard)
+        print("\n".join(["problem: " + p for p in problems] or ["OK: the Claude dashboard bundle passed every check"]))
+        return 1 if problems else 0
     if not any((args.data, args.grade, args.verdicts, args.mix)):
         parser.error("give a CSV of ad rows, or at least one of --grade, --verdicts, --mix")
     try:
@@ -403,17 +446,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         where = cm.parse_where(args.where)
         prior = cm.filter_rows(cm.load_rows(args.prior), where, key_map) if args.prior else None
         profile = Path(args.profile).read_text(encoding="utf-8") if args.profile else None
-        page = build_html(rows=rows, grade=_load_json(args.grade), verdicts=_load_json(args.verdicts), mix=_load_json(args.mix),
-                          profile=profile, title=args.title, currency=args.currency or detect_currency(args.data) or detect_currency(args.csv),
-                          source=args.source, attribution=args.attribution, completeness=args.completeness,
-                          account=load_account(args.account), prior=prior,
-                          previews=Previews(args.previews, args.thumbs, args.preview_max_kb, args.preview_budget_kb),
-                          top_n=args.top_n, pareto_share=args.pareto_share, scope=args.scope or cm.describe_where(where),
-                          breakdowns=cm.load_rows(args.breakdowns) if args.breakdowns else None, briefs=_load_json(args.briefs),
-                          key_map=key_map, changes=_load_json(args.changes))
+        page, ctx = build_report(rows=rows, grade=_load_json(args.grade), verdicts=_load_json(args.verdicts), mix=_load_json(args.mix),
+                                 profile=profile, title=args.title, currency=args.currency or detect_currency(args.data) or detect_currency(args.csv),
+                                 source=args.source, attribution=args.attribution, completeness=args.completeness,
+                                 account=load_account(args.account), prior=prior,
+                                 previews=Previews(args.previews, args.thumbs, args.preview_max_kb, args.preview_budget_kb),
+                                 top_n=args.top_n, pareto_share=args.pareto_share, scope=args.scope or cm.describe_where(where),
+                                 breakdowns=cm.load_rows(args.breakdowns) if args.breakdowns else None, briefs=_load_json(args.briefs),
+                                 key_map=key_map, changes=_load_json(args.changes))
     except (OSError, ValueError) as error:
         parser.error(str(error))
     Path(args.output).write_text(page, encoding="utf-8")
+    if args.claude_dashboard:
+        manifest = dashboard.write_bundle(ctx, args.claude_dashboard)
+        run_notes.append("wrote the Claude dashboard bundle to %s (%d datasets, %d page files)"
+                         % (args.claude_dashboard, len(manifest["datasets"]), len(manifest["files"])))
     print("\n".join(run_notes + ["wrote %s" % args.output]))
     return 0
 

@@ -3,7 +3,7 @@ name: creative-report
 description: Build one fixed, branded creative dashboard (overview, Pareto, keep and kill, with ad previews) as a self-contained HTML file that opens in any browser, prints to PDF and can be shared. Use when the user wants a shareable creative review, a dashboard or report for a client or team, or asks to "put this in a report". Needs ad performance data; any panel without its data shows why and how to get it.
 license: MIT
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
   role: analyse
 ---
 
@@ -99,6 +99,10 @@ Same header, tabs and panels in the same order every run. A panel with no data i
 2. Run `python3 -I scripts/report.py --check report.html` and fix anything it names. It checks every tab and panel is present in order with a known state, the completeness badge and the Scope line, that the only outside request is the font stylesheet, that no script loads from a file, that no missing value reads as 0, and the file size. It is a floor, not a visual check.
 3. Then open it and look: nothing clipped or overlapping, logo visible in light and dark, charts labelled, text readable at phone width and when printed. Do not hand over a report you have not looked at. If no browser you are allowed to use is available, say so plainly, give the `--check` result, and ask the user to look.
 4. Say what the report does not cover (missing fields, unclassified names, ads too young, the scope) in your reply, not just on the page.
+
+## Publish as a Claude dashboard
+
+Where the session's artifact tool lists a **Dashboard** type, also publish the report as a native Claude dashboard, where a reader can click any number to see its source. Add `--claude-dashboard dashboard/` to the `report.py` command, run `python3 -I scripts/report.py --check-dashboard dashboard/` (it must print OK), then create one dashboard from the type, upload each dataset file and write everything in one batch, step by step as in `references/claude-dashboard.md`. Tell the user it is showing, that anyone who can open it can read the attached data, and that the HTML file is the version to share outside Claude (it alone has the ad previews). If no Dashboard type is offered, build the HTML as above and say why.
 
 ## Guardrails
 
