@@ -1,0 +1,14 @@
+{
+  "name": "jumbo-creative-skills",
+  "owner": {
+    "name": "adamsz-er"
+  },
+  "description": "Agent skills for analysing and making Meta ad creative for any brand.",
+  "plugins": [
+    {
+      "name": "jumbo-creative",
+      "source": "./",
+      "description": "Skills that teach any brand to analyse and make Meta ad creative: brand context, metric definitions, grading against your own account baseline, fatigue and briefs."
+    }
+  ]
+}

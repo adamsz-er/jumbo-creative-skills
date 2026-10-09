@@ -1,0 +1,508 @@
+{
+ "data": [
+  {
+   "id": "120000000101",
+   "name": "durability-test | ugc-video | creator-01 | bau | trail-boot | lofi | 2026-01-15",
+   "created_time": "2026-01-15T09:30:00+0000",
+   "date_start": "2026-03-01",
+   "date_stop": "2026-03-01",
+   "objective": "OUTCOME_SALES",
+   "campaign_name": "Acme | always-on sales",
+   "spend": {
+    "value": "304.56",
+    "unit": "USD"
+   },
+   "impressions": "23,823",
+   "reach": 19769,
+   "link_click": 413,
+   "clicks": 611,
+   "omni_purchase": 11,
+   "omni_purchase_values": {
+    "value": "686.25",
+    "unit": "USD"
+   },
+   "omni_add_to_cart": 22,
+   "cost_per_action_type:video_view": {
+    "value": "0.043765",
+    "unit": "USD"
+   },
+   "video_thruplay_watched_actions": [
+    {
+     "action_type": "video_view",
+     "value": "2268"
+    }
+   ]
+  },
+  {
+   "id": "120000000101",
+   "name": "durability-test | ugc-video | creator-01 | bau | trail-boot | lofi | 2026-01-15",
+   "created_time": "2026-01-15T09:30:00+0000",
+   "date_start": "2026-03-02",
+   "date_stop": "2026-03-02",
+   "objective": "OUTCOME_SALES",
+   "campaign_name": "Acme | always-on sales",
+   "spend": {
+    "value": "151.26",
+    "unit": "USD"
+   },
+   "impressions": "15,100",
+   "reach": 10783,
+   "link_click": 137,
+   "clicks": 222,
+   "omni_purchase": 13,
+   "omni_purchase_values": {
+    "value": "736.78",
+    "unit": "USD"
+   },
+   "omni_add_to_cart": 52,
+   "cost_per_action_type:video_view": {
+    "value": "0.026588",
+    "unit": "USD"
+   },
+   "video_thruplay_watched_actions": [
+    {
+     "action_type": "video_view",
+     "value": "2235"
+    }
+   ]
+  },
+  {
+   "id": "120000000101",
+   "name": "durability-test | ugc-video | creator-01 | bau | trail-boot | lofi | 2026-01-15",
+   "created_time": "2026-01-15T09:30:00+0000",
+   "date_start": "2026-03-03",
+   "date_stop": "2026-03-03",
+   "objective": "OUTCOME_SALES",
+   "campaign_name": "Acme | always-on sales",
+   "spend": {
+    "value": "179.24",
+    "unit": "USD"
+   },
+   "impressions": "14,160",
+   "reach": 11235,
+   "link_click": 124,
+   "clicks": 162,
+   "omni_purchase": 5,
+   "omni_purchase_values": {
+    "value": "281.02",
+    "unit": "USD"
+   },
+   "omni_add_to_cart": 20,
+   "cost_per_action_type:video_view": {
+    "value": "0.044654",
+    "unit": "USD"
+   },
+   "video_thruplay_watched_actions": [
+    {
+     "action_type": "video_view",
+     "value": "1156"
+    }
+   ]
+  },
+  {
+   "id": "120000000102",
+   "name": "problem-first | ugc-video | creator-02 | bau | rain-shell | lofi | 2026-01-20",
+   "created_time": "2026-01-20T11:00:00+0000",
+   "date_start": "2026-03-01",
+   "date_stop": "2026-03-01",
+   "objective": "OUTCOME_SALES",
+   "campaign_name": "Acme | always-on sales",
+   "spend": {
+    "value": "180.20",
+    "unit": "USD"
+   },
+   "impressions": "15,400",
+   "reach": 11979,
+   "link_click": 215,
+   "clicks": 336,
+   "omni_purchase": 9,
+   "omni_purchase_values": {
+    "value": "595.14",
+    "unit": "USD"
+   },
+   "omni_add_to_cart": 36,
+   "cost_per_action_type:video_view": {
+    "value": "0.030830",
+    "unit": "USD"
+   },
+   "video_thruplay_watched_actions": [
+    {
+     "action_type": "video_view",
+     "value": "2332"
+    }
+   ]
+  },
+  {
+   "id": "120000000102",
+   "name": "problem-first | ugc-video | creator-02 | bau | rain-shell | lofi | 2026-01-20",
+   "created_time": "2026-01-20T11:00:00+0000",
+   "date_start": "2026-03-02",
+   "date_stop": "2026-03-02",
+   "objective": "OUTCOME_SALES",
+   "campaign_name": "Acme | always-on sales",
+   "spend": {
+    "value": "118.16",
+    "unit": "USD"
+   },
+   "impressions": "11,726",
+   "reach": 9453,
+   "link_click": 126,
+   "clicks": 178,
+   "omni_purchase": 3,
+   "omni_purchase_values": {
+    "value": "256.95",
+    "unit": "USD"
+   },
+   "omni_add_to_cart": 12,
+   "cost_per_action_type:video_view": {
+    "value": "0.037041",
+    "unit": "USD"
+   },
+   "video_thruplay_watched_actions": [
+    {
+     "action_type": "video_view",
+     "value": "1178"
+    }
+   ]
+  },
+  {
+   "id": "120000000102",
+   "name": "problem-first | ugc-video | creator-02 | bau | rain-shell | lofi | 2026-01-20",
+   "created_time": "2026-01-20T11:00:00+0000",
+   "date_start": "2026-03-03",
+   "date_stop": "2026-03-03",
+   "objective": "OUTCOME_SALES",
+   "campaign_name": "Acme | always-on sales",
+   "spend": {
+    "value": "185.98",
+    "unit": "USD"
+   },
+   "impressions": "21,665",
+   "reach": 15382,
+   "link_click": 351,
+   "clicks": 486,
+   "omni_purchase": 2,
+   "omni_purchase_values": {
+    "value": "140.04",
+    "unit": "USD"
+   },
+   "omni_add_to_cart": 6,
+   "cost_per_action_type:video_view": {
+    "value": "0.026205",
+    "unit": "USD"
+   },
+   "video_thruplay_watched_actions": [
+    {
+     "action_type": "video_view",
+     "value": "2015"
+    }
+   ]
+  },
+  {
+   "id": "120000000103",
+   "name": "founder-story | static | creator-03 | bau | trail-boot | polished | 2026-02-10",
+   "created_time": "2026-02-10T08:15:00+0000",
+   "date_start": "2026-03-01",
+   "date_stop": "2026-03-01",
+   "objective": "OUTCOME_SALES",
+   "campaign_name": "Acme | always-on sales",
+   "spend": {
+    "value": "152.70",
+    "unit": "USD"
+   },
+   "impressions": "15,504",
+   "reach": 12663,
+   "link_click": 140,
+   "clicks": 200,
+   "omni_purchase": 8,
+   "omni_purchase_values": {
+    "value": "483.07",
+    "unit": "USD"
+   },
+   "omni_add_to_cart": 16
+  },
+  {
+   "id": "120000000103",
+   "name": "founder-story | static | creator-03 | bau | trail-boot | polished | 2026-02-10",
+   "created_time": "2026-02-10T08:15:00+0000",
+   "date_start": "2026-03-02",
+   "date_stop": "2026-03-02",
+   "objective": "OUTCOME_SALES",
+   "campaign_name": "Acme | always-on sales",
+   "spend": {
+    "value": "133.26",
+    "unit": "USD"
+   },
+   "impressions": "12,311",
+   "reach": 8637,
+   "link_click": 170,
+   "clicks": 267,
+   "omni_purchase": 5,
+   "omni_purchase_values": {
+    "value": "376.77",
+    "unit": "USD"
+   },
+   "omni_add_to_cart": 15
+  },
+  {
+   "id": "120000000103",
+   "name": "founder-story | static | creator-03 | bau | trail-boot | polished | 2026-02-10",
+   "created_time": "2026-02-10T08:15:00+0000",
+   "date_start": "2026-03-03",
+   "date_stop": "2026-03-03",
+   "objective": "OUTCOME_SALES",
+   "campaign_name": "Acme | always-on sales",
+   "spend": {
+    "value": "138.48",
+    "unit": "USD"
+   },
+   "impressions": "13,291",
+   "reach": 10139,
+   "link_click": 169,
+   "clicks": 286,
+   "omni_purchase": 2,
+   "omni_purchase_values": {
+    "value": "179.15",
+    "unit": "USD"
+   },
+   "omni_add_to_cart": 6
+  },
+  {
+   "id": "120000000104",
+   "name": "comparison | carousel | creator-04 | bau | camp-stove | polished | 2026-02-12",
+   "created_time": "2026-02-12T14:45:00+0000",
+   "date_start": "2026-03-01",
+   "date_stop": "2026-03-01",
+   "objective": "OUTCOME_SALES",
+   "campaign_name": "Acme | always-on sales",
+   "spend": {
+    "value": "163.07",
+    "unit": "USD"
+   },
+   "impressions": "18,966",
+   "reach": 16115,
+   "link_click": 194,
+   "clicks": 329,
+   "omni_purchase": 11,
+   "omni_purchase_values": {
+    "value": "858.86",
+    "unit": "USD"
+   },
+   "omni_add_to_cart": 44
+  },
+  {
+   "id": "120000000104",
+   "name": "comparison | carousel | creator-04 | bau | camp-stove | polished | 2026-02-12",
+   "created_time": "2026-02-12T14:45:00+0000",
+   "date_start": "2026-03-02",
+   "date_stop": "2026-03-02",
+   "objective": "OUTCOME_SALES",
+   "campaign_name": "Acme | always-on sales",
+   "spend": {
+    "value": "99.29",
+    "unit": "USD"
+   },
+   "impressions": "10,379",
+   "reach": 8805,
+   "link_click": 115,
+   "clicks": 185,
+   "omni_purchase": 7,
+   "omni_purchase_values": {
+    "value": "493.13",
+    "unit": "USD"
+   },
+   "omni_add_to_cart": 21
+  },
+  {
+   "id": "120000000104",
+   "name": "comparison | carousel | creator-04 | bau | camp-stove | polished | 2026-02-12",
+   "created_time": "2026-02-12T14:45:00+0000",
+   "date_start": "2026-03-03",
+   "date_stop": "2026-03-03",
+   "objective": "OUTCOME_SALES",
+   "campaign_name": "Acme | always-on sales",
+   "spend": {
+    "value": "130.50",
+    "unit": "USD"
+   },
+   "impressions": "11,434",
+   "reach": 8158,
+   "link_click": 124,
+   "clicks": 191,
+   "omni_purchase": 7,
+   "omni_purchase_values": {
+    "value": "511.90",
+    "unit": "USD"
+   },
+   "omni_add_to_cart": 28
+  },
+  {
+   "id": "120000000105",
+   "name": "season-launch | ugc-video | creator-05 | launch | rain-shell | lofi | 2026-02-27",
+   "created_time": "2026-02-27T07:00:00+0000",
+   "date_start": "2026-03-01",
+   "date_stop": "2026-03-01",
+   "objective": "OUTCOME_SALES",
+   "campaign_name": "Acme | always-on sales",
+   "spend": {
+    "value": "228.09",
+    "unit": "USD"
+   },
+   "impressions": "24,850",
+   "reach": 20497,
+   "link_click": 313,
+   "clicks": 485,
+   "omni_purchase": 6,
+   "omni_purchase_values": {
+    "value": "526.27",
+    "unit": "USD"
+   },
+   "omni_add_to_cart": 12,
+   "cost_per_action_type:video_view": {
+    "value": "0.037478",
+    "unit": "USD"
+   },
+   "video_thruplay_watched_actions": [
+    {
+     "action_type": "video_view",
+     "value": "1448"
+    }
+   ]
+  },
+  {
+   "id": "120000000105",
+   "name": "season-launch | ugc-video | creator-05 | launch | rain-shell | lofi | 2026-02-27",
+   "created_time": "2026-02-27T07:00:00+0000",
+   "date_start": "2026-03-02",
+   "date_stop": "2026-03-02",
+   "objective": "OUTCOME_SALES",
+   "campaign_name": "Acme | always-on sales",
+   "spend": {
+    "value": "161.22",
+    "unit": "USD"
+   },
+   "impressions": "15,441",
+   "reach": 12399,
+   "link_click": 212,
+   "clicks": 282,
+   "omni_purchase": 2,
+   "omni_purchase_values": {
+    "value": "118.72",
+    "unit": "USD"
+   },
+   "omni_add_to_cart": 4,
+   "cost_per_action_type:video_view": {
+    "value": "0.035731",
+    "unit": "USD"
+   },
+   "video_thruplay_watched_actions": [
+    {
+     "action_type": "video_view",
+     "value": "1132"
+    }
+   ]
+  },
+  {
+   "id": "120000000105",
+   "name": "season-launch | ugc-video | creator-05 | launch | rain-shell | lofi | 2026-02-27",
+   "created_time": "2026-02-27T07:00:00+0000",
+   "date_start": "2026-03-03",
+   "date_stop": "2026-03-03",
+   "objective": "OUTCOME_SALES",
+   "campaign_name": "Acme | always-on sales",
+   "spend": {
+    "value": "275.49",
+    "unit": "USD"
+   },
+   "impressions": "21,832",
+   "reach": 16123,
+   "link_click": 330,
+   "clicks": 467,
+   "omni_purchase": 4,
+   "omni_purchase_values": {
+    "value": "376.35",
+    "unit": "USD"
+   },
+   "omni_add_to_cart": 16,
+   "cost_per_action_type:video_view": {
+    "value": "0.056650",
+    "unit": "USD"
+   },
+   "video_thruplay_watched_actions": [
+    {
+     "action_type": "video_view",
+     "value": "1438"
+    }
+   ]
+  },
+  {
+   "id": "120000000106",
+   "name": "gift-guide | static | creator-06 | promo | camp-stove | polished | 2026-02-20",
+   "created_time": "2026-02-20T16:20:00+0000",
+   "date_start": "2026-03-01",
+   "date_stop": "2026-03-01",
+   "objective": "OUTCOME_SALES",
+   "campaign_name": "Acme | always-on sales",
+   "spend": {
+    "value": "149.57",
+    "unit": "USD"
+   },
+   "impressions": "11,429",
+   "reach": 8480,
+   "link_click": 119,
+   "clicks": 155,
+   "omni_purchase": 6,
+   "omni_purchase_values": {
+    "value": "436.97",
+    "unit": "USD"
+   },
+   "omni_add_to_cart": 18
+  },
+  {
+   "id": "120000000106",
+   "name": "gift-guide | static | creator-06 | promo | camp-stove | polished | 2026-02-20",
+   "created_time": "2026-02-20T16:20:00+0000",
+   "date_start": "2026-03-02",
+   "date_stop": "2026-03-02",
+   "objective": "OUTCOME_SALES",
+   "campaign_name": "Acme | always-on sales",
+   "spend": {
+    "value": "108.82",
+    "unit": "USD"
+   },
+   "impressions": "10,981",
+   "reach": 7763,
+   "link_click": 157,
+   "clicks": 265,
+   "omni_purchase": 3,
+   "omni_purchase_values": {
+    "value": "181.61",
+    "unit": "USD"
+   },
+   "omni_add_to_cart": 9
+  },
+  {
+   "id": "120000000106",
+   "name": "gift-guide | static | creator-06 | promo | camp-stove | polished | 2026-02-20",
+   "created_time": "2026-02-20T16:20:00+0000",
+   "date_start": "2026-03-03",
+   "date_stop": "2026-03-03",
+   "objective": "OUTCOME_SALES",
+   "campaign_name": "Acme | always-on sales",
+   "spend": {
+    "value": "279.96",
+    "unit": "USD"
+   },
+   "impressions": "23,756",
+   "reach": 20123,
+   "link_click": 387,
+   "clicks": 593,
+   "omni_purchase": 4,
+   "omni_purchase_values": {
+    "value": "225.61",
+    "unit": "USD"
+   },
+   "omni_add_to_cart": 16
+  }
+ ]
+}
