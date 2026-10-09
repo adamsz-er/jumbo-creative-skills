@@ -97,6 +97,8 @@ Scripts live in `skills/<skill>/scripts/`. `creative_metrics.py` and `from_mcp.p
 | `report.py` | `--briefs` | none | JSON list of briefs written with creative-brief and hook-writer |
 | `report.py` | `--changes` | none | `changes.json` from creative-review: adds "What changed since last time" |
 | `report.py` | `--check` | none | check a built dashboard's structure and exit (no browser needed) |
+| `report.py` | `--check-dashboard` | none | check a Claude dashboard bundle offline and exit |
+| `report.py` | `--claude-dashboard` | none | also write the report as a native Claude dashboard bundle into this folder; the HTML is written as usual |
 | `report.py` | `--completeness` | absent: Totals not checked | `reconciled` or `incomplete:<percent>`, only from a real reconcile |
 | `report.py` | `--csv` | none | the CSV behind the JSON files, only to read the currency from its spend header |
 | `report.py` | `--currency` | read from the export's spend header | three-letter currency code for money |

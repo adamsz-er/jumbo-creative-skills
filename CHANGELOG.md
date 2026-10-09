@@ -18,3 +18,4 @@
 - README restyled for GitHub: copyable install steps, dashboard screenshot.
 - Docs: the README is rewritten as the front door (install, quick start, a diagram of how the skills fit, a which-skill table, known limits). New `docs/how-it-works.md` (with every command-line flag, kept in step with the scripts by a test), `docs/faq.md` and `docs/troubleshooting.md`; every skill gains "How to use" and "Common questions" sections, and `creative-context` carries an agent-facing FAQ so a single installed skill can still answer how-do-I questions.
 - Dashboard spacing and layout polish.
+- creative-report can publish the dashboard as a native Claude dashboard.

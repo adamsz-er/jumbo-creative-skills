@@ -1,0 +1,1255 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "creative-report/dashboard-schema.json",
+  "title": "Creative report: Claude dashboard datasets",
+  "description": "What report.py --claude-dashboard writes: one array of flat rows per dataset id. x-version is the schema version (the header dataset repeats it); x-key the column or columns that tell rows apart; x-unit currency (the report currency), percent (already times 100), ratio, count, days, date, per-row (the row's own unit column) or text; x-note the sibling column that says why the value is null, so a value is null exactly when its note is set. Metric columns use the metric ids in creative-context/references/metrics.md.",
+  "x-version": 1,
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "header": {
+      "$ref": "#/$defs/header"
+    },
+    "sections": {
+      "$ref": "#/$defs/sections"
+    },
+    "kpis": {
+      "$ref": "#/$defs/kpis"
+    },
+    "daily": {
+      "$ref": "#/$defs/daily"
+    },
+    "pareto": {
+      "$ref": "#/$defs/pareto"
+    },
+    "pareto-cut": {
+      "$ref": "#/$defs/pareto-cut"
+    },
+    "verdict-board": {
+      "$ref": "#/$defs/verdict-board"
+    },
+    "verdicts": {
+      "$ref": "#/$defs/verdicts"
+    },
+    "formats": {
+      "$ref": "#/$defs/formats"
+    },
+    "white-space": {
+      "$ref": "#/$defs/white-space"
+    },
+    "gaps": {
+      "$ref": "#/$defs/gaps"
+    },
+    "briefing": {
+      "$ref": "#/$defs/briefing"
+    },
+    "notes": {
+      "$ref": "#/$defs/notes"
+    }
+  },
+  "$defs": {
+    "header": {
+      "type": "array",
+      "description": "The report header: one fact per row (title, window, scope, currency, source, attribution, completeness, generated, images, schema version).",
+      "x-key": "fact",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "fact",
+          "value",
+          "tone"
+        ],
+        "properties": {
+          "fact": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "value": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "tone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-unit": "text",
+            "enum": [
+              "ok",
+              "warn",
+              "neutral",
+              null
+            ],
+            "description": "Completeness only: ok reconciled, warn short, neutral not checked."
+          }
+        }
+      }
+    },
+    "sections": {
+      "type": "array",
+      "description": "Each HTML panel's state as it rendered; why and how to get the data for an empty one.",
+      "x-key": "panel",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tab",
+          "panel",
+          "heading",
+          "state",
+          "why",
+          "how"
+        ],
+        "properties": {
+          "tab": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "panel": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "heading": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "state": {
+            "type": "string",
+            "x-unit": "text",
+            "enum": [
+              "data",
+              "empty",
+              "partial"
+            ]
+          },
+          "why": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-unit": "text"
+          },
+          "how": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-unit": "text"
+          }
+        }
+      }
+    },
+    "kpis": {
+      "type": "array",
+      "description": "Key numbers, one row per tile; value is in the unit the row names.",
+      "x-key": "metric",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "metric",
+          "name",
+          "unit",
+          "value",
+          "value_note",
+          "shown",
+          "detail",
+          "change_pct",
+          "change_pct_note",
+          "change_tone",
+          "against"
+        ],
+        "properties": {
+          "metric": {
+            "type": "string",
+            "x-unit": "text",
+            "enum": [
+              "spend",
+              "impressions",
+              "reach",
+              "frequency",
+              "ctr",
+              "cpm",
+              "conversions",
+              "cpa",
+              "conversion_value",
+              "roas",
+              "hook_rate",
+              "hold_rate"
+            ],
+            "description": "A metric or base field id from creative-context/references/metrics.md."
+          },
+          "name": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "unit": {
+            "type": "string",
+            "x-unit": "text",
+            "description": "The currency code for money, else empty."
+          },
+          "value": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "per-row",
+            "x-note": "value_note",
+            "description": "The total for the window: currency for money metrics, percent for rates, ratio for roas and frequency, count otherwise."
+          },
+          "value_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "shown": {
+            "type": "string",
+            "x-unit": "text",
+            "description": "The value as the HTML tile shows it."
+          },
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-unit": "text"
+          },
+          "change_pct": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "percent",
+            "x-note": "change_pct_note",
+            "description": "Change against the prior period."
+          },
+          "change_pct_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "change_tone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-unit": "text",
+            "enum": [
+              "up",
+              "down",
+              "flat",
+              null
+            ]
+          },
+          "against": {
+            "type": "string",
+            "x-unit": "text"
+          }
+        }
+      }
+    },
+    "daily": {
+      "type": "array",
+      "description": "One row per calendar day and measure; a day with no data is null with a note, never 0.",
+      "x-key": "day,metric",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "day",
+          "metric",
+          "name",
+          "kind",
+          "unit",
+          "value",
+          "value_note",
+          "average",
+          "average_note"
+        ],
+        "properties": {
+          "day": {
+            "type": "string",
+            "x-unit": "date",
+            "format": "date"
+          },
+          "metric": {
+            "type": "string",
+            "x-unit": "text",
+            "enum": [
+              "spend",
+              "roas",
+              "cpa",
+              "ctr",
+              "cpm",
+              "hook_rate"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "kind": {
+            "type": "string",
+            "x-unit": "text",
+            "enum": [
+              "money",
+              "pct",
+              "x"
+            ]
+          },
+          "unit": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "value": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "per-row",
+            "x-note": "value_note",
+            "description": "Currency for money, percent for pct, ratio for x."
+          },
+          "value_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "average": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "per-row",
+            "x-note": "average_note",
+            "description": "The rolling average, in the value's unit."
+          },
+          "average_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          }
+        }
+      }
+    },
+    "pareto": {
+      "type": "array",
+      "description": "Ads with spend, largest first, with cumulative shares.",
+      "x-key": "ad_id",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rank",
+          "ad_id",
+          "label",
+          "format",
+          "spend",
+          "conversion_value",
+          "conversion_value_note",
+          "cum_spend_pct",
+          "cum_basis_pct",
+          "in_head"
+        ],
+        "properties": {
+          "rank": {
+            "type": "integer",
+            "x-unit": "count"
+          },
+          "ad_id": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "label": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "format": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "spend": {
+            "type": "number",
+            "x-unit": "currency"
+          },
+          "conversion_value": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "currency",
+            "x-note": "conversion_value_note"
+          },
+          "conversion_value_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "cum_spend_pct": {
+            "type": "number",
+            "x-unit": "percent"
+          },
+          "cum_basis_pct": {
+            "type": "number",
+            "x-unit": "percent",
+            "description": "Cumulative share of purchase value, or of spend when the data has no purchase value."
+          },
+          "in_head": {
+            "type": "boolean",
+            "x-unit": "text"
+          }
+        }
+      }
+    },
+    "pareto-cut": {
+      "type": "array",
+      "description": "One row: the Pareto cut and the spend concentration.",
+      "x-key": null,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ads",
+          "cut",
+          "ads_pct",
+          "head_share_pct",
+          "basis",
+          "setting_pct",
+          "sentence",
+          "coverage",
+          "top_n",
+          "concentration_pct",
+          "concentration_pct_note",
+          "tail_ads",
+          "tail_spend",
+          "tail_conversion_value",
+          "tail_conversion_value_note"
+        ],
+        "properties": {
+          "ads": {
+            "type": "integer",
+            "x-unit": "count"
+          },
+          "cut": {
+            "type": "integer",
+            "x-unit": "count"
+          },
+          "ads_pct": {
+            "type": "number",
+            "x-unit": "percent"
+          },
+          "head_share_pct": {
+            "type": "number",
+            "x-unit": "percent"
+          },
+          "basis": {
+            "type": "string",
+            "x-unit": "text",
+            "enum": [
+              "purchase value",
+              "spend"
+            ]
+          },
+          "setting_pct": {
+            "type": "number",
+            "x-unit": "percent"
+          },
+          "sentence": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "coverage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-unit": "text"
+          },
+          "top_n": {
+            "type": "integer",
+            "x-unit": "count"
+          },
+          "concentration_pct": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "percent",
+            "x-note": "concentration_pct_note"
+          },
+          "concentration_pct_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "tail_ads": {
+            "type": "integer",
+            "x-unit": "count"
+          },
+          "tail_spend": {
+            "type": "number",
+            "x-unit": "currency"
+          },
+          "tail_conversion_value": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "currency",
+            "x-note": "tail_conversion_value_note"
+          },
+          "tail_conversion_value_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          }
+        }
+      }
+    },
+    "verdict-board": {
+      "type": "array",
+      "description": "One row per keep-or-kill verdict, money at risk first.",
+      "x-key": "verdict_class",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "verdict_class",
+          "verdict",
+          "ads",
+          "spend_at_stake",
+          "spend_at_stake_note",
+          "check"
+        ],
+        "properties": {
+          "verdict_class": {
+            "type": "string",
+            "x-unit": "text",
+            "enum": [
+              "pause",
+              "iterate",
+              "check",
+              "scale",
+              "keep",
+              "too-early",
+              "cant-judge"
+            ]
+          },
+          "verdict": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "ads": {
+            "type": "integer",
+            "x-unit": "count"
+          },
+          "spend_at_stake": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "currency",
+            "x-note": "spend_at_stake_note"
+          },
+          "spend_at_stake_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "check": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-unit": "text"
+          }
+        }
+      }
+    },
+    "verdicts": {
+      "type": "array",
+      "description": "Every ad with its verdict and key rates.",
+      "x-key": "ad_id",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ad_id",
+          "label",
+          "ad_name",
+          "format",
+          "verdict",
+          "verdict_note",
+          "verdict_class",
+          "confidence",
+          "confidence_note",
+          "spend",
+          "spend_note",
+          "spend_at_stake",
+          "spend_at_stake_note",
+          "age_days",
+          "age_days_note",
+          "fatiguing",
+          "fatiguing_note",
+          "next_step",
+          "check",
+          "roas",
+          "roas_note",
+          "cpa",
+          "cpa_note",
+          "ctr",
+          "ctr_note",
+          "hook_rate",
+          "hook_rate_note"
+        ],
+        "properties": {
+          "ad_id": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "label": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "ad_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-unit": "text"
+          },
+          "format": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "verdict": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-unit": "text",
+            "x-note": "verdict_note"
+          },
+          "verdict_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "verdict_class": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-unit": "text",
+            "enum": [
+              "pause",
+              "iterate",
+              "check",
+              "scale",
+              "keep",
+              "too-early",
+              "cant-judge",
+              null
+            ]
+          },
+          "confidence": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-unit": "text",
+            "x-note": "confidence_note"
+          },
+          "confidence_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "spend": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "currency",
+            "x-note": "spend_note"
+          },
+          "spend_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "spend_at_stake": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "currency",
+            "x-note": "spend_at_stake_note"
+          },
+          "spend_at_stake_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "age_days": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "days",
+            "x-note": "age_days_note"
+          },
+          "age_days_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "fatiguing": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "x-unit": "text",
+            "x-note": "fatiguing_note"
+          },
+          "fatiguing_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "next_step": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-unit": "text"
+          },
+          "check": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-unit": "text"
+          },
+          "roas": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "ratio",
+            "x-note": "roas_note"
+          },
+          "roas_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "cpa": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "currency",
+            "x-note": "cpa_note"
+          },
+          "cpa_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "ctr": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "percent",
+            "x-note": "ctr_note"
+          },
+          "ctr_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "hook_rate": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "percent",
+            "x-note": "hook_rate_note"
+          },
+          "hook_rate_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "thumb": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-unit": "text",
+            "description": "A data: image URL; present only when thumbnails were supplied and fit the size limit.",
+            "x-optional": true
+          }
+        }
+      }
+    },
+    "formats": {
+      "type": "array",
+      "description": "One row per format, graded only against the account's other formats.",
+      "x-key": "format",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "format",
+          "name",
+          "ads",
+          "spend_share",
+          "spend_share_note",
+          "ctr",
+          "ctr_note",
+          "ctr_grade",
+          "cpm",
+          "cpm_note",
+          "cpm_grade",
+          "cpa",
+          "cpa_note",
+          "cpa_grade",
+          "roas",
+          "roas_note",
+          "roas_grade",
+          "hook_rate",
+          "hook_rate_note",
+          "hook_rate_grade",
+          "hold_rate",
+          "hold_rate_note",
+          "hold_rate_grade"
+        ],
+        "properties": {
+          "format": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "name": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "ads": {
+            "type": "integer",
+            "x-unit": "count"
+          },
+          "spend_share": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "percent",
+            "x-note": "spend_share_note"
+          },
+          "spend_share_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "ctr": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "percent",
+            "x-note": "ctr_note"
+          },
+          "ctr_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "ctr_grade": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-unit": "text",
+            "description": "Its band among the account's formats; null when the value is."
+          },
+          "cpm": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "currency",
+            "x-note": "cpm_note"
+          },
+          "cpm_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "cpm_grade": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-unit": "text",
+            "description": "Its band among the account's formats; null when the value is."
+          },
+          "cpa": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "currency",
+            "x-note": "cpa_note"
+          },
+          "cpa_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "cpa_grade": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-unit": "text",
+            "description": "Its band among the account's formats; null when the value is."
+          },
+          "roas": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "ratio",
+            "x-note": "roas_note"
+          },
+          "roas_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "roas_grade": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-unit": "text",
+            "description": "Its band among the account's formats; null when the value is."
+          },
+          "hook_rate": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "percent",
+            "x-note": "hook_rate_note"
+          },
+          "hook_rate_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "hook_rate_grade": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-unit": "text",
+            "description": "Its band among the account's formats; null when the value is."
+          },
+          "hold_rate": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "x-unit": "percent",
+            "x-note": "hold_rate_note"
+          },
+          "hold_rate_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          },
+          "hold_rate_grade": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-unit": "text",
+            "description": "Its band among the account's formats; null when the value is."
+          }
+        }
+      }
+    },
+    "white-space": {
+      "type": "array",
+      "description": "Concept by format cells: ads, spend and the gap number when the cell is a gap.",
+      "x-key": "concept,format",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "concept",
+          "format",
+          "ads",
+          "spend",
+          "gap"
+        ],
+        "properties": {
+          "concept": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "format": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "ads": {
+            "type": "integer",
+            "x-unit": "count"
+          },
+          "spend": {
+            "type": "number",
+            "x-unit": "currency"
+          },
+          "gap": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "x-unit": "count"
+          }
+        }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "description": "Gaps worth testing, strongest first.",
+      "x-key": "number",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "number",
+          "label",
+          "why"
+        ],
+        "properties": {
+          "number": {
+            "type": "integer",
+            "x-unit": "count"
+          },
+          "label": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "why": {
+            "type": "string",
+            "x-unit": "text"
+          }
+        }
+      }
+    },
+    "briefing": {
+      "type": "array",
+      "description": "Finished briefs or brief starters, one shape for both.",
+      "x-key": "number",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "number",
+          "kind",
+          "title",
+          "details",
+          "references",
+          "judged",
+          "prompt",
+          "prompt_note"
+        ],
+        "properties": {
+          "number": {
+            "type": "integer",
+            "x-unit": "count"
+          },
+          "kind": {
+            "type": "string",
+            "x-unit": "text",
+            "enum": [
+              "brief",
+              "starter"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "details": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "references": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "judged": {
+            "type": "string",
+            "x-unit": "text"
+          },
+          "prompt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "x-unit": "text",
+            "x-note": "prompt_note"
+          },
+          "prompt_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "description": "Method lines, missing-data caveats and what the pull could not show.",
+      "x-key": "id",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "section",
+          "text"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "x-unit": "count"
+          },
+          "section": {
+            "type": "string",
+            "x-unit": "text",
+            "enum": [
+              "not-in-pull",
+              "method",
+              "caveat"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "x-unit": "text"
+          }
+        }
+      }
+    }
+  }
+}

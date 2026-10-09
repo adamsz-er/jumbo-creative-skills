@@ -163,6 +163,13 @@ class Ctx:
         self.colours = charts.format_colours({f: v for f, v in self.format_spend.items() if f != "unknown"})
         self.heat = interact.heat_map(self.ads)
         self.na_reasons: Dict[str, int] = {}
+        # filled by report.build_report as it renders, so the Claude dashboard bundle reads what the page showed
+        self.panel_states: List[Dict[str, str]] = []
+        self.page_title, self.generated = "", ""
+        self.header_facts: List[Tuple[str, str]] = []
+        self.completeness: Tuple[str, str] = ("neutral", "")
+        self.method_lines: List[str] = []
+        self.caveats: List[str] = []
 
     def prior_label(self) -> str:
         """What the prior period is called: the last review's run day and data end when a run compared itself with it, else "prior period"."""
@@ -622,14 +629,10 @@ REACH_NOTE = ("Reach and frequency don't add up across ads, so they need an acco
               "Pull account-level reach and frequency for the same window and add them when you rebuild this report.")
 
 
-def missing_everywhere(ctx: Ctx) -> str:
-    """One banner at the top of Overview naming the key numbers no ad can show in this pull, why, and how to get them; "" when none.
-
-    Each tile reads a plain n/a (or its own reason); this says it once, up front. Reach and frequency are named here too
-    when no account-level figure was supplied.
-    """
+def not_in_pull(ctx: Ctx) -> List[Dict[str, str]]:
+    """The key numbers no ad can show in this pull: one dict per missing field with the tiles it empties, why, and how to get it."""
     if not ctx.ads:
-        return ""
+        return []
     gone: Dict[str, List[str]] = {}
     for key, name, _ in KPI_ORDER:
         if key in ("reach", "frequency") or key not in cm.METRICS or any(a.get(key) is not None for a in ctx.ads):
@@ -640,11 +643,20 @@ def missing_everywhere(ctx: Ctx) -> str:
             gone.setdefault(field, []).append(name)
     refused = next((a["video_views_3s_source"] for a in ctx.ads
                     if str(a.get("video_views_3s_source") or "").startswith("not derived")), None)
-    items = []
-    for field, names in gone.items():
-        why = refused if field == "video_views_3s" and refused else "missing %s" % interact.FIELD_WORDS.get(field, field)
-        items.append("<li><b>%s</b>: %s. To get it: %s.</li>" % (
-            esc(" and ".join(names)), esc(why), esc(HOW_TO_GET.get(field, "add %s to the pull" % interact.FIELD_WORDS.get(field, field)))))
+    return [{"metrics": " and ".join(names),
+             "why": refused if field == "video_views_3s" and refused else "missing %s" % interact.FIELD_WORDS.get(field, field),
+             "how": HOW_TO_GET.get(field, "add %s to the pull" % interact.FIELD_WORDS.get(field, field))} for field, names in gone.items()]
+
+
+def missing_everywhere(ctx: Ctx) -> str:
+    """One banner at the top of Overview naming the key numbers no ad can show in this pull, why, and how to get them; "" when none.
+
+    Each tile reads a plain n/a (or its own reason); this says it once, up front. Reach and frequency are named here too
+    when no account-level figure was supplied.
+    """
+    if not ctx.ads:
+        return ""
+    items = ["<li><b>%s</b>: %s. To get it: %s.</li>" % (esc(i["metrics"]), esc(i["why"]), esc(i["how"])) for i in not_in_pull(ctx)]
     parts = ['<p><b>Not in this pull</b>, so these read n/a for every ad:</p><ul>%s</ul>' % "".join(items)] if items else []
     if "reach" in gone_metrics(ctx):
         parts.append("<p>%s</p>" % esc(REACH_NOTE))
@@ -659,37 +671,46 @@ def _tile_value(text: str) -> Tuple[str, str]:
     return ("n/a", found.group(1)) if found else (text, "")
 
 
-def _delta_pill(key: str, change: float, against: str = "prior period") -> str:
+def delta_tone(key: str, change: float) -> str:
+    """"up" when the change is good for this measure, "down" when bad, "flat" for none or a measure that is neither (spend, reach)."""
     good = change < 0 if key in LOWER_IS_BETTER else change > 0
-    tone = "flat" if key in NEUTRAL_KPIS or change == 0 else "up" if good else "down"
-    return '<span class="pill %s">%+.1f%%</span> vs %s' % (tone, change, against)
+    return "flat" if key in NEUTRAL_KPIS or change == 0 else "up" if good else "down"
 
 
-def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
+def _delta_pill(key: str, change: float, against: str = "prior period") -> str:
+    return '<span class="pill %s">%+.1f%%</span> vs %s' % (delta_tone(key, change), change, against)
+
+
+def kpi_tiles(ctx: Ctx) -> List[Dict[str, Any]]:
+    """The key numbers, one dict per tile in KPI_ORDER: what the tile shows and why, computed once for the HTML and the Claude dashboard.
+
+    `value` is the raw number (None when the tile reads n/a), `shown` the big text, `reason` why it is n/a, `notes` the muted line's parts,
+    `change_pct` the change against the prior period (None when it cannot be read) and `change_note` why not; both are None with no prior.
+    """
     if not ctx.rows:
-        return empty_state("There are no ads, so no totals can be added up.",
-                           "Pass an Ads Manager export or the connector pull as the data file.")
+        return []
     total = totals(ctx.rows)
     prior_total = totals(ctx.prior) if ctx.prior else None
-    series = daily(ctx.rows)
     ctr_basis = cm.metric_basis(total, "ctr")["numerator"]
     gone = gone_metrics(ctx)
-    tiles = []
     needs = {"spend": ("spend",), "impressions": ("impressions",), "conversions": ("conversions",), "conversion_value": ("conversion_value",),
              "cpm": ("spend", "impressions"), "ctr": (ctr_basis or "link_clicks", "impressions"), "cpa": ("spend", "conversions"),
              "roas": ("conversion_value", "spend"), "hook_rate": ("video_views_3s", "impressions"), "hold_rate": ("video_thruplay", "video_views_3s")}
+    tiles = []
     for key, name, kind in KPI_ORDER:
-        tot, ptot, sser, video_note = total, prior_total, series, ""
+        tot, ptot, video_note = total, prior_total, ""
         if key in VIDEO_KPIS:
-            vrows = video_rows(ctx.rows, key)
-            tot, sser = totals(vrows), daily(vrows)
+            tot = totals(video_rows(ctx.rows, key))
             ptot = totals(video_rows(ctx.prior, key)) if ctx.prior else None
             video_note = "" if key in gone else video_basis(ctx, key)
         if key == "reach":
-            text = "{:,.0f}".format(ctx.account["reach"]) if ctx.account else "n/a"
+            raw = ctx.account["reach"] if ctx.account else None
+            text = "{:,.0f}".format(raw) if ctx.account else "n/a"
         elif key == "frequency":
-            text = "%.2f" % ctx.account["frequency"] if ctx.account else "n/a"
+            raw = ctx.account["frequency"] if ctx.account else None
+            text = "%.2f" % raw if ctx.account else "n/a"
         else:
+            raw = _kpi_value(tot, key)
             text = _kpi_text(ctx, tot, key, kind)
         label = name
         if key == "ctr" and ctr_basis == "clicks":
@@ -697,32 +718,52 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
         if key == "frequency" and ctx.account and ctx.account.get("frequency_computed"):
             label += " (computed)"
         value, reason = ("n/a", "") if key in gone else _tile_value(text)
-        if prior_total is None:
-            delta = ""
-        elif key in ACCOUNT_KPIS:
-            delta = '<span class="muted">n/a (reach is account-level only)</span>'
-        else:
-            change = _pct_change(_kpi_value(tot, key), _kpi_value(ptot, key)) if ptot is not None else None
-            delta = '<span class="muted">n/a (prior value missing or zero)</span>' if change is None else _delta_pill(key, change, ctx.prior_label())
-        spark = ""
-        if key not in ACCOUNT_KPIS:
-            cal = calendar(vrows if key in VIDEO_KPIS else ctx.rows)
-            values = day_values(cal, key)
-            tips = ["%s: %s" % (charts.day_label(d), _kpi_text(ctx, totals(_measure_rows(rs, key)), key, kind)) if v is not None else ""
-                    for (d, rs), v in zip(cal, values)]
-            spark = charts.sparkline(values, "%s by day" % name, tips=tips, average=rolling_values(cal, key))
-        spark_note = spark or ("" if key in ACCOUNT_KPIS or key in gone else
-                               '<span class="muted">%s</span>' % ("one day of data" if len(sser) == 1 else "no dates in the data"))
+        change, change_note = None, None
+        if prior_total is not None:
+            if key in ACCOUNT_KPIS:
+                change_note = "n/a (reach is account-level only)"
+            else:
+                change = _pct_change(_kpi_value(tot, key), _kpi_value(ptot, key)) if ptot is not None else None
+                change_note = "n/a (prior value missing or zero)" if change is None else None
         unit = " (%s)" % (ctx.currency or "account currency") if kind.startswith("money") else ""
         partial = [] if video_note or key in gone else coverage(ctx.ads, needs.get(key, ()))
         wide = [ACCOUNT_WIDE % ctx.scope] if key in ACCOUNT_KPIS and ctx.account and ctx.scope and \
             str(ctx.account.get("scope") or "").strip().lower() != ctx.scope.strip().lower() else []
-        notes = ([reason] if reason else []) + ([video_note] if video_note else []) + partial + wide
-        note_html = '<p class="kpi-note">%s</p>' % esc("; ".join(notes)) if notes else ""
-        tiles.append('<div class="kpi%s%s"><p class="kpi-name">%s%s</p><p class="kpi-value">%s</p>%s%s<div class="kpi-spark">%s</div></div>'
-                     % (" unknown" if value == "n/a" else "", " partial" if partial else "", esc(label), esc(unit), esc(value), note_html, '<p class="kpi-delta">%s</p>' % delta if delta else "", spark_note))
-    caption = "" if prior_total is not None else '<p class="muted kpi-caption">No prior period supplied: deltas appear when you pass one.</p>'
-    return '<div class="kpis">%s</div>%s' % ("".join(tiles), caption), "data"
+        tiles.append({"metric": key, "name": label, "base_name": name, "kind": kind, "unit": unit, "value": None if value == "n/a" else raw, "shown": value,
+                      "reason": reason, "notes": ([reason] if reason else []) + ([video_note] if video_note else []) + partial + wide,
+                      "partial": bool(partial), "change_pct": change, "change_note": change_note, "against": ctx.prior_label()})
+    return tiles
+
+
+def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
+    if not ctx.rows:
+        return empty_state("There are no ads, so no totals can be added up.",
+                           "Pass an Ads Manager export or the connector pull as the data file.")
+    out = []
+    for tile in kpi_tiles(ctx):
+        key, kind = tile["metric"], tile["kind"]
+        rows = video_rows(ctx.rows, key) if key in VIDEO_KPIS else ctx.rows
+        if not ctx.prior:
+            delta = ""
+        elif tile["change_note"]:
+            delta = '<span class="muted">%s</span>' % tile["change_note"]
+        else:
+            delta = _delta_pill(key, tile["change_pct"], tile["against"])
+        spark = ""
+        if key not in ACCOUNT_KPIS:
+            cal = calendar(rows)
+            values = day_values(cal, key)
+            tips = ["%s: %s" % (charts.day_label(d), _kpi_text(ctx, totals(_measure_rows(rs, key)), key, kind)) if v is not None else ""
+                    for (d, rs), v in zip(cal, values)]
+            spark = charts.sparkline(values, "%s by day" % tile["base_name"], tips=tips, average=rolling_values(cal, key))
+        spark_note = spark or ("" if key in ACCOUNT_KPIS or key in gone_metrics(ctx) else
+                               '<span class="muted">%s</span>' % ("one day of data" if len(daily(rows)) == 1 else "no dates in the data"))
+        note_html = '<p class="kpi-note">%s</p>' % esc("; ".join(tile["notes"])) if tile["notes"] else ""
+        out.append('<div class="kpi%s%s"><p class="kpi-name">%s%s</p><p class="kpi-value">%s</p>%s%s<div class="kpi-spark">%s</div></div>'
+                   % (" unknown" if tile["shown"] == "n/a" else "", " partial" if tile["partial"] else "", esc(tile["name"]), esc(tile["unit"]),
+                      esc(tile["shown"]), note_html, '<p class="kpi-delta">%s</p>' % delta if delta else "", spark_note))
+    caption = "" if ctx.prior else '<p class="muted kpi-caption">No prior period supplied: deltas appear when you pass one.</p>'
+    return '<div class="kpis">%s</div>%s' % ("".join(out), caption), "data"
 
 
 TIME_METRICS = (("spend", "Spend", "money"), ("roas", "ROAS", "x"), ("cpa", "CPA", "money"), ("ctr", "CTR", "pct"),
@@ -793,37 +834,40 @@ def rolling_values(cal: Sequence[Tuple[str, List[Dict[str, Any]]]], key: str, wi
     return out
 
 
-def _time_view(ctx: Ctx, cal, key: str, name: str, kind: str, spend_bars: Sequence[Optional[float]]) -> str:
-    values = day_values(cal, key)
-    if not any(v is not None for v in values):
-        return ""
+def time_series(ctx: Ctx) -> Tuple[List[str], List[Dict[str, Any]]]:
+    """(calendar days, one dict per TIME_METRICS measure with any value): key, name, kind, unit, the daily values and the rolling average."""
+    cal = calendar(ctx.rows)
+    out = []
+    for key, name, kind in TIME_METRICS:
+        values = day_values(cal, key)
+        if any(v is not None for v in values):
+            out.append({"key": key, "name": name, "kind": kind, "unit": _unit_of(ctx, name, kind), "values": values, "average": rolling_values(cal, key)})
+    return [d for d, _ in cal], out
+
+
+def _time_view(ctx: Ctx, labels: Sequence[str], series: Dict[str, Any], spend_bars: Sequence[Optional[float]]) -> str:
+    key, name, kind = series["key"], series["name"], series["kind"]
     axis, hover = _kind_formats(ctx, kind)
-    labels = [d for d, _ in cal]
-    lines = [{"name": "Daily", "values": values, "colour": charts.SERIES_VARS[0], "kind": "daily"},
-             {"name": "7-day average", "values": rolling_values(cal, key), "colour": charts.SERIES_VARS[0], "kind": "avg"}]
+    lines = [{"name": "Daily", "values": series["values"], "colour": charts.SERIES_VARS[0], "kind": "daily"},
+             {"name": "7-day average", "values": series["average"], "colour": charts.SERIES_VARS[0], "kind": "avg"}]
     bars = None if key == "spend" else spend_bars
-    return charts.line_chart(labels, lines, "%s by day with a 7-day average" % name, axis, _unit_of(ctx, name, kind), bars=bars,
+    return charts.line_chart(labels, lines, "%s by day with a 7-day average" % name, axis, series["unit"], bars=bars,
                              bar_fmt=charts.axis_format("money", ctx.currency), bar_name="Spend", bar_unit=_unit_of(ctx, "Spend", "money"),
                              tip_fmt=hover, bar_tip_fmt=lambda v: ctx.money(v, 2),
                              caption="%s by day%s. A day with no data is a gap, not a zero." % (name, "; the faint bars are spend" if bars else ""))
 
 
 def over_time(ctx: Ctx) -> Tuple[str, str]:
-    cal = calendar(ctx.rows)
-    if not cal:
+    labels, found = time_series(ctx)
+    if not labels:
         return empty_state(*NO_DATES)
-    spend_bars = day_values(cal, "spend")
-    views, skipped = [], []
-    for key, name, kind in TIME_METRICS:
-        chart = _time_view(ctx, cal, key, name, kind, spend_bars)
-        if chart:
-            views.append((key, name, chart))
-        else:
-            skipped.append(name)
+    spend_bars = day_values(calendar(ctx.rows), "spend")
+    views = [(series["key"], series["name"], _time_view(ctx, labels, series, spend_bars)) for series in found]
+    skipped = [name for key, name, _ in TIME_METRICS if key not in {series["key"] for series in found}]
     if not views:
         return empty_state("Neither spend nor any rate could be read from the data.", "Include the spend and purchase columns in the export.")
     notes = []
-    if len(cal) == 1:
+    if len(labels) == 1:
         notes.append("One day of data: there is no trend to read yet.")
     if skipped:
         notes.append("Not shown, no data for it: %s." % ", ".join(skipped))
@@ -1372,13 +1416,15 @@ def _why_missing(total: Dict[str, Optional[float]], metric: str) -> str:
     return interact.plain_ids(_na(cm.describe_missing(total, metric) or "no value"))
 
 
-def format_scorecard(ctx: Ctx) -> Tuple[str, str]:
-    if not ctx.mix:
-        return empty_state(*NO_MIX)
-    formats = ctx.mix.get("by_format") or []
+NO_FORMAT_READ = ("creative-mix read no format from the ad names, so there is nothing to compare.",
+                  "Name ads with the convention in creative-context, or tell the creative-mix skill the naming pattern your ads use.")
+
+
+def format_cells(ctx: Ctx) -> Optional[Dict[str, Any]]:
+    """The format scorecard's numbers: per format and metric a (value, n/a reason) cell and its band among the formats; None without formats."""
+    formats = (ctx.mix or {}).get("by_format") or []
     if not formats:
-        return empty_state("creative-mix read no format from the ad names, so there is nothing to compare.",
-                           "Name ads with the convention in creative-context, or tell the creative-mix skill the naming pattern your ads use.")
+        return None
     groups: Dict[str, List[Dict[str, Any]]] = {}
     for ad in ctx.ads:
         groups.setdefault(ad.get("format") or "unknown", []).append(ad)
@@ -1416,6 +1462,17 @@ def format_scorecard(ctx: Ctx) -> Tuple[str, str]:
         bands[key] = _grade_across(values, key in LOWER_BETTER)
         if UNKNOWN_FORMAT in cells and cells[UNKNOWN_FORMAT][key][0] is not None:
             bands[key][UNKNOWN_FORMAT] = "not graded: format not known"
+    return {"formats": formats, "groups": groups, "cells": cells, "bands": bands, "derived_formats": derived_formats, "derived_seen": derived_seen}
+
+
+def format_scorecard(ctx: Ctx) -> Tuple[str, str]:
+    if not ctx.mix:
+        return empty_state(*NO_MIX)
+    found = format_cells(ctx)
+    if not found:
+        return empty_state(*NO_FORMAT_READ)
+    formats, groups, cells, bands = found["formats"], found["groups"], found["cells"], found["bands"]
+    derived_formats, derived_seen = found["derived_formats"], found["derived_seen"]
     body = []
     for row in formats:
         name, line, ads = row["format"], cells[row["format"]], groups.get(row["format"], [])
@@ -1797,18 +1854,27 @@ def _gap_cells(ctx: Ctx, rows: Sequence[str]) -> Dict[Tuple[int, int], int]:
 UNREAD_PANEL = '<div class="empty"><p>%s</p></div>'
 
 
+def heatmap_grid(ctx: Ctx) -> Optional[Dict[str, Any]]:
+    """The concept-by-format grid: the concepts shown (top HEATMAP_CONCEPTS by spend), the formats and (ads, spend) per cell; None without one."""
+    grid = (ctx.mix or {}).get("grid") or {}
+    families, formats = grid.get("families") or [], grid.get("formats") or []
+    if not families or not formats:
+        return None
+    shown = families[:HEATMAP_CONCEPTS]
+    return {"families": families, "formats": formats, "shown": shown,
+            "cells": [[(grid["cells"][i][f]["ads"], grid["cells"][i][f]["spend"]) for f in formats] for i in range(len(shown))]}
+
+
 def concept_heatmap(ctx: Ctx) -> Tuple[str, str]:
     if not ctx.mix:
         return empty_state(*NO_MIX)
     if ctx.mix.get("concepts_unread"):
         return UNREAD_PANEL % esc(ctx.mix["concepts_unread_message"]), "empty"
-    grid = ctx.mix.get("grid") or {}
-    families, formats = grid.get("families") or [], grid.get("formats") or []
-    if not families or not formats:
+    found = heatmap_grid(ctx)
+    if not found:
         return empty_state("creative-mix read no concept and format from the ad names, so there is no grid.",
                            "Name ads with the convention in creative-context, or tell the creative-mix skill the naming pattern your ads use.")
-    shown = families[:HEATMAP_CONCEPTS]
-    cells = [[(grid["cells"][i][f]["ads"], grid["cells"][i][f]["spend"]) for f in formats] for i in range(len(shown))]
+    families, formats, shown, cells = found["families"], found["formats"], found["shown"], found["cells"]
     chart = charts.heatmap([_plain(c) for c in shown], [_group_name(f, "Format not known") for f in formats], cells,
                            _gap_cells(ctx, shown), "Concept by format: ads and spend", "cf", ctx.currency or "account currency")
     hidden = len(families) - len(shown)
@@ -1937,6 +2003,12 @@ def gap_reason(ctx: Ctx, gap: Dict[str, Any]) -> str:
     return "%s, and %s in %s %s." % (" and ".join(said), _plain(gap["concept"]), _plain(gap["format"]), lack)
 
 
+def gap_rows(ctx: Ctx) -> List[Dict[str, Any]]:
+    """The numbered gaps, strongest first: number, concept, format, the plain label and why test it."""
+    return [{"number": n, "concept": g["concept"], "format": g["format"], "label": briefing.gap_label(_plain(g["concept"]), _plain(g["format"])),
+             "why": gap_reason(ctx, g)} for n, g in enumerate(ctx.gaps, 1)]
+
+
 def gap_list(ctx: Ctx) -> Tuple[str, str]:
     if not ctx.mix:
         return empty_state(*NO_MIX)
@@ -1946,10 +2018,8 @@ def gap_list(ctx: Ctx) -> Tuple[str, str]:
         return empty_state("creative-mix found no gap worth testing: no empty or single-ad cell sits beside a proven top-quarter concept or format.",
                            "Widen the window, lower the minimum proven spend in creative-mix, or add more concepts and formats to compare.")
 
-    def row(number: int, gap: Dict[str, Any]) -> str:
-        return ('<tr class="gap" data-gap="%d"><td data-label="Gap"><b>#%d %s</b></td><td data-label="Why test it">%s</td></tr>'
-                % (number, number, esc(briefing.gap_label(_plain(gap["concept"]), _plain(gap["format"]))), esc(gap_reason(ctx, gap))))
-    rows = [row(n, g) for n, g in enumerate(ctx.gaps, 1)]
+    rows = ['<tr class="gap" data-gap="%d"><td data-label="Gap"><b>#%d %s</b></td><td data-label="Why test it">%s</td></tr>'
+            % (g["number"], g["number"], esc(g["label"]), esc(g["why"])) for g in gap_rows(ctx)]
     head = [("Gap", False), ("Why test it", False)]
     rest = ""
     if len(rows) > ctx.top_n:
