@@ -3,7 +3,7 @@ name: creative-brief
 description: Write a production-ready Meta (Facebook and Instagram) ad creative brief for any brand, built from evidence - what won, what faded, where the coverage gaps are - with hook, script, visual direction, copy, specs, naming and how it will be judged; also writes a creator brief with usage rights and disclosure. Use when the user wants a brief for a designer, editor, studio or creator, or needs to turn a concept into something that can be made. Works with no data.
 license: MIT
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
   role: make
 ---
 
@@ -35,7 +35,7 @@ python3 -I scripts/evidence.py ads.csv --include-types bau,promo   # briefing a 
 python3 -I scripts/evidence.py ads.csv --profile creative-profile.md --where market=US   # naming settings and one market
 ```
 
-Pass the same `--profile` (or `--key-map` and `--type-map`) as the analyses, or keyed ad names will not yield concepts and the evidence comes back empty. `--where` keeps one scope, read from a column or the names.
+The evidence script is shared with `persona-builder`, `hook-writer` and `creative-ideation` (they read its `--for persona`, `--for hooks` and `--for ideation` views); the brief uses the default `--for brief` view. Pass the same `--profile` (or `--key-map` and `--type-map`) as the analyses, or keyed ad names will not yield concepts and the evidence comes back empty. `--where` keeps one scope, read from a column or the names.
 
 It prints an **Evidence** block: top-quartile ads (every available payback metric top quartile for the ad's format) with the fields parsed from their names, ads that are fatiguing or never worked, and coverage gaps (evergreen concepts behind a winner that have no ad in a winning format). Everything is relative to the account's own ads in the same format, never a benchmark. `--include-types` (default `bau`) picks which ad types seed the gaps, and the header names the ones used. `--window`, `--min-change` and `--max-gaps` are arbitrary defaults: set them from the account. Paste the block into the brief. Hook wording is not in an export, so take the winning hook from the ad itself.
 

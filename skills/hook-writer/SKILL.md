@@ -1,9 +1,9 @@
 ---
 name: hook-writer
-description: Write hooks for Meta (Facebook and Instagram) ads - the first 3 seconds of a video (spoken line, on-screen text, visual action) and the opening line of primary text - and produce one-change variants of a winning hook. Use when the user needs hooks, openers, a scroll-stopping first line, or fresh variants of an ad whose hook is fatiguing or working. Works with no data and gets sharper with a brand profile, personas or keep-or-kill verdicts.
+description: Write hooks for Meta (Facebook and Instagram) ads - the first 3 seconds of a video (spoken line, on-screen text, visual action) and the opening line of primary text - from the account's own hook and hold rates, the openings of its top and bottom ads, verdicts and ad age (skipping hooks already faded), and produce one-change variants of a winning hook. Every hook names the ads it learns from. Use when the user needs hooks, openers, a scroll-stopping first line, or fresh variants of a fatiguing or working ad. Works with no data and says the hooks are unbacked.
 license: MIT
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
   role: make
 ---
 
@@ -17,6 +17,22 @@ A hook is the part of the ad that earns the next second. This skill writes hooks
 2. If not, ask for the five essentials in one short round: **brand, product, audience, offer or calendar, tone**. Never block on this. Say what you assumed and mark it "assumed".
 3. Ask which persona and funnel stage the hooks are for. If `persona-builder` output exists, use its starting states and language. If not, ask for the viewer's situation in one sentence.
 4. With no performance data, say so: the hooks come from craft, not results.
+
+## Read the account first
+
+When there is data, start from what already stops people in this account:
+
+```
+python3 -I scripts/evidence.py ads.csv --for hooks
+python3 -I scripts/evidence.py ads.csv --for hooks --verdicts verdicts.json
+python3 -I scripts/evidence.py ads.csv --for hooks --json
+```
+
+It lists the openings that stop people (top-quartile hook rate within their format, not faded) and those that do not (bottom quartile), each with hold rate, age and verdict, and sets apart the hooks that have faded (hook rate down by at least the min-change since the ad's first days). An export with an ad text column (primary text, body or title) gives each ad's opening line; without one it says `n/a (missing primary text ...)`, and you ask the user for the openings or read them from the ads.
+
+- Learn from the top, avoid repeating the bottom, and **skip faded hooks** as models (vary them one change at a time in iteration mode instead).
+- A strong hook rate with a weak hold rate means the opening works and the body loses people: the hook is not the thing to change.
+- Name the ads each new hook learns from ("same archetype as 120000000018's opening"). With no data, label every hook "unbacked: from craft, not results".
 
 ## Inputs it can use if present
 
@@ -55,7 +71,8 @@ Run each hook through `references/hook-checklist.md` and show pass or fail. Fix 
 1. Hooks in the table above, grouped by persona and stage.
 2. The checklist result for each.
 3. For iteration mode, a table of variants: what stayed, what changed, what it tests.
-4. **Next step:** `creative-brief` to turn a chosen hook into a production brief, or `creative-ideation` for concepts behind the hooks.
+4. The ads each hook learns from, or "unbacked".
+5. **Next step:** `creative-brief` to turn a chosen hook into a production brief, `copy-tests` for the rest of the copy and the test, or `creative-ideation` for concepts behind the hooks.
 
 ## Guardrails
 
@@ -83,4 +100,5 @@ Try:
 - **Do hooks include testimonials?** Only real ones you supply, with permission.
 - **Is there a best hook length?** No benchmark; the checklist is craft, not a target.
 - **Can it write text hooks?** Yes: video and primary-text openings.
+- **Does it use my results?** Yes, with data: it learns from your top-quartile openings and skips hooks that have faded.
 - More: creative-context/references/faq.md
