@@ -142,7 +142,7 @@ class ReadmeTests(unittest.TestCase):
         text = read(README)
         match = re.search(r"```mermaid\n(.*?)```", text, re.S)
         self.assertIsNotNone(match, "README.md has no mermaid block")
-        self.assertEqual(len(SKILLS), 12)
+        self.assertEqual(len(SKILLS), 19)
         missing = [name for name in SKILLS if name not in match.group(1)]
         self.assertEqual(missing, [], "skills missing from the diagram")
 

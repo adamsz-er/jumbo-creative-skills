@@ -16,7 +16,7 @@ These skills never call a tool that changes your ad account. Your agent could, i
 
 ## The shared metrics module
 
-Every metric id and formula is defined once, in [metrics.md](../skills/creative-context/references/metrics.md), and implemented once, in `shared/creative_metrics.py`. A skill installed on its own (from a zip, or with `npx skills add --skill`) must still run, so each skill that does arithmetic carries a synced copy of that file (and of `from_mcp.py`) in its own `scripts/` folder. `python3 tools/sync_shared.py` copies `shared/` into the skills, and `--check` fails if any copy has drifted; CI runs it.
+Every metric id and formula is defined once, in [metrics.md](../skills/creative-context/references/metrics.md), and implemented once, in `shared/creative_metrics.py`. A skill installed on its own (from a zip, or with `npx skills add --skill`) must still run, so each skill that does arithmetic carries a synced copy of that file (and of `from_mcp.py`) in its own `scripts/` folder, and the make skills that read the account (`creative-brief`, `creative-ideation`, `hook-writer`, `persona-builder`) carry a copy of `shared/evidence.py` too. `python3 tools/sync_shared.py` copies `shared/` into the skills, and `--check` fails if any copy has drifted; CI runs it.
 
 Rules the module enforces:
 
@@ -41,6 +41,31 @@ A group needs at least 5 comparable ads to stand on its own. A smaller group wid
 
 Verdicts (`keep-or-kill`) use the same comparison, plus age, a learning flag and a fatigue trend (the first and last few delivery days of an ad compared). The rules are in [verdict-rules.md](../skills/keep-or-kill/references/verdict-rules.md). Two protections matter: an ad that cannot be judged is never told to iterate or pause, and the account's biggest sellers are never paused without a check. A never-worked ad is paused only when it misses a target you set; with no target it reads "Check before cutting" and asks for one.
 
+## How the make skills read the account
+
+One evidence script, `evidence.py`, feeds every make skill, so ideas, hooks and personas come from what the account's own ads did and each one can name the ads behind it. It returns one versioned evidence set (`--json`, `schema: 1`) and four views of it:
+
+| View | Skill | What it shows |
+|---|---|---|
+| `--for brief` (default) | `creative-brief` | top-quartile, fatiguing and never-worked ads, and untried concept and format pairs beside a winner |
+| `--for persona` | `persona-builder` | results by persona or audience (a `persona` name field, else an audience or ad set column), each group's return as a percent of the account's, its new-customer share where present, and the angles that won and lost |
+| `--for hooks` | `hook-writer` | the openings that stop people and those that do not (hook-rate quartiles within each format), with hold rate, age and verdict, and the hooks that have faded |
+| `--for ideation` | `creative-ideation` | concept by format coverage with spend share and age, winning and losing angles, and a competitor scan when given |
+
+`--verdicts` (keep-or-kill's `--json`) puts each ad's verdict beside it; `--competitor` (competitor-scan's `--json`) adds rivals' open ground. With no usable data every view says so, and the skill labels its output unbacked.
+
+## Reading the funnel: creative or site
+
+`funnel-diagnosis` and keep-or-kill share one read. The steps the ad controls are hook rate, hold rate and click-through; the steps on the site are landing-page view rate, add-to-cart rate and cart-to-checkout rate. A step is weak when it has fallen since the ad's first days, or sits in the bottom quartile of similar ads, and the gap is clear on the ad's own counts (a two-proportion test at 1.96 standard errors, the common statistical convention, not a benchmark). Site weak and attention fine reads "site"; the reverse reads "creative". A Pause whose funnel reads "site" becomes "Check before cutting". Without the site columns the site side is unreadable, never fine.
+
+## The delivery-day band
+
+The report's age curve and `fatigue-planner` use the same band: for each day of delivery (counting only days with impressions), the median and quartiles of a rate across the ads that launched inside the window. Ads already running when the window opened are left out, because their day of delivery is unknown. `fatigue-planner` compares each young ad with that band, fits a straight line through each ad's recent days to estimate days left until it crosses its format's lower quartile, and lays refreshes into weeks at the capacity you give.
+
+## What the review suggests next
+
+`creative-review` ends with two or three skills chosen by fixed rules from its own findings, in this order: unreadable names (`ad-namer`), a site check (`funnel-diagnosis`), fatiguing ads (`fatigue-planner`), pause or scale calls (`spend-analysis`), mix gaps (`creative-ideation`), iterate calls (`hook-writer`), scale calls (`copy-tests`). With nothing found it suggests `creative-ideation` and `creative-brief`.
+
 ## Defaults and the flags that change them
 
 Every default below is arbitrary. None is a rule or a benchmark, and none is right for every account. Set each one from your own account: for example, pick the minimum impressions from your own spend per ad, and the fatigue window from how fast your own ads tire. The scripts print the settings they used on every run.
@@ -53,6 +78,8 @@ Scripts live in `skills/<skill>/scripts/`. `creative_metrics.py` and `from_mcp.p
 |---|---|---|---|
 | `beats.py` | `--json` | off | print machine-readable JSON instead of text |
 | `beats.py` | `--product` | empty | product name, so the script can check it is named early |
+| `copy_check.py` | `--json` | off | print machine-readable JSON instead of text |
+| `copy_check.py` | `--limits` | `primary_text=150,headline=27` (Meta's published guidance for Facebook Feed, checked 2026-10-10) | character limits per field; a description is checked only if you give one |
 | `creative_metrics.py` | `--json` | off | print machine-readable JSON instead of text |
 | `creative_metrics.py` | `--profile` | none | profile whose Script settings fill any flag left unset (shared by grade, verdicts, mix, evidence, detect_naming) |
 | `creative_metrics.py` | `--type-map` | none | the account's own ad-type words, e.g. `core=bau,drop=launch` |
@@ -62,19 +89,45 @@ Scripts live in `skills/<skill>/scripts/`. `creative_metrics.py` and `from_mcp.p
 | `detect_naming.py` | `--min-match-rate` | 85.0 | ask the user to confirm the convention only below this percent of names read |
 | `detect_naming.py` | `--profile` | `./creative-profile.md` for `review.py run`, else none | read the Script settings block of the profile (key map, type map, targets, currency); a flag on the command line still wins |
 | `detect_naming.py` | `--type-map` | none | the account's own ad-type words, e.g. `core=bau,drop=launch` |
+| `evidence.py` | `--competitor` | none | competitor-scan `--json` output, for the ideation view |
+| `evidence.py` | `--for` | `brief` | which view to print: `brief` (the Evidence block), `persona`, `hooks` or `ideation` |
 | `evidence.py` | `--include-types` | `bau` | ad types whose top-quartile concepts seed coverage gaps (add `promo` or `launch` when briefing a sale or a drop) |
 | `evidence.py` | `--json` | off | print machine-readable JSON instead of text |
 | `evidence.py` | `--key-map` | none | name unlabelled or private `KEY:value` segments of ad names, e.g. `PX=concept,6=tone` |
 | `evidence.py` | `--max-gaps` | 8 | coverage gaps shown |
 | `evidence.py` | `--min-change` | 8.0 | percent move that counts as real for CTR, frequency and hook rate |
 | `evidence.py` | `--min-impressions` | 1000 | ads below this are not judged |
+| `evidence.py` | `--segment` | `persona`, then `audience`, then the ad set name, whichever the data has | column or name field to read personas from |
+| `evidence.py` | `--top` | 6 | openings listed at each end of the hooks view |
+| `evidence.py` | `--verdicts` | none | keep-or-kill `--json` output, so each ad carries its verdict |
 | `evidence.py` | `--window` | 6 | days compared at the start and end of an ad's life when looking for fatigue |
+| `fatigue_plan.py` | `--capacity` | none: no calendar without it | refreshes the team can make per week |
+| `fatigue_plan.py` | `--curve-min-ads` | 3 | ads needed on a delivery day for the account's band that day |
+| `fatigue_plan.py` | `--fit-days` | 9 | delivery days the straight-line fit uses |
+| `fatigue_plan.py` | `--json` | off | print machine-readable JSON instead of text |
+| `fatigue_plan.py` | `--key-map` | none | name unlabelled or private `KEY:value` segments of ad names, e.g. `PX=concept,6=tone` |
+| `fatigue_plan.py` | `--lead-days` | 7 | days a refresh needs from brief to live |
+| `fatigue_plan.py` | `--metric` | `ctr` | the rate to follow, an ad-level metric where higher is better (frequency, costs and account-level ratios are refused); hook rate is read too for video ads |
+| `fatigue_plan.py` | `--min-change` | 8.0 | percent move that counts as real for the fatigue trend |
+| `fatigue_plan.py` | `--min-days` | 9 | fewest delivery days before an ad gets a days-left estimate |
+| `fatigue_plan.py` | `--min-impressions` | 1000 | ads below this are not judged |
+| `fatigue_plan.py` | `--start` | the day after the data's last date | first day of the refresh calendar |
+| `fatigue_plan.py` | `--weeks` | 6 | calendar horizon in weeks |
+| `fatigue_plan.py` | `--window` | 6 | days compared at the start and end of an ad's life, and days checked against the band |
 | `from_mcp.py` | `--expect-ads` | none | text file with one expected ad id per line, to catch ads missing from the pull |
 | `from_mcp.py` | `--expect-impressions` | none | account-level impressions for the same window, to reconcile the pull |
 | `from_mcp.py` | `--expect-spend` | none | account-level spend for the same window, to reconcile the pull |
 | `from_mcp.py` | `--level` | `ad` | level of the rows; `id` and `name` read as ad id and name only for ad rows |
 | `from_mcp.py` | `--output` | required | CSV to write (also `-o`) |
 | `from_mcp.py` | `--tolerance` | 0.5 | percent of the expected total a pull may fall short before it counts as incomplete |
+| `funnel.py` | `--ad` | every ad with enough delivery | ad id or name to judge (repeatable) |
+| `funnel.py` | `--group-by` | `format` | columns that define similar ads for the bottom-quartile read |
+| `funnel.py` | `--json` | off | print machine-readable JSON instead of text |
+| `funnel.py` | `--key-map` | none | name unlabelled or private `KEY:value` segments of ad names, e.g. `PX=concept,6=tone` |
+| `funnel.py` | `--min-change` | 8.0 | percent a step must fall to count as falling |
+| `funnel.py` | `--min-impressions` | 1000 | ads below this are listed as too little delivery to judge |
+| `funnel.py` | `--window` | 6 | delivery days compared at the start and end of an ad's life |
+| `funnel.py` | `--z` | 1.96 (the two-sided 95% convention from statistics, not a benchmark) | standard errors a fall or a gap must clear to count |
 | `grade.py` | `--group-by` | `format,ad_type` | columns to compare ads within, narrowest first; a group with fewer than 5 comparable ads widens to the next |
 | `grade.py` | `--json` | off | print machine-readable JSON instead of text |
 | `grade.py` | `--key-map` | none | name unlabelled or private `KEY:value` segments of ad names, e.g. `PX=concept,6=tone` |
@@ -85,8 +138,28 @@ Scripts live in `skills/<skill>/scripts/`. `creative_metrics.py` and `from_mcp.p
 | `mix.py` | `--min-proven-spend` | 3 times the account's median ad spend | BAU spend a concept or format needs before it counts as proven for gap ranking |
 | `mix.py` | `--no-family` | off | do not group `-suffix` variants of a concept into one family |
 | `mix.py` | `--pattern` | `concept,format,creator,ad_type,product,tone,launch_date` | naming-convention fields, in order, for positional names |
+| `namer.py` | `--allow-missing` | off | write `unknown` for a missing value and warn (`make`) |
+| `namer.py` | `--dedupe` | off | number duplicate names `-v2`, `-v3` on the version (`make`) |
+| `namer.py` | `--fields` | required for `make` and `map` | the schema fields, in name order |
+| `namer.py` | `--fill` | none | a value for a field no name carries, e.g. `funnel_stage=prospecting,version=1` (`map`) |
+| `namer.py` | `--force` | off | overwrite the output file if it exists (`make`, `map`) |
+| `namer.py` | `--json` | off | print machine-readable JSON instead of text |
+| `namer.py` | `--key-map` | none | name unlabelled or private `KEY:value` segments of ad names, e.g. `PX=concept` |
+| `namer.py` | `--keyed` | off | write `KEY:value` segments, e.g. `CONCEPT:durability-test` |
+| `namer.py` | `--output` | required for `map`; none for `make` | the rename map CSV (`map`), or a CSV of names instead of printing them (`make`); also `-o` |
+| `namer.py` | `--sep` | a space, a pipe and a space (the package convention) | separator between segments |
 | `palette.py` | `--json` | off | print machine-readable JSON instead of text |
 | `palette.py` | `--k` | 6 | how many colours to report |
+| `power.py` | `--alpha` | 0.05 (a statistical convention, not a benchmark) | false-win rate, two-sided; split across comparisons when there are more than two arms |
+| `power.py` | `--arms` | 2 | control plus variants |
+| `power.py` | `--currency` | read from the export's spend header | three-letter currency code for money |
+| `power.py` | `--daily-budget` | required | money per day for the whole test |
+| `power.py` | `--json` | off | print machine-readable JSON instead of text |
+| `power.py` | `--key-map` | none | name unlabelled or private `KEY:value` segments of ad names, e.g. `PX=concept,6=tone` |
+| `power.py` | `--max-days` | required | the longest you will run the test |
+| `power.py` | `--mde` | required | the smallest relative change worth detecting, in percent of the baseline |
+| `power.py` | `--metric` | required | the rate the test should move: a rate built from counts, such as `ctr` or `cvr` |
+| `power.py` | `--power` | 0.8 (a statistical convention, not a benchmark) | chance of seeing a real change of `--mde` |
 | `profile_draft.py` | `--currency` | read from the export's spend header | three-letter currency code for money |
 | `profile_draft.py` | `--force` | off | overwrite the `--output` file if it already exists |
 | `profile_draft.py` | `--name` | none | the brand name, if you know it |
@@ -118,6 +191,7 @@ Scripts live in `skills/<skill>/scripts/`. `creative_metrics.py` and `from_mcp.p
 | `report.py` | `--title` | brand from the profile | account label for the title; wins over the profile |
 | `report.py` | `--top-n` | 8 | ad cards shown per list before the rest collapse |
 | `report.py` | `--verdicts` | none | keep-or-kill `--json` output |
+| `research_check.py` | `--json` | off | print machine-readable JSON instead of text |
 | `review.py` | `--account` | none | JSON file with account-level `reach` and `frequency` (and optionally `name`) |
 | `review.py` | `--attribution` | not stated | attribution setting shown in the header |
 | `review.py` | `--cache-dir` | `creative-review-runs` | where run folders are kept |
@@ -142,6 +216,33 @@ Scripts live in `skills/<skill>/scripts/`. `creative_metrics.py` and `from_mcp.p
 | `review.py` | `--tolerance` | 0.5 (the adapter's default) | percent a pull may fall short before it counts as incomplete (`pull`) |
 | `review.py` | `--type-map` | none | the account's own ad-type words, e.g. `core=bau,drop=launch` |
 | `review.py` | `--where` | none (all ads) | keep only rows where a column or name field matches, e.g. `market=US`; repeat the flag or use commas for more values |
+| `sale_lift.py` | `--baseline-days` | 21 | days before the sale that set the baseline, minus any `--exclude` days |
+| `sale_lift.py` | `--baseline-margin` | the `--margin` value | contribution margin in percent at full price |
+| `sale_lift.py` | `--currency` | read from the export's spend header | three-letter currency code for money |
+| `sale_lift.py` | `--exclude` | none | `FROM:TO` ISO dates, inclusive, repeatable: drop an earlier promotion from the baseline and post-sale days |
+| `sale_lift.py` | `--gap-days` | 0 | days skipped right before the sale, e.g. a teaser |
+| `sale_lift.py` | `--json` | off | print machine-readable JSON instead of text |
+| `sale_lift.py` | `--key-map` | none | name unlabelled or private `KEY:value` segments of ad names, e.g. `PX=concept,6=tone` |
+| `sale_lift.py` | `--margin` | none: no contribution without it | contribution margin in percent on sale revenue, after the discount and the cost of goods |
+| `sale_lift.py` | `--min-baseline-days` | 7 | fewer baseline days than this gives no lift number |
+| `sale_lift.py` | `--post-days` | 9 | days after the sale read for pull-forward |
+| `sale_lift.py` | `--sale-from` | required | first sale day (YYYY-MM-DD) |
+| `sale_lift.py` | `--sale-to` | required | last sale day (YYYY-MM-DD) |
+| `scan.py` | `--as-of` | today | the date days running are counted to |
+| `scan.py` | `--crowded-share` | 60 | percent of advertisers using an angle for it to count as crowded |
+| `scan.py` | `--evidence` | none | the evidence script's `--json` output, to compare with your own concepts |
+| `scan.py` | `--json` | off | print machine-readable JSON instead of text |
+| `scan.py` | `--keep-text` | off | keep each ad's text in the rows output |
+| `scan.py` | `--long-days` | 36 | days running at or above which an ad counts as long-running |
+| `scan.py` | `--source` | `Meta Ad Library (public)` | where the ads were collected from |
+| `spend.py` | `--age-bands` | `9,18,36` | day edges for age bands (under 9, 9-17, 18-35, 36+ days) |
+| `spend.py` | `--currency` | read from the export's spend header | three-letter currency code for money |
+| `spend.py` | `--json` | off | print machine-readable JSON instead of text |
+| `spend.py` | `--key-map` | none | name unlabelled or private `KEY:value` segments of ad names, e.g. `PX=concept,6=tone` |
+| `spend.py` | `--min-impressions` | 1000 | ads below this are left out of the frequency baseline |
+| `spend.py` | `--pareto-share` | 80 | percent of spend (and of value) the fewest ads hold; a common convention, not a rule |
+| `spend.py` | `--top-n` | 3 | how many top-spend ads the concentration line counts |
+| `spend.py` | `--verdicts` | none | keep-or-kill `--json` output, for pause spend, room to scale and budget moves |
 | `verdicts.py` | `--currency` | read from the export's spend header | three-letter currency code for money |
 | `verdicts.py` | `--group-by` | `format,ad_type` | columns to compare ads within, narrowest first; a group with fewer than 5 comparable ads widens to the next |
 | `verdicts.py` | `--json` | off | print machine-readable JSON instead of text |

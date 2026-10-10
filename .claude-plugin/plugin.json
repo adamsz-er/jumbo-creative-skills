@@ -1,11 +1,18 @@
 {
   "name": "jumbo-creative",
-  "version": "0.1.0",
-  "description": "Skills that teach any brand to analyse and make Meta ad creative, graded against the account's own baseline rather than generic benchmarks.",
+  "version": "0.2.0",
+  "description": "Skills that teach any brand to analyse and make Meta ad creative, graded against the account's own baseline rather than generic benchmarks: review, keep or kill, spend, fatigue and funnel reads, and ideas, hooks, personas, copy tests, briefs, ad names, competitor scans and sale plans built from the account's own results.",
   "author": {
     "name": "adamsz-er"
   },
   "license": "MIT",
   "repository": "https://github.com/adamsz-er/jumbo-creative-skills",
-  "keywords": ["meta-ads", "creative", "advertising", "skills"]
+  "keywords": [
+    "meta-ads",
+    "creative",
+    "advertising",
+    "skills",
+    "ad-testing",
+    "sales"
+  ]
 }

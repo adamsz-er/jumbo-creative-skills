@@ -37,6 +37,7 @@ LABELS = {
     "check_top_seller": "Check before cutting",
     "check_immature": "Check before cutting",
     "check_feeds": "Check before cutting",
+    "check_site": "Check before cutting",
     "check_no_target": "Check before cutting",
     "check_meets_target": "Check before cutting",
     "iterate": "Iterate: refresh the hook or creator, keep the concept",
@@ -221,6 +222,9 @@ def _sentence(vid: str, ad: Dict[str, Any], ctx: Dict[str, Any]) -> str:
     elif vid == "check_meets_target":
         text = ("Check before cutting: it is weaker than most of your %s ads, but it still meets your %s target."
                 % (pool_word, " and ".join(ctx["met"])))
+    elif vid == "check_site":
+        text = ("Check before cutting: the ad still earns attention and clicks, but %s on the site. "
+                "Check the landing page and checkout before pausing the ad." % ctx["site"])
     elif vid == "check_feeds":
         text = ("Check before cutting: it catches attention (%s) but pays back weakly. "
                 "See whether it feeds your other ads first." % " and ".join(ctx["strong"]))
@@ -405,6 +409,28 @@ def judge_ads(rows: Sequence[Dict[str, Any]], young_days: int = 5, window: int =
                         _against_target(m, ad.get(m), relevant[m], currency) for m in met))
                 else:
                     vid = pause
+                    funnel = cm.funnel_read(rows, ad, pool, group_by, window, min_change, min_impressions)
+                    entry["funnel"] = {k: funnel[k] for k in ("call", "reason", "weak_steps", "missing_site_steps")}
+                    weak = [st for st in funnel["steps"] if st["weak"] and st["side"] == "site"]
+                    site_steps = "; ".join("%s is %s" % (st["metric"].replace("_", " "), st["why"]) for st in weak)
+                    if funnel["call"] == "site" and pause == "pause_never_worked":
+                        vid = "check_site"
+                        ctx["site"] = site_steps
+                        reasons.append("would be paused, but its funnel points at the site: %s (%s)" % (
+                            funnel["reason"], ctx["site"]))
+                        reasons.append("no step the ad controls (hook rate, hold rate, ctr) is weak or falling")
+                    elif weak and pause == "pause_fatigued":
+                        ctx["site"] = site_steps
+                        reasons.append("its click-through rate is fading, so the pause stands; a site step is weak "
+                                       "too (%s): fix the page before its replacement goes live" % site_steps)
+                    elif weak and funnel["call"] == "both":
+                        ctx["site"] = site_steps
+                        reasons.append("both the ad's own steps and a site step are weak (%s), so the pause "
+                                       "stands: fix the page before its replacement goes live" % site_steps)
+                    elif weak:
+                        ctx["site"] = site_steps
+                        reasons.append("a site step is weak too (%s), but the ad's own steps could not be judged, so "
+                                       "the pause stands: check the page as well" % site_steps)
                     reasons.append("payback is bottom quartile on every measure, in its group and account-wide within "
                                    "its objective" + (", and was bottom in the first %d delivery days too" % window
                                                       if pause == "pause_never_worked" else ", and it is fatiguing"))
