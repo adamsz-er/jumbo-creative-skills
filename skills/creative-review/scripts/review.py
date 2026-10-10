@@ -35,6 +35,7 @@ sys.path.insert(0, str(HERE))
 import changes as changes_mod  # noqa: E402
 import creative_metrics as cm  # noqa: E402
 import errors  # noqa: E402
+import next_steps  # noqa: E402
 import profile_draft  # noqa: E402
 from errors import ReviewError  # noqa: E402
 
@@ -187,8 +188,10 @@ def biggest_opportunity(mix: Dict[str, Any]) -> str:
     return "Try the %s idea as a %s (no ads like it yet): %s." % (gap.get("concept"), gap.get("format"), why)
 
 
-def summary_text(title: str, bullets: Sequence[str], report: Path) -> str:
+def summary_text(title: str, bullets: Sequence[str], report: Path, steps: Sequence[Dict[str, str]] = ()) -> str:
     lines = ["Creative review: %s" % title, ""] + ["- %s" % b for b in bullets] + ["", "Full dashboard: %s" % report]
+    if steps:
+        lines += ["", next_steps.render(steps)]
     return "\n".join(lines) + "\n"
 
 
@@ -370,7 +373,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     else:
         moves, basis = None, "first run: nothing to compare yet"
     bullets = [headline(scoped, currency, moves, basis), biggest_action(verdicts, currency), biggest_opportunity(mix)]
-    text = summary_text(title or "your ads", bullets, report.resolve())
+    text = summary_text(title or "your ads", bullets, report.resolve(), next_steps.next_steps(verdicts, mix))
     (folder / "summary.md").write_text(text, encoding="utf-8")
     write_run_info(folder, info, complete=True)
     print(text, end="")

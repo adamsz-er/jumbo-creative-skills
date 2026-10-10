@@ -1,8 +1,25 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.2.0 (unreleased)
 
-- Eleven skills: `creative-context`, `creative-grader`, `keep-or-kill`, `creative-mix`, `creative-ideation`, `hook-writer`, `persona-builder`, `creative-brief`, `ad-transcript`, `colour-grade` and `creative-report`.
+Nineteen skills, up from twelve. Every new skill judges against the account's own baseline, never a benchmark, and only reads: none changes the ad account.
+
+- New `spend-analysis`: where the money goes by ad, concept, format, ad type, age and verdict; spend and value concentration; spend on ads judged pause; room to scale; and budget moves from keep-or-kill's verdicts, each with a confidence and its evidence.
+- New `fatigue-planner`: each ad against the account's band for its day of delivery (the same age curve the report draws), fading and on-course ads, days left from a straight line through the ad's own recent days with its range, and a dated refresh calendar sized to the team's capacity.
+- New `funnel-diagnosis`: creative or site. If hook, hold and click-through hold while landing-page view, add-to-cart or checkout rates fall or lag, it points at the page, with a page checklist. keep-or-kill now turns such a Pause into "Check before cutting" (`check_site`) with the reason.
+- New `copy-tests`: primary text, headline and description variants tied to a persona and a hook, one change per variant, checked against Meta's published text guidance; and test sizing from the account's own baseline rate (sample, budget, duration, stopping rule), saying plainly when the account cannot power a test.
+- New `competitor-scan`: rivals' public Meta Ad Library ads clustered by angle, hook type, offer and format, with open ground, angles worth testing and ones not to chase against the brand's own winners. Text only; no media kept.
+- New `sale-planner`: a sale by phase (teaser to post-sale), an offer-mechanic chooser, consumer-law rules as hard gates (citing the Australian Competition and Consumer Commission's own guidance), an Australian sale calendar, and a past sale judged against a weekday-matched baseline with new-customer share, pull-forward and contribution.
+- New `ad-namer`: names to a schema the user picks, an audit of existing names, and an old-to-new rename map as a CSV. It renames nothing.
+- `creative-context` seeds the brand profile from public research on the brand's site and reviews: every line labelled and sourced, reviews paraphrased, checked by `research_check.py`, saved only after the user confirms.
+- `persona-builder`, `hook-writer` and `creative-ideation` read the account through one shared evidence script (`shared/evidence.py`, moved from creative-brief and synced into each): results by persona or audience, hook and hold rate with faded hooks set apart, concept and format coverage, verdicts and a competitor scan. Every persona, hook or idea names the ads it came from, or says it is unbacked.
+- `creative-review` ends with the two or three skills its findings point to, chosen by fixed rules. The README gains an "I want to..." skill map.
+- Metrics: base fields `landing_page_views`, `checkouts`, `new_customers`; package metrics `landing_page_view_rate`, `cart_to_checkout_rate`, `new_customer_purchase_share`. Ad names can carry `persona`, `hook`, `offer` and `version` (`PERSONA:`, `HOOK:`, `OFFER:`, `VER:`).
+- A second synthetic Acme export, `examples/acme/ads_daily_extended.csv` (`make_fixture.py --extended`), adds an audience ad set, landing page views, checkouts and new-customer purchases; the original export is unchanged.
+
+## 0.1.0
+
+- Twelve skills: `creative-context`, `creative-grader`, `keep-or-kill`, `creative-mix`, `creative-ideation`, `hook-writer`, `persona-builder`, `creative-brief`, `ad-transcript`, `colour-grade`, `creative-report` and `creative-review`.
 - One shared metrics module (`shared/creative_metrics.py`) synced into every skill, so each works on its own after install.
 - Worked examples for the fictional Acme Outdoor Co. in `examples/acme/`, generated from a synthetic fixture, including a shareable HTML report.
 - Per-skill and all-skills zips for Claude desktop and claude.ai (`tools/build_zips.py`), and a release workflow that attaches them when a version tag is pushed.
