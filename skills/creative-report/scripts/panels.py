@@ -524,12 +524,13 @@ def _day(row: Dict[str, Any]) -> Optional[str]:
 
 
 def coverage(ads: Sequence[Dict[str, Any]], fields: Sequence[str]) -> List[str]:
-    """One note per field recorded on some ads and not others; fully present or fully missing is not partial."""
-    notes = []
+    """One note per field recorded on some ads with spend and not others, counted out of the ads with spend as the headline is; fully present
+    or fully missing is not partial."""
+    notes, spent = [], [a for a in ads if a.get("spend")]
     for field in dict.fromkeys(fields):
-        have = sum(1 for a in ads if a.get(field) is not None)
-        if 0 < have < len(ads):
-            notes.append("%s recorded on %d of %d ads; the rest had none in this window" % (interact.FIELD_WORDS.get(field, field), have, len(ads)))
+        have = sum(1 for a in spent if a.get(field) is not None)
+        if 0 < have < len(spent):
+            notes.append("%s recorded on %d of the %d ads with spend; the rest had none in this window" % (interact.FIELD_WORDS.get(field, field), have, len(spent)))
     return notes
 
 
@@ -753,7 +754,7 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
         if key not in ACCOUNT_KPIS:
             cal = calendar(rows)
             values = day_values(cal, key)
-            tips = ["%s: %s" % (charts.day_label(d), _kpi_text(ctx, totals(_measure_rows(rs, key)), key, kind)) if v is not None else ""
+            tips = ["%s: %s" % (charts.day_label(d), _kpi_text(ctx, totals(_day_rows(rs, key)), key, kind)) if v is not None else ""
                     for (d, rs), v in zip(cal, values)]
             spark = charts.sparkline(values, "%s by day" % tile["base_name"], tips=tips, average=rolling_values(cal, key))
         spark_note = spark or ("" if key in ACCOUNT_KPIS or key in gone_metrics(ctx) else
@@ -806,11 +807,19 @@ def _measure_rows(rows: Sequence[Dict[str, Any]], key: str) -> List[Dict[str, An
     return [r for r in rows if any(r.get(f) is not None for f in num) and any(r.get(f) is not None for f in den)]
 
 
+def _day_rows(rows: Sequence[Dict[str, Any]], key: str) -> List[Dict[str, Any]]:
+    """The rows a day's measure sums, on its key number's basis. A count keeps the rows that carry it. A rate keeps every row (a video rate only
+    the rows that can have plays), so a row with spend and a blank purchase count adds its spend to the day's CPA as it does to the tile's."""
+    if key in cm.NUMERIC_FIELDS:
+        return _measure_rows(rows, key)
+    return video_rows(rows, key) if key in VIDEO_KPIS else list(rows)
+
+
 def day_values(cal: Sequence[Tuple[str, List[Dict[str, Any]]]], key: str) -> List[Optional[float]]:
     """A measure per calendar day as a ratio of that day's sums; a day with no usable rows is None, never 0."""
     out: List[Optional[float]] = []
     for _, rows in cal:
-        used = _measure_rows(rows, key)
+        used = _day_rows(rows, key)
         out.append(_kpi_value(totals(used), key) if used else None)
     return out
 
@@ -819,11 +828,11 @@ def rolling_values(cal: Sequence[Tuple[str, List[Dict[str, Any]]]], key: str, wi
                    need: int = charts.ROLLING_MIN_VALUES) -> List[Optional[float]]:
     """A rolling average over `window` days: a count (spend, impressions, ...) is its mean per day, a ratio is the ratio of the window's sums.
 
-    Only days with rows that carry the measure count, and only those rows are summed; fewer than `need` such days is a gap.
+    Only days with rows on the measure's basis (see _day_rows) count, and only those rows are summed; fewer than `need` such days is a gap.
     """
     out: List[Optional[float]] = []
     for i in range(len(cal)):
-        days = [_measure_rows(rows, key) for _, rows in cal[max(0, i - window + 1):i + 1]]
+        days = [_day_rows(rows, key) for _, rows in cal[max(0, i - window + 1):i + 1]]
         days = [d for d in days if d]
         if len(days) < need:
             out.append(None)
@@ -1017,14 +1026,14 @@ def pareto_cut(ctx: Ctx) -> Optional[Dict[str, Any]]:
     partial = has_value and ads_with < len(ranked)
     return {"ranked": ranked, "has_value": has_value, "cum_spend": cum_spend, "cum_basis": cum_basis, "cut": cut or len(ranked),
             "head_basis": cum_basis[(cut or len(ranked)) - 1],
-            "coverage": ("Purchase value was recorded on %d of %d ads; the rest had none in this window and count as no value."
+            "coverage": ("Purchase value was recorded on %d of the %d ads with spend; the rest had none in this window and count as no value."
                          % (ads_with, len(ranked))) if partial else None}
 
 
 def pareto_sentence(ctx: Ctx, info: Dict[str, Any]) -> str:
     n, total = info["cut"], len(info["ranked"])
     what = "purchase value" if info["has_value"] else "spend"
-    text = "%d ads (%.0f%% of ads) drive %.0f%% of %s." % (n, n / total * 100, info["head_basis"], what)
+    text = "%d ads (%.0f%% of the %d ads with spend) drive %.0f%% of %s." % (n, n / total * 100, total, info["head_basis"], what)
     if not info["has_value"]:
         text += " There is no purchase value in the data, so this is read on spend."
     if info.get("coverage"):
