@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This repo is a public package of Agent Skills for analysing and making Meta ad creative. Skills live in `skills/<name>/SKILL.md`, with `references/` and `scripts/` beside each. `shared/creative_metrics.py` is the one canonical metrics module. Each skill carries a synced copy in its own `scripts/` so it works after install on its own.
+This repo is a public package of Agent Skills for analysing and making Meta ad creative. Skills live in `skills/<name>/SKILL.md`, with `references/` and `scripts/` beside each. `shared/creative_metrics.py` is the one canonical metrics module, and `shared/evidence.py` the one account-evidence script the make skills read. Each skill carries synced copies in its own `scripts/` so it works after install on its own.
 
 ## Contributor rules
 

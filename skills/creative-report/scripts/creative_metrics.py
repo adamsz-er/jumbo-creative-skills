@@ -38,6 +38,9 @@ METRICS: Dict[str, Tuple[Tuple[str, ...], Tuple[str, ...], float]] = {
     "engagement_rate": (("engagements",), ("impressions",), 100.0),
     "frequency": (("impressions",), ("reach",), 1.0),
     "mer": (("revenue",), ("spend",), 1.0),
+    "landing_page_view_rate": (("landing_page_views",), ("link_clicks",), 100.0),
+    "cart_to_checkout_rate": (("checkouts",), ("add_to_carts",), 100.0),
+    "new_customer_purchase_share": (("new_customers",), ("conversions",), 100.0),
 }
 
 # An alias is another name for the same metric, never a second metric.
@@ -47,6 +50,7 @@ NUMERIC_FIELDS = (
     "spend", "impressions", "reach", "video_views_3s", "video_thruplay",
     "link_clicks", "clicks", "conversions", "conversion_value", "add_to_carts",
     "revenue", "leads", "shares", "saves", "comments",
+    "landing_page_views", "checkouts", "new_customers",
 )
 COST_PER_VIEW = "cost_per_action_type:video_view"
 DERIVED_3S = "derived: spend / cost per 3-second view"
@@ -59,7 +63,7 @@ AGE_FROM_CREATED = "created_time"
 AGE_FROM_DELIVERY = "first delivery in window (older ads may be understated)"
 # The original positional convention: what a name of exactly this many parts is read as.
 LEGACY_PATTERN = ("concept", "format", "creator", "ad_type", "product", "tone", "launch_date")
-NAME_FIELDS = LEGACY_PATTERN + ("market", "funnel_stage", "collection", "range")
+NAME_FIELDS = LEGACY_PATTERN + ("market", "funnel_stage", "collection", "range", "persona", "hook", "offer", "version")
 AD_TYPES = ("bau", "promo", "launch", "hype", "partnership", "retention")
 # Words an account uses for the six ad types. A word not here is kept as written, counted, and asked about.
 SYNONYMS = {
@@ -84,6 +88,10 @@ KEY_MAP = {
     "STG": "funnel_stage", "STAGE": "funnel_stage", "FUNNEL": "funnel_stage",
     "TONE": "tone",
     "LD": "launch_date", "DATE": "launch_date", "LAUNCH": "launch_date",
+    "PER": "persona", "PERSONA": "persona",
+    "HK": "hook", "HOOK": "hook",
+    "OFFER": "offer", "OFR": "offer",
+    "VER": "version", "VERSION": "version",
 }
 SEPARATORS = (" | ", "|", " _ ", "_", " - ")
 FORMAT_WORDS = frozenset(("image", "static", "video", "carousel", "collection", "catalogue", "catalog",
@@ -125,6 +133,12 @@ _ALIASES = {
     "omnipurchasevalues": "conversion_value", "omniaddtocart": "add_to_carts",
     "costperactiontypevideoview": COST_PER_VIEW, "costpervideoview": COST_PER_VIEW,
     "createdtime": "created_time", "onsiteconversionleadgrouped": "leads",
+    "landingpageviews": "landing_page_views", "websitelandingpageviews": "landing_page_views",
+    "landingpageview": "landing_page_views",
+    "checkouts": "checkouts", "checkoutsinitiated": "checkouts", "websitecheckoutsinitiated": "checkouts",
+    "initiatecheckout": "checkouts", "initiatecheckouts": "checkouts",
+    "omniinitiatedcheckout": "checkouts",
+    "newcustomerpurchases": "new_customers", "newcustomers": "new_customers", "newcustomerorders": "new_customers",
 }
 # `id` and `name` are ad fields only on a row that is marked as an ad row.
 _ID_NAME_ALIASES = {"id": "ad_id", "name": "ad_name"}
@@ -140,6 +154,8 @@ _API_ACTION_TYPES = {
     "comment": "comments",
     "post": "shares",
     "onsite_conversion.post_save": "saves",
+    "landing_page_view": "landing_page_views",
+    "initiate_checkout": "checkouts",
 }
 _API_VALUE_TYPES = {"purchase": "conversion_value"}
 _API_LIST_FIELDS = {"video_thruplay_watched_actions": "video_thruplay"}
@@ -1212,7 +1228,7 @@ def _describe(found: Dict[str, Any]) -> str:
 
 BAND_TOP, BAND_MID, BAND_BOTTOM = "top quartile", "middle", "bottom quartile"
 HIGHER_IS_BETTER = ("hook_rate", "hold_rate", "video_completion_rate", "ctr", "cvr",
-                    "add_to_cart_rate", "roas", "engagement_rate")
+                    "add_to_cart_rate", "roas", "engagement_rate", "landing_page_view_rate", "cart_to_checkout_rate")
 LOWER_IS_BETTER = ("cpm", "cpc", "cpa", "cost_per_add_to_cart", "cost_per_lead")
 # Fewer comparable ads than this is not enough to grade against. An arbitrary
 # default, not a statistical rule: set your own from how many ads you run per format.
@@ -1598,6 +1614,218 @@ def window_aggregate(rows: Sequence[Dict[str, Any]], window: int = 6,
         keep = ordered[:window] if which == "first" else ordered[-window:]
         chosen.extend(r for d in keep for r in days[d])
     return aggregate_by_ad(chosen, key_map=key_map) if chosen else []
+
+
+# A delivery day's median band needs this many ads with a value that day. An arbitrary default: set your own.
+CURVE_MIN_ADS = 3
+BEFORE_WINDOW = "running before the window began; its launch day is not in the data"
+
+
+def _row_key(row: Dict[str, Any]) -> str:
+    return str(row.get("ad_id") or row.get("ad_name"))
+
+
+def ad_days(rows: Sequence[Dict[str, Any]], ad_key: str) -> List[Tuple[str, Dict[str, Optional[float]]]]:
+    """An ad's own calendar days, each with its rows summed. Reach is kept only when the day has one row."""
+    days: Dict[str, List[Dict[str, Any]]] = {}
+    for row in rows:
+        day = _parse_date(row.get("date"))
+        if day and _row_key(row) == str(ad_key):
+            days.setdefault(day.isoformat(), []).append(row)
+    out = []
+    for day in sorted(days):
+        total = _sum_rows(days[day])
+        total["reach"] = days[day][0].get("reach") if len(days[day]) == 1 else None
+        out.append((day, total))
+    return out
+
+
+def delivery_series(rows: Sequence[Dict[str, Any]], ad_key: str,
+                    metrics: Sequence[str] = ("ctr",)) -> List[Dict[str, Any]]:
+    """One entry per day the ad has a row: its spend and each metric, with `delivery_day` counting only
+    days with impressions (None on a day without). A metric is None on a day without delivery."""
+    out, delivered = [], 0
+    for day, total in ad_days(rows, ad_key):
+        live = (total.get("impressions") or 0) > 0
+        delivered += live
+        values = compute_metrics(total)
+        entry: Dict[str, Any] = {"day": day, "delivery_day": delivered if live else None, "spend": total.get("spend")}
+        for metric in metrics:
+            entry[resolve_metric(metric)] = values[resolve_metric(metric)] if live else None
+        out.append(entry)
+    return out
+
+
+def launched_in_window(rows: Sequence[Dict[str, Any]], ad_key: str,
+                       series: Optional[Sequence[Dict[str, Any]]] = None) -> Tuple[Optional[str], Optional[str]]:
+    """(launch day, reason): the ad's first day with impressions when it launched inside the data's window.
+
+    An ad with a row on the window's first day, or created before it, was already running when the window
+    opened, so its first delivery here is not its launch and its delivery days are not days since launch.
+    """
+    series = series if series is not None else delivery_series(rows, ad_key)
+    first = next((e["day"] for e in series if e["delivery_day"] == 1), None)
+    if first is None:
+        return None, "no day with impressions in the window"
+    start = data_window(rows)[0] or first
+    created = [d for d in (_parse_date(r.get("created_time")) for r in rows if _row_key(r) == str(ad_key)) if d]
+    if series[0]["day"] <= start or (created and min(created).isoformat() < start):
+        return None, BEFORE_WINDOW
+    return first, None
+
+
+def delivery_curve(rows: Sequence[Dict[str, Any]], metrics: Sequence[str] = ("hook_rate", "ctr", "frequency"),
+                   min_ads: int = CURVE_MIN_ADS) -> Dict[str, List[Dict[str, Any]]]:
+    """The account's own band by day of delivery: for each metric and delivery day, the median and quartiles
+    across the ads launched inside the window that have a value that day.
+
+    Only ads that launched inside the window count, because day N of an ad already running when the window
+    opened is not day N since launch. A day with fewer than `min_ads` values has no band (None, with a note).
+    """
+    metrics = [resolve_metric(m) for m in metrics]
+    by_metric: Dict[str, Dict[int, List[float]]] = {m: {} for m in metrics}
+    for key in dict.fromkeys(_row_key(r) for r in rows):
+        series = delivery_series(rows, key, metrics)
+        if launched_in_window(rows, key, series)[0] is None:
+            continue
+        for entry in series:
+            for metric in metrics:
+                if entry["delivery_day"] is not None and entry[metric] is not None:
+                    by_metric[metric].setdefault(entry["delivery_day"], []).append(entry[metric])
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for metric in metrics:
+        days = by_metric[metric]
+        out[metric] = []
+        for day in range(1, max(days) + 1 if days else 1):
+            stats = _stats(sorted(days.get(day, [])))
+            enough = stats["n"] >= min_ads
+            out[metric].append({"delivery_day": day, "ads": stats["n"],
+                                "median": stats["median"] if enough else None,
+                                "p25": stats["p25"] if enough else None, "p75": stats["p75"] if enough else None,
+                                "note": None if enough else "n/a (fewer than %d ads launched in the window had a value "
+                                                            "on delivery day %d)" % (min_ads, day)})
+    return out
+
+
+# The funnel in order: the steps the ad itself controls, then the steps on the site. Purchase rate (cvr) is
+# shown beside them but decides nothing: a weak one can be the offer or the audience as much as the page.
+ATTENTION_STEPS = ("hook_rate", "hold_rate", "ctr")
+SITE_STEPS = ("landing_page_view_rate", "add_to_cart_rate", "cart_to_checkout_rate")
+CONTEXT_STEPS = ("cvr",)
+FUNNEL_CALLS = {
+    "site": "the ad still earns attention and clicks while a step on the site is weak or falling: check the page first",
+    "creative": "a step the ad controls is weak or falling while the site steps hold: the creative is the place to work",
+    "both": "steps on both sides are weak or falling: check the page before judging the creative",
+    "neither": "no funnel step is weak or falling against the ad's own group or its own start",
+    "unjudged": "too little history and too few comparable ads to judge a step on each side: no call",
+    "unreadable": "the site steps cannot be read from this data",
+}
+
+
+# How many standard errors a rate must move before the funnel read calls it real: the common two-sided 95%
+# convention from statistics, not a benchmark. Raise it to call fewer steps weak.
+FUNNEL_Z = 1.96
+
+
+def rate_counts(total: Dict[str, Any], metric: str) -> Tuple[Optional[float], Optional[float]]:
+    """(numerator, denominator) counts behind a rate metric for summed rows, as compute_metrics picks them."""
+    num_fields, den_fields, _ = METRICS[resolve_metric(metric)]
+    return _pick(total, num_fields)[1], _pick(total, den_fields)[1]
+
+
+def proportion_z(x1: Optional[float], n1: Optional[float], x2: Optional[float], n2: Optional[float]) -> Optional[float]:
+    """Two-proportion z score of x2/n2 against x1/n1 (negative when the second is lower); None when either
+    share is missing, has no denominator or is not a proportion (above 1), or there is no variation."""
+    if None in (x1, n1, x2, n2) or not n1 or not n2 or x1 > n1 or x2 > n2:
+        return None
+    pooled = (x1 + x2) / (n1 + n2)
+    se = math.sqrt(pooled * (1 - pooled) * (1 / n1 + 1 / n2))
+    return None if se == 0 else (x2 / n2 - x1 / n1) / se
+
+
+def _window_totals(rows: Sequence[Dict[str, Any]], ad_key: str, window: int) -> Optional[Tuple[Dict[str, Any], Dict[str, Any]]]:
+    days = [t for _, t in ad_days(rows, ad_key) if (t.get("impressions") or 0) > 0]
+    if len(days) < 2 * window:
+        return None
+    first, last = {}, {}
+    for target, chosen in ((first, days[:window]), (last, days[-window:])):
+        for field in NUMERIC_FIELDS:
+            values = [d[field] for d in chosen if d.get(field) is not None]
+            target[field] = sum(values) if values else None
+    return first, last
+
+
+def funnel_read(rows: Sequence[Dict[str, Any]], ad: Dict[str, Any], ads: Sequence[Dict[str, Any]],
+                group_by: Sequence[str] = ("format",), window: int = 6, min_change: float = 8.0,
+                min_impressions: int = 1000, z: float = FUNNEL_Z) -> Dict[str, Any]:
+    """Whether an ad's weak or falling result sits in the creative or on the site.
+
+    Each funnel step is judged two ways, both against the account itself:
+    - falling: down at least `min_change` percent from the ad's first `window` delivery days to its last, and
+      the drop is at least `z` standard errors on the ad's own counts;
+    - low: bottom quartile of the ad's group (as grade_against), and below the group's pooled rate by at least
+      `z` standard errors.
+    A step is weak when either holds. Purchase rate is reported as context and never decides the call.
+    The call is "site" when a site step is weak and no attention step is,
+    "creative" for the reverse, "both", "neither", or "unreadable" when no site step has data. A call that
+    says one side holds needs at least one step on that side that could be judged (a trend or a graded band);
+    otherwise the call is "unjudged". A step with no value is never read as fine: it is listed as missing.
+    """
+    key = ad.get("ad_id") or ad.get("ad_name")
+    windows = _window_totals(rows, key, window)
+    steps = []
+    for metric in ATTENTION_STEPS + SITE_STEPS + CONTEXT_STEPS:
+        grade = grade_against(ad, ads, metric, group_by, min_impressions)
+        readable = ad.get(metric) is not None
+        change = trend_z = gap_z = None
+        if windows and readable:
+            first, last = windows
+            first_value, last_value = compute_metrics(first)[metric], compute_metrics(last)[metric]
+            change = _pct_change(first_value, last_value)
+            trend_z = proportion_z(*rate_counts(first, metric), *rate_counts(last, metric))
+        if grade["band"] == BAND_BOTTOM:
+            peers = [a for a in ads if group_key(a, group_by) == grade["group"] and a is not ad] if grade["basis"] == "group" \
+                else [a for a in ads if a is not ad]
+            peers = [a for a in peers if None not in rate_counts(a, metric)]
+            present = {f: [a[f] for a in peers if a.get(f) is not None] for f in NUMERIC_FIELDS}
+            pooled = {f: sum(v) if v else None for f, v in present.items()}
+            gap_z = proportion_z(*rate_counts(pooled, metric), *rate_counts(ad, metric))
+        falling = change is not None and change <= -min_change and trend_z is not None and trend_z <= -z
+        low = gap_z is not None and gap_z <= -z
+        why = []
+        if low:
+            why.append("bottom quartile of its group")
+        if falling:
+            why.append("down %.0f%% since its first %d delivery days" % (-change, window))
+        side = "attention" if metric in ATTENTION_STEPS else "site" if metric in SITE_STEPS else "context"
+        judged = readable and (trend_z is not None or grade["band"] in (BAND_TOP, BAND_MID, BAND_BOTTOM))
+        steps.append({"metric": metric, "side": side,
+                      "value": ad.get(metric), "band": grade["band"], "change_pct": change,
+                      "trend_z": trend_z, "gap_z": gap_z, "readable": readable, "judged": judged,
+                      "weak": falling or low,
+                      "why": ", ".join(why) or None,
+                      "note": None if readable else "n/a (%s)" % (describe_missing(ad, metric) or "no value")})
+    attention = [s for s in steps if s["side"] == "attention" and s["weak"]]
+    site = [s for s in steps if s["side"] == "site" and s["weak"]]
+    judged = {side: any(s["judged"] for s in steps if s["side"] == side) for side in ("attention", "site")}
+    if not any(s["readable"] for s in steps if s["side"] == "site"):
+        call = "unreadable"
+    elif attention and site:
+        call = "both"
+    elif site and judged["attention"]:
+        call = "site"
+    elif attention and judged["site"]:
+        call = "creative"
+    elif not attention and not site and judged["attention"] and judged["site"]:
+        call = "neither"
+    else:
+        call = "unjudged"
+    return {"ad": key, "call": call, "reason": FUNNEL_CALLS[call],
+            "weak_steps": [s["metric"] for s in attention + site], "steps": steps,
+            "trend_readable": windows is not None,
+            "missing_site_steps": [s["metric"] for s in steps if s["side"] == "site" and not s["readable"]],
+            "settings": {"window": window, "min_change": min_change, "min_impressions": min_impressions,
+                         "group_by": list(group_by), "z": z}}
 
 
 def spend_share(ads: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:

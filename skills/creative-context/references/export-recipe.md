@@ -10,6 +10,8 @@ Menu names and column labels change from time to time. Where this page names one
    - 3-second video plays, ThruPlays
    - Video plays at 25%, 50%, 75%, 95% and 100%, and Video average play time
    - For the objective: Purchases, Purchases conversion value, Adds to cart, and the Results and Cost per result columns
+   - For the funnel read (`funnel-diagnosis`, and keep-or-kill's site check): Landing page views and Checkouts initiated
+   - Optional, for personas by audience: Ad set name (the audience is often in it)
 3. Set **Breakdown** to **By time** then **Day**. Daily rows are what fatigue and ad-age work need. If you also want placement cuts, make a second export with Breakdown by **Delivery** then **Platform** and **Placement**.
 4. **Export** the table data as CSV (or XLSX if CSV is not offered). Raw exports keep stable column names.
 5. If the table hides ads with no delivery, that is fine for most work. For keep-or-kill reviews that need paused ads, change the filter so paused ads in the window are included.
