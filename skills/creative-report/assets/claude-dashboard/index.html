@@ -1,38 +1,75 @@
+<link rel="stylesheet" href="fonts.css">
 <link rel="stylesheet" href="dashboard.css">
 <div class="cr" id="top">
   <header class="cr-head">
+    <div class="cr-bar">
+      <div class="cr-lockup">
+        <img class="cr-logo cr-logo-light cr-logo-jumbo" src="{{logo jumbo-logo.svg}}" alt="Jumbo">
+        <img class="cr-logo cr-logo-dark cr-logo-jumbo" src="{{logo jumbo-logo-dark.svg}}" alt="Jumbo">
+        <span class="cr-brand-div" aria-hidden="true"></span>
+        <span class="cr-brand-by">by</span>
+        <img class="cr-logo cr-logo-light cr-logo-er" src="{{logo er-logo-dark.svg}}" alt="Elephant Room">
+        <img class="cr-logo cr-logo-dark cr-logo-er" src="{{logo er-logo.svg}}" alt="Elephant Room">
+      </div>
+      <p class="cr-status dash-skeleton cr-completeness" title="The ads' totals fall short of the account's own totals" hidden data-source="header" data-field="value" data-where="fact=Completeness">—</p>
+    </div>
+    <p class="cr-eyebrow">Creative review</p>
     <h1 class="cr-title dash-skeleton" id="title" data-source="header" data-field="value" data-where="fact=Title">—</h1>
     <p class="cr-lead dash-skeleton" id="takeaway" data-source="pareto-cut" data-field="sentence" data-row="0">—</p>
-    <dl class="cr-facts" id="facts">
-      <div class="cr-fact"><dt>Window</dt><dd class="dash-skeleton" data-source="header" data-field="value" data-where="fact=Window">—</dd></div>
-      <div class="cr-fact"><dt>Scope</dt><dd class="dash-skeleton" data-source="header" data-field="value" data-where="fact=Scope">—</dd></div>
-      <div class="cr-fact"><dt>Currency</dt><dd class="dash-skeleton" data-source="header" data-field="value" data-where="fact=Currency">—</dd></div>
-      <div class="cr-fact"><dt>Source</dt><dd class="dash-skeleton" data-source="header" data-field="value" data-where="fact=Source">—</dd></div>
-      <div class="cr-fact"><dt>Attribution</dt><dd class="dash-skeleton" data-source="header" data-field="value" data-where="fact=Attribution">—</dd></div>
-      <div class="cr-fact"><dt>Totals</dt><dd class="dash-skeleton cr-completeness" data-source="header" data-field="value" data-where="fact=Completeness">—</dd></div>
-      <div class="cr-fact"><dt>Generated</dt><dd class="dash-skeleton" data-source="header" data-field="value" data-where="fact=Generated">—</dd></div>
+    <p class="cr-muted" id="lead-note" hidden></p>
+    <dl class="cr-scope" id="facts">
+      <div class="cr-scope-seg"><dt>Window</dt><dd class="dash-skeleton" data-source="header" data-field="value" data-where="fact=Window">—</dd></div>
+      <div class="cr-scope-seg"><dt>Scope</dt><dd class="dash-skeleton" data-source="header" data-field="value" data-where="fact=Scope">—</dd></div>
+      <div class="cr-scope-seg"><dt>Currency</dt><dd class="dash-skeleton" data-source="header" data-field="value" data-where="fact=Currency">—</dd></div>
+      <div class="cr-scope-seg"><dt>Source</dt><dd class="dash-skeleton" data-source="header" data-field="value" data-where="fact=Source">—</dd></div>
+      <div class="cr-scope-seg"><dt>Attribution</dt><dd class="dash-skeleton" data-source="header" data-field="value" data-where="fact=Attribution">—</dd></div>
+      <div class="cr-scope-seg"><dt>Totals</dt><dd class="dash-skeleton" data-source="header" data-field="value" data-where="fact=Totals">—</dd></div>
+      <div class="cr-scope-seg"><dt>Generated</dt><dd class="dash-skeleton" data-source="header" data-field="value" data-where="fact=Generated">—</dd></div>
     </dl>
-    <p class="cr-muted dash-skeleton" id="previews-note" data-source="header" data-field="value" data-where="fact=Previews">—</p>
   </header>
 
-  <nav class="cr-jump" id="jump" aria-label="Report sections">
-    <a href="#overview" data-section="overview">Overview</a>
-    <a href="#pareto" data-section="pareto">Pareto</a>
-    <a href="#keep-kill" data-section="keep-kill">Keep / kill</a>
-    <a href="#format" data-section="format">Format</a>
-    <a href="#white-space" data-section="white-space">White space</a>
-    <a href="#briefing" data-section="briefing">Briefing</a>
-    <a href="#method" data-section="method">Method</a>
-  </nav>
-
-  <section class="cr-section" id="overview" aria-labelledby="overview-h">
-    <h2 class="cr-h2" id="overview-h">Overview</h2>
-    <div class="cr-banner" id="not-in-pull" hidden>
-      <p class="cr-banner-title">Not in this pull, so these read n/a for every ad</p>
-      <ul class="cr-list" id="not-in-pull-list" data-source="notes" data-where="section=not-in-pull"></ul>
+  <div class="cr-sticky">
+    <nav class="cr-tabs" id="tabs" aria-label="Report pages">
+      <a href="#overview" data-page="overview">Overview</a>
+      <a href="#ads" data-page="ads">Ads</a>
+      <a href="#trends" data-page="trends">Trends</a>
+      <a href="#pareto" data-page="pareto">Pareto</a>
+      <a href="#mix" data-page="mix">Format and gaps</a>
+      <a href="#briefing" data-page="briefing">Briefing</a>
+      <a href="#method" data-page="method">Method</a>
+    </nav>
+    <div class="cr-range" id="range" data-source="daily">
+      <div class="cr-range-head">
+        <span class="cr-range-label">Date range</span>
+        <span class="cr-range-hint">Spend by day: drag across the bars to set the charts' range</span>
+      </div>
+      <div class="cr-brush" id="range-brush"></div>
+      <div class="cr-range-fields">
+        <input class="cr-date" id="range-start" type="date" aria-label="Charts from">
+        <span class="cr-range-to" aria-hidden="true">to</span>
+        <input class="cr-date" id="range-end" type="date" aria-label="Charts to">
+        <button class="cr-reset" id="range-reset" type="button" hidden>Whole window</button>
+      </div>
     </div>
+    <p class="cr-range-off" id="range-off" hidden>This tab always reads the whole window. The date range applies to Overview, Ads and Trends.</p>
+  </div>
+
+  <section class="cr-page" id="overview" data-page="overview" aria-labelledby="overview-h">
+    <h2 class="cr-sr" id="overview-h">Overview</h2>
+    <article class="cr-card" id="time">
+      <div class="cr-card-head">
+        <p class="cr-eyebrow">Performance</p>
+        <h3 class="cr-h3">Spend and return by day</h3>
+        <p class="cr-note" id="time-caption">Bars are spend per day on the left axis; the line is the chosen measure on the right axis, with its rolling average dashed. A day with no data is a gap, not a zero. <span class="cr-range-note" data-range-note></span></p>
+      </div>
+      <div class="cr-seg" id="time-switch" role="group" aria-label="Measure"></div>
+      <div class="cr-chart cr-chart-tall" id="time-chart" data-source="daily"></div>
+      <p class="cr-empty" id="time-empty" data-source="sections" data-field="why" data-where="panel=time" hidden>—</p>
+      <p class="cr-muted" id="time-how" data-source="sections" data-field="how" data-where="panel=time" hidden>—</p>
+    </article>
     <p class="cr-empty" id="kpis-empty" data-source="sections" data-field="why" data-where="panel=kpis" hidden>—</p>
     <p class="cr-muted" id="kpis-how" data-source="sections" data-field="how" data-where="panel=kpis" hidden>—</p>
+    <p class="cr-whole" data-whole hidden></p>
     <div class="cr-kpis" id="kpis">
       <div class="cr-kpi" data-metric="spend"><p class="cr-kpi-name" data-source="kpis" data-field="name" data-where="metric=spend">—</p><p class="cr-kpi-value dash-skeleton" data-source="kpis" data-field="shown" data-where="metric=spend">—</p><p class="cr-kpi-change" data-source="kpis" data-field="change_pct" data-where="metric=spend" hidden>—</p><p class="cr-kpi-note" data-source="kpis" data-field="value_note" data-where="metric=spend" hidden>—</p><p class="cr-kpi-note" data-source="kpis" data-field="detail" data-where="metric=spend" hidden>—</p><p class="cr-kpi-note" data-source="kpis" data-field="change_pct_note" data-where="metric=spend" hidden>—</p><div class="cr-spark" data-source="daily" data-where="metric=spend"></div></div>
       <div class="cr-kpi" data-metric="impressions"><p class="cr-kpi-name" data-source="kpis" data-field="name" data-where="metric=impressions">—</p><p class="cr-kpi-value dash-skeleton" data-source="kpis" data-field="shown" data-where="metric=impressions">—</p><p class="cr-kpi-change" data-source="kpis" data-field="change_pct" data-where="metric=impressions" hidden>—</p><p class="cr-kpi-note" data-source="kpis" data-field="value_note" data-where="metric=impressions" hidden>—</p><p class="cr-kpi-note" data-source="kpis" data-field="detail" data-where="metric=impressions" hidden>—</p><p class="cr-kpi-note" data-source="kpis" data-field="change_pct_note" data-where="metric=impressions" hidden>—</p><div class="cr-spark" data-source="daily" data-where="metric=impressions"></div></div>
@@ -47,132 +84,273 @@
       <div class="cr-kpi" data-metric="hook_rate"><p class="cr-kpi-name" data-source="kpis" data-field="name" data-where="metric=hook_rate">—</p><p class="cr-kpi-value dash-skeleton" data-source="kpis" data-field="shown" data-where="metric=hook_rate">—</p><p class="cr-kpi-change" data-source="kpis" data-field="change_pct" data-where="metric=hook_rate" hidden>—</p><p class="cr-kpi-note" data-source="kpis" data-field="value_note" data-where="metric=hook_rate" hidden>—</p><p class="cr-kpi-note" data-source="kpis" data-field="detail" data-where="metric=hook_rate" hidden>—</p><p class="cr-kpi-note" data-source="kpis" data-field="change_pct_note" data-where="metric=hook_rate" hidden>—</p><div class="cr-spark" data-source="daily" data-where="metric=hook_rate"></div></div>
       <div class="cr-kpi" data-metric="hold_rate"><p class="cr-kpi-name" data-source="kpis" data-field="name" data-where="metric=hold_rate">—</p><p class="cr-kpi-value dash-skeleton" data-source="kpis" data-field="shown" data-where="metric=hold_rate">—</p><p class="cr-kpi-change" data-source="kpis" data-field="change_pct" data-where="metric=hold_rate" hidden>—</p><p class="cr-kpi-note" data-source="kpis" data-field="value_note" data-where="metric=hold_rate" hidden>—</p><p class="cr-kpi-note" data-source="kpis" data-field="detail" data-where="metric=hold_rate" hidden>—</p><p class="cr-kpi-note" data-source="kpis" data-field="change_pct_note" data-where="metric=hold_rate" hidden>—</p><div class="cr-spark" data-source="daily" data-where="metric=hold_rate"></div></div>
     </div>
-    <article class="cr-card" id="time">
-      <h3 class="cr-h3">Performance over time</h3>
-      <p class="cr-muted">Each measure by day, with a rolling average; a day with no data is a gap, not a zero. The faint bars are spend.</p>
-      <div class="cr-switch" id="time-switch" role="group" aria-label="Measure"></div>
-      <div class="cr-chart cr-chart-tall" id="time-chart" data-source="daily"></div>
-      <p class="cr-empty" id="time-empty" data-source="sections" data-field="why" data-where="panel=time" hidden>—</p>
-      <p class="cr-muted" id="time-how" data-source="sections" data-field="how" data-where="panel=time" hidden>—</p>
+    <div class="cr-kpis-foot" id="kpis-foot">
+      <p class="cr-muted" id="kpis-change-note" data-source="kpis" data-field="change_pct_note" data-row="0" hidden>—</p>
+    </div>
+    <details class="cr-gone" id="not-in-pull" hidden>
+      <summary class="cr-gone-title">Notes on the key numbers</summary>
+      <ul class="cr-list cr-kpis-shared" id="kpis-detail-note" data-source="kpis" data-field="detail" hidden></ul>
+      <ul class="cr-list cr-kpis-shared" id="kpis-na" data-source="kpis" data-field="value_note" hidden></ul>
+      <ul class="cr-list" id="not-in-pull-list" data-source="notes" data-where="section=not-in-pull"></ul>
+    </details>
+    <article class="cr-card" id="first">
+      <div class="cr-card-head">
+        <p class="cr-eyebrow">Keep or kill</p>
+        <h3 class="cr-h3">Do these first</h3>
+        <p class="cr-note">Ads to act on, grouped by verdict. Each card shows its spend by day; the arrows compare its rates with similar ads. Open one for its detail. <span class="cr-whole-inline" data-whole hidden></span></p>
+      </div>
+      <p class="cr-muted" id="first-images" data-source="header" data-field="value" data-where="fact=Ad images">—</p>
+      <div class="cr-ads cr-ads-row" id="first-ads" data-source="ad-media ad-daily verdicts ad-metrics"></div>
+      <p class="cr-muted" id="first-more" hidden></p>
+    </article>
+    <article class="cr-card" id="board">
+      <div class="cr-card-head">
+        <p class="cr-eyebrow">Keep or kill</p>
+        <h3 class="cr-h3">Verdict board</h3>
+        <p class="cr-note">Verdicts to act on come first; the bar is the spend at stake. Pick a verdict to list only its ads. <span class="cr-whole-inline" data-whole hidden></span></p>
+      </div>
+      <p class="cr-empty" id="board-empty" data-source="sections" data-field="why" data-where="panel=board" hidden>—</p>
+      <p class="cr-muted" id="board-how" data-source="sections" data-field="how" data-where="panel=board" hidden>—</p>
+      <div class="cr-scroll">
+        <table class="cr-table cr-board cr-stack" id="board-table" data-source="verdict-board" data-row-key="verdict_class">
+          <thead><tr><th data-field="verdict">Verdict</th><th data-field="ads" class="num">Ads</th><th data-field="spend_at_stake" class="num">Spend at stake</th><th data-field="next_step">Next step</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </article>
   </section>
 
-  <section class="cr-section" id="pareto" aria-labelledby="pareto-h">
-    <h2 class="cr-h2" id="pareto-h">Pareto</h2>
+  <section class="cr-page" id="ads" data-page="ads" aria-labelledby="ads-h" hidden>
+    <article class="cr-card" id="scatter">
+      <div class="cr-card-head">
+        <p class="cr-eyebrow">Keep or kill</p>
+        <h3 class="cr-h3">Spend against purchase value</h3>
+        <p class="cr-note">One dot per ad, coloured by verdict and sized by spend; both axes are logarithmic. Ads above the dashed line return more than the account's ROAS. Ads with no purchase value sit on the strip below. Click a dot to open the ad. <span class="cr-whole-inline" data-whole hidden></span></p>
+      </div>
+      <div class="cr-chart cr-chart-tall" id="scatter-chart" data-source="pareto verdicts kpis"></div>
+    </article>
+    <article class="cr-card" id="all-ads">
+      <div class="cr-card-head">
+        <p class="cr-eyebrow">Keep or kill</p>
+        <h2 class="cr-h3" id="ads-h">All ads</h2>
+        <p class="cr-note">Each ad with its verdict, spend by day and its rates against similar ads (an arrow up is better, down is worse). Open one for its detail. <span class="cr-range-note" data-range-note></span> <span class="cr-whole-inline" data-whole hidden></span></p>
+        <p class="cr-muted" id="images-note" data-source="header" data-field="value" data-where="fact=Ad images">—</p>
+      </div>
+      <p class="cr-empty" id="all-ads-empty" data-source="sections" data-field="why" data-where="panel=all-ads" hidden>—</p>
+      <p class="cr-muted" id="all-ads-how" data-source="sections" data-field="how" data-where="panel=all-ads" hidden>—</p>
+      <div class="cr-toolbar">
+        <div class="cr-pills" id="verdict-filter" role="group" aria-label="Show ads with verdict"></div>
+        <div class="cr-tools">
+          <input class="cr-search" id="ads-search" type="search" placeholder="Find an ad by name" aria-label="Find an ad by name">
+          <select class="cr-select" id="ads-sort" aria-label="Sort ads">
+            <option value="stake">Money at risk first</option>
+            <option value="spend">Most spend first</option>
+            <option value="payback">Best payback first</option>
+            <option value="name">By name</option>
+          </select>
+        </div>
+        <div class="cr-seg" id="ads-view" role="group" aria-label="Show ads as">
+          <button type="button" data-view="cards" aria-pressed="true">Cards</button>
+          <button type="button" data-view="table" aria-pressed="false">Table</button>
+        </div>
+      </div>
+      <div class="cr-ads" id="ad-gallery" data-source="ad-media ad-daily verdicts ad-metrics"></div>
+      <div class="cr-scroll" id="ad-table-wrap" hidden>
+        <table class="cr-table cr-stack" id="verdict-table" data-source="verdicts" data-row-key="ad_id">
+          <thead><tr><th data-field="label">Ad</th><th data-field="format">Format</th><th data-field="verdict">Verdict</th><th data-field="confidence">Confidence</th><th data-field="spend" class="num">Spend</th><th data-field="spend_at_stake" class="num">Spend at stake</th><th data-field="roas" class="num">ROAS</th><th data-field="cpa" class="num">CPA</th><th data-field="ctr" class="num">CTR</th><th data-field="hook_rate" class="num">Hook rate</th><th data-field="next_step">Next step</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="cr-more-row">
+        <p class="cr-muted" id="ads-count"></p>
+        <button class="cr-more" id="ads-more" type="button" hidden>Show more</button>
+      </div>
+    </article>
+  </section>
+
+  <section class="cr-page" id="ad" data-page="ad" aria-labelledby="ad-title" hidden>
+    <button class="cr-back" id="ad-back" type="button">Back to all ads</button>
+    <article class="cr-card cr-detail" id="ad-detail">
+      <div class="cr-detail-media" id="ad-media-box" data-source="ad-media"></div>
+      <div class="cr-detail-body">
+        <p class="cr-eyebrow" data-source="ad-media" data-field="format" id="ad-format">—</p>
+        <h2 class="cr-detail-title" id="ad-title" data-source="ad-media" data-field="short_label">—</h2>
+        <p class="cr-ad-id" id="ad-id" data-source="ad-media" data-field="ad_id">—</p>
+        <p class="cr-chips" id="ad-chips" data-source="verdicts"></p>
+        <p class="cr-sentence" id="ad-reason" data-source="ad-media" data-field="reason">—</p>
+        <p class="cr-check" id="ad-check" data-source="ad-media" data-field="check" hidden>—</p>
+        <div class="cr-detail-stats" id="ad-stats" data-source="verdicts ad-media"></div>
+        <h3 class="cr-h4">Against comparable ads</h3>
+        <p class="cr-note">The shaded bar is the middle half of comparable ads in this account and the tick their median. The dot is this ad: green when better than the median, red when worse, grey when neither way is better. An arrow at an end means the ad is off the scale. The verdict weighs payback and spend first, so a kept ad can still trail similar ads on a rate. <span class="cr-whole-inline" data-whole hidden></span></p>
+        <p class="cr-note cr-basis" id="ad-basis" hidden></p>
+        <div class="cr-versus" id="ad-versus" data-source="ad-metrics"></div>
+      </div>
+    </article>
+    <article class="cr-card" id="ad-time">
+      <div class="cr-card-head">
+        <p class="cr-eyebrow">This ad over time</p>
+        <h3 class="cr-h3" id="ad-time-h">By day of delivery</h3>
+        <p class="cr-note" id="ad-launch" data-source="ad-media" data-field="launch_day_note" hidden>—</p>
+        <p class="cr-note"><span id="ad-time-what">The ad's own line against the median and middle half of the ads launched in the window on the same day since launch (whole window).</span> Below, its spend each day on its own axis. <span class="cr-range-note" data-range-note></span></p>
+      </div>
+      <div class="cr-seg" id="ad-time-switch" role="group" aria-label="Measure"></div>
+      <div class="cr-chart cr-chart-tall" id="ad-time-chart" data-source="ad-daily age-curve"></div>
+    </article>
+  </section>
+
+  <section class="cr-page" id="trends" data-page="trends" aria-labelledby="trends-h" hidden>
+    <h2 class="cr-sr" id="trends-h">Trends</h2>
+    <article class="cr-card" id="fatigue">
+      <div class="cr-card-head">
+        <p class="cr-eyebrow">Fatigue</p>
+        <h3 class="cr-h3">Rates by day of delivery</h3>
+        <p class="cr-note">Ads launched in the window, by day since launch: the band is their middle half, the thick line their median, the top spenders in dark ink, each in its own line style. Hover to pick out an ad, click to open it. <span class="cr-range-note" data-range-note></span></p>
+        <p class="cr-muted" id="fatigue-launched" data-source="header" data-field="value" data-where="fact=Launched%20in%20the%20window">—</p>
+      </div>
+      <div class="cr-seg" id="fatigue-switch" role="group" aria-label="Measure"></div>
+      <div class="cr-chart cr-chart-tall" id="fatigue-chart" data-source="ad-daily age-curve ad-media"></div>
+      <p class="cr-muted" id="fatigue-clipped"></p>
+    </article>
+    <div class="cr-grid">
+      <article class="cr-card" id="share">
+        <div class="cr-card-head">
+          <p class="cr-eyebrow">Mix</p>
+          <h3 class="cr-h3">Share of spend over time</h3>
+          <p class="cr-note">Each band is a group's share of that day's spend; days with no spend are left out. <span class="cr-range-note" data-range-note></span></p>
+        </div>
+        <div class="cr-seg" id="share-switch" role="group" aria-label="Split by">
+          <button type="button" data-dimension="format" aria-pressed="true">Format</button>
+          <button type="button" data-dimension="verdict" aria-pressed="false">Verdict</button>
+        </div>
+        <div class="cr-chart" id="share-chart" data-source="share-daily"></div>
+      </article>
+      <article class="cr-card" id="cumulative">
+        <div class="cr-card-head">
+          <p class="cr-eyebrow">Payback</p>
+          <h3 class="cr-h3">Return on spend so far</h3>
+          <p class="cr-note">Summed from the first day of the window. <span class="cr-range-note" data-range-note></span></p>
+        </div>
+        <div class="cr-seg" id="cumulative-switch" role="group" aria-label="Show">
+          <button type="button" data-cumulative="roas" aria-pressed="true">Running ROAS</button>
+          <button type="button" data-cumulative="sums" aria-pressed="false">Spend and value</button>
+        </div>
+        <div class="cr-chart" id="cumulative-chart" data-source="cumulative"></div>
+        <p class="cr-muted" id="cumulative-basis" data-source="cumulative" hidden></p>
+      </article>
+    </div>
+  </section>
+
+  <section class="cr-page" id="pareto" data-page="pareto" aria-labelledby="pareto-h" hidden>
+    <h2 class="cr-sr" id="pareto-h">Pareto</h2>
     <article class="cr-card" id="pareto-card">
-      <h3 class="cr-h3">Where the value comes from</h3>
-      <p class="cr-lead dash-skeleton" id="pareto-lead" data-source="pareto-cut" data-field="sentence" data-row="0">—</p>
+      <div class="cr-card-head">
+        <p class="cr-eyebrow">Pareto</p>
+        <h3 class="cr-h3">Where the value comes from</h3>
+        <p class="cr-lead cr-lead-card dash-skeleton" id="pareto-lead" data-source="pareto-cut" data-field="sentence" data-row="0">—</p>
+        <p class="cr-whole" data-whole hidden></p>
+      </div>
       <div class="cr-chart cr-chart-tall" id="pareto-chart" data-source="pareto"></div>
       <p class="cr-empty" id="pareto-empty" data-source="sections" data-field="why" data-where="panel=pareto" hidden>—</p>
       <p class="cr-muted" id="pareto-how" data-source="sections" data-field="how" data-where="panel=pareto" hidden>—</p>
       <div class="cr-stats">
-        <div class="cr-stat"><p class="cr-stat-name">Ads in the head</p><p class="cr-stat-value dash-skeleton" data-source="pareto-cut" data-field="cut" data-row="0">—</p></div>
-        <div class="cr-stat"><p class="cr-stat-name">Share the cut must reach</p><p class="cr-stat-value dash-skeleton" data-source="pareto-cut" data-field="setting_pct" data-row="0">—</p></div>
-        <div class="cr-stat"><p class="cr-stat-name">Spend in the top ads</p><p class="cr-stat-value dash-skeleton" data-source="pareto-cut" data-field="concentration_pct" data-row="0">—</p><p class="cr-muted" id="concentration-note">—</p></div>
-        <div class="cr-stat"><p class="cr-stat-name">Long tail spend</p><p class="cr-stat-value dash-skeleton" data-source="pareto-cut" data-field="tail_spend" data-row="0">—</p></div>
+        <div class="cr-stat"><p class="cr-stat-name">Ads in the head</p><p class="cr-stat-value dash-skeleton" id="head-ads" data-source="pareto-cut" data-field="cut" data-row="0">—</p><p class="cr-muted" id="head-of"></p></div>
+        <div class="cr-stat"><p class="cr-stat-name">Head's share of value</p><p class="cr-stat-value dash-skeleton" data-source="pareto-cut" data-field="head_share_pct" data-row="0">—</p><p class="cr-muted" id="head-basis"></p></div>
+        <div class="cr-stat"><p class="cr-stat-name">Head's share of spend</p><p class="cr-stat-value dash-skeleton" data-source="pareto-cut" data-field="head_spend_pct" data-row="0">—</p></div>
+        <div class="cr-stat"><p class="cr-stat-name">Long tail spend</p><p class="cr-stat-value dash-skeleton" data-source="pareto-cut" data-field="tail_spend" data-row="0">—</p><p class="cr-muted" id="tail-share"></p></div>
       </div>
-      <p class="cr-muted">The cut is the fewest top-spend ads whose cumulative share reaches the set share. That share is a common convention, not a rule: set it from your own account when you rebuild the report.</p>
+      <p class="cr-muted" id="pareto-setting"></p>
+      <p class="cr-muted" id="concentration-note">—</p>
     </article>
     <article class="cr-card">
-      <h3 class="cr-h3">Ads ranked by spend</h3>
+      <div class="cr-card-head">
+        <p class="cr-eyebrow">Pareto</p>
+        <h3 class="cr-h3">Ads ranked by spend</h3>
+        <p class="cr-muted" id="no-spend-note"></p>
+      </div>
       <div class="cr-scroll">
-        <table class="cr-table" id="pareto-table" data-source="pareto" data-row-key="ad_id">
+        <table class="cr-table cr-stack" id="pareto-table" data-source="pareto" data-row-key="ad_id">
           <thead><tr><th data-field="rank" class="num">Rank</th><th data-field="label">Ad</th><th data-field="format">Format</th><th data-field="spend" class="num">Spend</th><th data-field="conversion_value" class="num">Purchase value</th><th data-field="cum_spend_pct" class="num">Cumulative spend</th><th data-field="cum_basis_pct" class="num">Cumulative value</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
-    </article>
-  </section>
-
-  <section class="cr-section" id="keep-kill" aria-labelledby="keep-kill-h">
-    <h2 class="cr-h2" id="keep-kill-h">Keep / kill</h2>
-    <article class="cr-card" id="board">
-      <h3 class="cr-h3">Verdict board</h3>
-      <p class="cr-muted">Money at risk first. Pick a verdict to list only its ads below.</p>
-      <p class="cr-empty" id="board-empty" data-source="sections" data-field="why" data-where="panel=board" hidden>—</p>
-      <p class="cr-muted" id="board-how" data-source="sections" data-field="how" data-where="panel=board" hidden>—</p>
-      <table class="cr-table cr-board" id="board-table" data-source="verdict-board" data-row-key="verdict_class">
-        <thead><tr><th data-field="verdict">Verdict</th><th data-field="ads" class="num">Ads</th><th data-field="spend_at_stake" class="num">Spend at stake</th><th data-field="check">Check first</th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </article>
-    <article class="cr-card" id="all-ads">
-      <h3 class="cr-h3">All ads</h3>
-      <p class="cr-empty" id="all-ads-empty" data-source="sections" data-field="why" data-where="panel=all-ads" hidden>—</p>
-      <p class="cr-muted" id="all-ads-how" data-source="sections" data-field="how" data-where="panel=all-ads" hidden>—</p>
-      <div class="cr-switch" id="verdict-filter" role="group" aria-label="Show ads with verdict"></div>
-      <div class="cr-scroll cr-scroll-tall">
-        <table class="cr-table" id="verdict-table" data-source="verdicts" data-row-key="ad_id">
-          <thead><tr><th data-field="thumb">Image</th><th data-field="label">Ad</th><th data-field="format">Format</th><th data-field="verdict">Verdict</th><th data-field="confidence">Confidence</th><th data-field="spend" class="num">Spend</th><th data-field="spend_at_stake" class="num">Spend at stake</th><th data-field="roas" class="num">ROAS</th><th data-field="cpa" class="num">CPA</th><th data-field="ctr" class="num">CTR</th><th data-field="hook_rate" class="num">Hook rate</th><th data-field="next_step">Next step</th></tr></thead>
-          <tbody></tbody>
-        </table>
+      <div class="cr-more-row">
+        <p class="cr-muted" id="pareto-count"></p>
+        <button class="cr-more" id="pareto-more" type="button" hidden>Show all</button>
       </div>
-      <p class="cr-muted" id="images-note" data-source="header" data-field="value" data-where="fact=Ad images">—</p>
     </article>
   </section>
 
-  <section class="cr-section" id="format" aria-labelledby="format-h">
-    <h2 class="cr-h2" id="format-h">Format</h2>
+  <section class="cr-page" id="mix" data-page="mix" aria-labelledby="mix-h" hidden>
+    <h2 class="cr-sr" id="mix-h">Format and gaps</h2>
     <article class="cr-card" id="format-scorecard">
-      <h3 class="cr-h3">Format scorecard</h3>
-      <p class="cr-muted">Each format is graded only against your other formats, by rank. CPM and CPA grade the other way round (lowest is best). Hook and hold rate count video ads only.</p>
+      <div class="cr-card-head">
+        <p class="cr-eyebrow">Format</p>
+        <h3 class="cr-h3">Format scorecard</h3>
+        <p class="cr-note">Each format's share of spend beside its return on spend. The dot's colour is its grade against your other formats only, by rank: best, middle or weakest. <span class="cr-whole-inline" data-whole hidden></span></p>
+      </div>
+      <div class="cr-formats" id="format-chart" data-source="formats"></div>
+      <p class="cr-muted" id="format-unscored" data-source="header" data-field="value" data-where="fact=Formats%20not%20scored">—</p>
+      <h4 class="cr-h5">Every rate by format</h4>
+      <p class="cr-note">CPM and CPA grade the other way round (lowest is best). Hook and hold rate count video ads only.</p>
       <p class="cr-empty" id="format-empty" data-source="sections" data-field="why" data-where="panel=format-scorecard" hidden>—</p>
       <p class="cr-muted" id="format-how" data-source="sections" data-field="how" data-where="panel=format-scorecard" hidden>—</p>
       <div class="cr-scroll">
-        <table class="cr-table" id="format-table" data-source="formats" data-row-key="format">
+        <table class="cr-table cr-stack" id="format-table" data-source="formats" data-row-key="format">
           <thead><tr><th data-field="name">Format</th><th data-field="ads" class="num">Ads</th><th data-field="spend_share" class="num">Spend share</th><th data-field="ctr" class="num">CTR</th><th data-field="cpm" class="num">CPM</th><th data-field="cpa" class="num">CPA</th><th data-field="roas" class="num">ROAS</th><th data-field="hook_rate" class="num">Hook rate</th><th data-field="hold_rate" class="num">Hold rate</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
     </article>
-  </section>
-
-  <section class="cr-section" id="white-space" aria-labelledby="white-space-h">
-    <h2 class="cr-h2" id="white-space-h">White space</h2>
     <article class="cr-card" id="heatmap">
-      <h3 class="cr-h3">Concept by format</h3>
-      <p class="cr-muted">Shade is spend, the number is ads. Outlined cells are the numbered gaps listed below.</p>
-      <div class="cr-chart" id="heatmap-chart" data-source="white-space"></div>
+      <div class="cr-card-head">
+        <p class="cr-eyebrow">White space</p>
+        <h3 class="cr-h3">Concept by format</h3>
+        <p class="cr-note">Shade is spend, the number is ads. Outlined cells are the numbered gaps listed below. <span class="cr-whole-inline" data-whole hidden></span></p>
+        <p class="cr-muted" id="concepts-shown" data-source="header" data-field="value" data-where="fact=Concepts%20shown">—</p>
+      </div>
+      <div class="cr-heat-scroll"><div class="cr-chart" id="heatmap-chart" data-source="white-space"></div></div>
       <p class="cr-empty" id="heatmap-empty" data-source="sections" data-field="why" data-where="panel=heatmap" hidden>—</p>
       <p class="cr-muted" id="heatmap-how" data-source="sections" data-field="how" data-where="panel=heatmap" hidden>—</p>
     </article>
     <article class="cr-card" id="gaps">
-      <h3 class="cr-h3">Gaps worth testing</h3>
-      <p class="cr-muted">A hypothesis to test, not a result: an empty or single-ad cell beside a concept or format that performs well in this account.</p>
+      <div class="cr-card-head">
+        <p class="cr-eyebrow">White space</p>
+        <h3 class="cr-h3">Gaps worth testing</h3>
+        <p class="cr-note">A hypothesis to test, not a result: an empty or single-ad cell beside a concept or format that performs well in this account.</p>
+      </div>
       <p class="cr-empty" id="gaps-empty" data-source="sections" data-field="why" data-where="panel=gaps" hidden>—</p>
       <p class="cr-muted" id="gaps-how" data-source="sections" data-field="how" data-where="panel=gaps" hidden>—</p>
-      <div class="cr-scroll">
-        <table class="cr-table" id="gap-table" data-source="gaps" data-row-key="number">
-          <thead><tr><th data-field="number" class="num">Gap</th><th data-field="label">Cell</th><th data-field="why">Why test it</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
+      <div class="cr-gaps" id="gap-list" data-source="gaps"></div>
     </article>
   </section>
 
-  <section class="cr-section" id="briefing" aria-labelledby="briefing-h">
-    <h2 class="cr-h2" id="briefing-h">Briefing</h2>
+  <section class="cr-page" id="briefing" data-page="briefing" aria-labelledby="briefing-h" hidden>
     <article class="cr-card" id="briefs">
-      <h3 class="cr-h3">Briefs</h3>
-      <p class="cr-muted">Brief starters never invent a hook or a message: each carries a prompt for the creative-brief and hook-writer skills.</p>
+      <div class="cr-card-head">
+        <p class="cr-eyebrow">Briefing</p>
+        <h2 class="cr-h3" id="briefing-h">Briefs</h2>
+        <p class="cr-note">Brief starters never invent a hook or a message: each carries a prompt for the creative-brief and hook-writer skills.</p>
+        <p class="cr-note" id="briefs-judged"></p>
+      </div>
       <p class="cr-empty" id="briefs-empty" data-source="sections" data-field="why" data-where="panel=briefs" hidden>—</p>
       <p class="cr-muted" id="briefs-how" data-source="sections" data-field="how" data-where="panel=briefs" hidden>—</p>
-      <div class="cr-scroll">
-        <table class="cr-table" id="brief-table" data-source="briefing" data-row-key="number">
-          <thead><tr><th data-field="number" class="num">Brief</th><th data-field="title">Title</th><th data-field="details">Details</th><th data-field="references">Reference ads</th><th data-field="judged">How it will be judged</th><th data-field="prompt">Prompt</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
+      <div class="cr-briefs" id="brief-cards" data-source="briefing"></div>
     </article>
   </section>
 
-  <footer class="cr-section" id="method" aria-labelledby="method-h">
-    <h2 class="cr-h2" id="method-h">Data and method</h2>
+  <section class="cr-page" id="method" data-page="method" aria-labelledby="method-h" hidden>
     <article class="cr-card">
+      <div class="cr-card-head">
+        <p class="cr-eyebrow">Method</p>
+        <h2 class="cr-h3" id="method-h">Data and method</h2>
+      </div>
       <ul class="cr-list cr-method" id="method-list" data-source="notes" data-where="section=method"></ul>
-      <h3 class="cr-h3">Missing data and caveats</h3>
+      <p class="cr-muted dash-skeleton" id="payback-note" data-source="header" data-field="value" data-where="fact=Payback metric">—</p>
+      <p class="cr-muted dash-skeleton" id="launched-note" data-source="header" data-field="value" data-where="fact=Launched%20in%20the%20window">—</p>
+      <p class="cr-muted dash-skeleton" id="previews-note" data-source="header" data-field="value" data-where="fact=Previews">—</p>
+      <h3 class="cr-h4">Missing data and caveats</h3>
       <ul class="cr-list" id="caveat-list" data-source="notes" data-where="section=caveat"></ul>
     </article>
-  </footer>
+  </section>
 </div>
 <script src="dashboard.js"></script>

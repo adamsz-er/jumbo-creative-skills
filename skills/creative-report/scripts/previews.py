@@ -128,7 +128,7 @@ class Previews:
                 self.symbols[key] = image
                 found_image = dict(image, kind=kind, symbol="pv-" + key, reason=None)
                 break
-            reason = reason or why
+            reason = why if why == BUDGET else reason or why  # the budget is what kept the ad out, whatever the preview's own reason
         if not found_image:
             reason = reason or NO_PREVIEW
             self.kinds["placeholder"] += 1
