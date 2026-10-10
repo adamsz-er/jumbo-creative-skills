@@ -26,6 +26,7 @@ First matching rule wins. Every verdict lists its reasons, a plain-English sente
 | 6 | Pause case but one of the biggest sellers | Check before cutting (`check_top_seller`) |
 | 7 | Bottom on every payback measure, in its group and account-wide within its objective, and fatiguing | Pause: fatigued (`pause_fatigued`) |
 | 8 | Bottom on every payback measure, in its group and account-wide within its objective, bottom in its first `--window` delivery days too, and missing every target the user set for its payback measures | Pause: never worked (`pause_never_worked`) |
+| 8c | A Pause from 8 whose funnel points at the site: a landing-page view, add-to-cart or cart-to-checkout rate is weak (bottom quartile and clearly below similar ads, or clearly falling since its first days) while no step the ad controls (hook rate, hold rate, click-through) is | Check before cutting (`check_site`): the sentence names the weak site steps and says to check the landing page and checkout first. A fatigued pause (7) stands, since its click-through is falling by definition, and so does a pause whose own steps could not be judged; either way a weak site step is added to its reasons |
 | 8a | As 8, but the user set no target for its payback measures | Check before cutting (`check_no_target`): weak only next to the account's other ads; the sentence asks for a target |
 | 8b | As 8, but it meets a target the user set | Check before cutting (`check_meets_target`) |
 | 9 | Payback top on every measure, fatigue readable and not fatiguing | Scale (`scale`) |
@@ -33,6 +34,8 @@ First matching rule wins. Every verdict lists its reasons, a plain-English sente
 | 11 | Anything else | Keep (`keep`) |
 
 Every Pause carries this line: rule out tracking, site or audience problems first; only fatigue and never-worked are creative decisions.
+
+Rule 8c is the funnel read from `funnel-diagnosis` (the shared `funnel_read`), applied to every would-be Pause. It needs landing page views, adds to cart or checkouts initiated in the data; without them the site side is unreadable, the Pause stands, and the JSON's `funnel` block says which steps were missing. Purchase rate is shown but never decides it: a weak one can be the offer or the audience as much as the page. The JSON carries the read as `funnel` (`call`, `reason`, `weak_steps`, `missing_site_steps`) on every ad that reached a Pause.
 
 Targets come from the user only: `--target cpa=40,roas=3` (any metric id; cost metrics are met at or below the target, rates and ROAS at or above), or `target:` in the profile's `Script settings`. A target set for another objective's measure does not count. An ad whose measure is n/a (no purchases, so no CPA) misses its target. Never suggest a target value.
 
