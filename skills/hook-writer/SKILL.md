@@ -32,7 +32,7 @@ It lists the openings that stop people (top-quartile hook rate within their form
 
 - Learn from the top, avoid repeating the bottom, and **skip faded hooks** as models (vary them one change at a time in iteration mode instead).
 - A strong hook rate with a weak hold rate means the opening works and the body loses people: the hook is not the thing to change.
-- Name the ads each new hook learns from ("same archetype as 120000000018's opening"). With no data, label every hook "unbacked: from craft, not results".
+- Name the ads each new hook learns from ("same archetype as 120000000018's opening"), each with the format the evidence prints for it. Never list an ad under a format it is not in (a partnership ad is not a UGC video). With no data, label every hook "unbacked: from craft, not results".
 
 ## Inputs it can use if present
 

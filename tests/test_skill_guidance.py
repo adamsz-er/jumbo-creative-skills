@@ -80,5 +80,10 @@ class CopyTestsHonestyTest(unittest.TestCase):
         self.assertIn("`[your current headline]`", text)
         self.assertIn("never invent the control", text)
 
+
+class HookWriterFormatTest(unittest.TestCase):
+    def test_each_source_ad_is_named_with_its_own_format(self):
+        self.assertIn("with the format the evidence prints for it", read("hook-writer", "SKILL.md"))
+
 if __name__ == "__main__":
     unittest.main()
