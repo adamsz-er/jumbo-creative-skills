@@ -64,7 +64,7 @@ def stale_bundled(root, pairs):
     """Files under creative-review/siblings/ that no bundled skill ships (a SKILL.md copy included)."""
     folder = Path(root) / "skills" / BUNDLER / "siblings"
     wanted = {target for _, target in pairs}
-    return sorted(p for p in folder.rglob("*") if p.is_file() and p not in wanted
+    return sorted(p for p in folder.rglob("*") if p.is_file() and p not in wanted and p.name != ".DS_Store"
                   and "__pycache__" not in p.parts and p.suffix != ".pyc")
 
 

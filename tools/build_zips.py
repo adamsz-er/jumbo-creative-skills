@@ -5,8 +5,8 @@ Usage: python3 tools/build_zips.py [--out dist]
 
 Each skills/<name>/ becomes <out>/<name>.zip with a single top-level folder
 <name>/ holding SKILL.md and everything beside it, ready for Claude desktop or
-claude.ai (Customize > Skills > Upload). <out>/jumbo-creative-skills-all.zip
-holds every skill folder. Entries are sorted and carry a fixed timestamp, so the
+claude.ai (Customize > Skills, +, Create skill > Upload a skill). <out>/jumbo-creative-skills-all.zip
+holds every skill folder, for unpacking; the upload takes one skill per zip. Entries are sorted and carry a fixed timestamp, so the
 same tree always gives the same bytes. Every skill is validated first; one
 invalid skill stops the build before anything is written.
 """

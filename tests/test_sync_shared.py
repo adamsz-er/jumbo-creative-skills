@@ -109,6 +109,14 @@ class SyncSharedTest(unittest.TestCase):
         self.assertFalse(stale.exists())
         self.assertEqual(sync_shared.sync(self.root, check=True), [])
 
+    def test_a_finder_file_in_the_bundle_is_not_stale_but_a_skill_md_copy_is(self):
+        bundled = self.make_sibling()
+        sync_shared.sync(self.root)
+        (bundled / ".DS_Store").write_bytes(b"x")
+        self.assertEqual(sync_shared.sync(self.root, check=True), [])
+        (bundled / "SKILL.md").write_text("---\nname: keep-or-kill\n---\n")
+        self.assertEqual(sync_shared.sync(self.root, check=True), [bundled / "SKILL.md"])
+
     def test_real_repo_is_in_sync(self):
         self.assertEqual(sync_shared.sync(ROOT, check=True), [])
 

@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TOOL = ROOT / "tools" / "build_zips.py"
 ALL_ZIP = "jumbo-creative-skills-all.zip"
+BUNDLED_SKILLS = ("creative-grader", "keep-or-kill", "creative-mix", "creative-report")
 
 
 def run_build(root, out):
@@ -111,10 +112,13 @@ class BuildZipsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             for skill in self.skills:
                 folder = self.unzip_alone(skill, Path(tmp) / skill)
-                for script in sorted((folder / "scripts").glob("*.py")):
+                scripts = sorted(folder.glob("scripts/*.py")) + sorted(folder.glob("siblings/*/scripts/*.py"))
+                for script in scripts:
                     done = subprocess.run([sys.executable, "-I", str(script), "--help"], cwd=tmp,
                                           capture_output=True, text=True)
-                    self.assertEqual(done.returncode, 0, "%s/%s: %s" % (skill, script.name, done.stderr))
+                    self.assertEqual(done.returncode, 0, "%s/%s: %s" % (skill, script.relative_to(folder), done.stderr))
+            bundled = list((Path(tmp) / "creative-review" / "creative-review").glob("siblings/*/scripts/*.py"))
+            self.assertGreater(len(bundled), len(BUNDLED_SKILLS))
 
     def test_creative_review_runs_from_its_unzipped_skill_alone(self):
         with tempfile.TemporaryDirectory() as tmp:
