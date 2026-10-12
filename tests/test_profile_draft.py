@@ -31,6 +31,11 @@ class ProfileDraftTest(unittest.TestCase):
         self.assertRegex(self.line("Naming convention"), r"\d+ of \d+ ad names read \(\d+%\)")
         self.assertIn("concept", self.line("Naming convention"))
         self.assertIn("durability-test", self.line("Concepts in use"))
+
+    def test_the_concept_count_says_it_counts_names_not_families(self):
+        line = self.line("Concepts in use")
+        self.assertIn("30 distinct concept names", line)
+        self.assertIn("creative-mix groups variant names such as x and x-two into one family", line)
         self.assertEqual(self.line("currency:"), "- currency: USD")
 
     def test_brand_voice_offers_personas_and_the_rest_are_never_filled(self):
