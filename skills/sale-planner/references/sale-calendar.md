@@ -1,6 +1,26 @@
 # Sale calendar
 
-Dates move year to year: work out each one for the year you plan, and confirm retailer-run events on their organiser's site.
+Dates move year to year: work out each one for the year you plan, and confirm retailer-run events on their organiser's site. The two markets below are examples, not a default: use the user's own market.
+
+## United States
+
+| Moment | When | Notes |
+|---|---|---|
+| Valentine's Day | 14 February | Gifting; delivery cut-off copy in the last week |
+| Presidents' Day | The third Monday in February | Long weekend; sales in some categories |
+| Easter | Varies (March or April) | Gifting and seasonal ranges |
+| Mother's Day | Second Sunday in May | Gifting; one of the larger gifting moments |
+| Memorial Day | The last Monday in May | Long weekend; start of summer sales |
+| Father's Day | Third Sunday in June | Gifting |
+| Independence Day | 4 July | Long weekend sales |
+| Retailer-run online shopping events | Usually July and October | Dates and participation vary: check the organiser |
+| Back to school | Late July to early September | Varies by state and school year |
+| Labor Day | The first Monday in September | Long weekend; end of summer clearance |
+| Halloween | 31 October | Costumes, decor, treats |
+| Thanksgiving | The fourth Thursday in November | Starts the Black Friday week |
+| Black Friday | The day after Thanksgiving | Often a week or more of trading |
+| Cyber Monday | The Monday after Black Friday | Often run as one event with Black Friday |
+| Christmas | December | Gifting phases: early, peak, last-minute (fast shipping, gift cards); publish delivery cut-offs |
 
 ## Australia
 

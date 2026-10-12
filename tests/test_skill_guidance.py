@@ -1,0 +1,47 @@
+"""The answer guidance a skill gives its agent, where a sandbox QA pass found the agent going wrong.
+
+Each test pins the instruction that removes one cause: the wording is the fix, so the wording is what is checked.
+"""
+import re
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+SKILLS = ROOT / "skills"
+
+
+def read(*parts):
+    return (SKILLS.joinpath(*parts)).read_text(encoding="utf-8")
+
+
+class SalePlannerMarketTest(unittest.TestCase):
+    """The market comes from the profile, then the data, then the user; until then no regulator is named."""
+
+    def test_the_market_is_resolved_before_any_rule_set_applies(self):
+        text = read("sale-planner", "SKILL.md")
+        step = re.search(r"^3\. (.+)$", text.split("## Before you start")[1], re.M).group(1)
+        self.assertIn("\"Markets or regions\"", step)
+        self.assertIn("currency", step)
+        self.assertIn("market-neutral", step)
+        self.assertIn("name no regulator", step)
+        self.assertNotIn("**My market is not Australia.**", text)
+
+    def test_consumer_law_holds_us_and_australian_sources(self):
+        text = read("sale-planner", "references", "consumer-law.md")
+        intro = text.split("## ")[0]
+        self.assertIn("most markets", intro)
+        self.assertNotIn("They follow the Australian Competition and Consumer Commission", intro)
+        self.assertIn("https://www.govinfo.gov/content/pkg/CFR-2024-title16-vol1/pdf/CFR-2024-title16-vol1-part233.pdf", text)
+        self.assertIn("https://www.ftc.gov/legal-library/browse/rules/guide-concerning-use-word-free-similar-representations", text)
+        self.assertIn("https://www.ftc.gov/business-guidance/resources/advertising-faqs-guide-small-business", text)
+        self.assertIn("accc.gov.au", text)
+
+    def test_the_calendar_has_a_us_section_and_says_each_is_an_example(self):
+        text = read("sale-planner", "references", "sale-calendar.md")
+        self.assertIn("## United States", text)
+        self.assertIn("Thanksgiving | The fourth Thursday in November", text)
+        self.assertIn("examples", text.split("## Australia")[0])
+
+
+if __name__ == "__main__":
+    unittest.main()

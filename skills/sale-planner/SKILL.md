@@ -1,6 +1,6 @@
 ---
 name: sale-planner
-description: Plan a sale on Meta phase by phase - teaser, early access, launch, peak, extension, last chance, post-sale - with the creative, copy, audience and budget shape for each; choose the offer mechanic (gift with purchase, buy-more-save-more and tiers, BOGO, red-line markdowns, "take a further X% off", sale extended, early access, free-shipping threshold, bundles, mystery offers, sitewide or category); and judge a past sale from the account's own data - lift against a weekday-matched baseline (with earlier promotions left out when the user names them), new against returning buyers, pull-forward after the sale and contribution when margins are given. Consumer-law guardrails are hard rules. Use for Black Friday and Cyber Monday, the Australian end of financial year, Boxing Day, or any other sale or offer question.
+description: Plan a sale on Meta phase by phase - teaser, early access, launch, peak, extension, last chance, post-sale - with the creative, copy, audience and budget shape for each; choose the offer mechanic (gift with purchase, buy-more-save-more and tiers, BOGO, red-line markdowns, "take a further X% off", sale extended, early access, free-shipping threshold, bundles, mystery offers, sitewide or category); and judge a past sale from the account's own data - lift against a weekday-matched baseline (with earlier promotions left out when the user names them), new against returning buyers, pull-forward after the sale and contribution when margins are given. Consumer-law guardrails are hard rules. Use for Black Friday and Cyber Monday, Thanksgiving, the Australian end of financial year, Boxing Day, or any other sale or offer question, in any market.
 license: MIT
 metadata:
   version: "0.2.0"
@@ -15,15 +15,15 @@ A sale is several jobs in a row, and each needs its own creative. This skill pla
 
 1. Read `creative-profile.md` (offers, calendar, margin, claims that need approval). If missing, ask in one round: brand, product, audience, the sale's dates and offer, tone.
 2. Ask **why** this sale: clear stock, acquire new customers, reward existing ones, hit a cash target, match a market moment. The reason picks the mechanic.
-3. Ask the market. Australia: the rules from the Australian Competition and Consumer Commission and the calendar in the references apply. Elsewhere: tell the user to check their own regulator's rules on sale pricing and urgency before anything runs.
+3. Settle the market before applying any market's rules: the profile's "Markets or regions" line first, then a market column in the data, then ask. The currency is a hint, not an answer ("Your data is in USD: are you selling in the US?"). Until the market is known, give the rules as market-neutral principles and name no regulator. Australia and the US have sources and a calendar in the references; for any other market, tell the user to check their own regulator's rules on sale pricing and urgency before anything runs.
 4. Never invent the offer, the discount, the dates or a "was" price. They come from the user.
 
 ## Plan the sale
 
 - **Phases:** `references/sale-phases.md` gives each phase's job, creative, copy, audience and budget shape. Build the creative for every phase before the sale opens; a sale that is briefed mid-flight runs launch ads at last chance.
 - **Mechanic:** `references/offer-tactics.md` covers when to use each, when not to, its creative pattern, its risks and what to judge it on.
-- **Calendar:** `references/sale-calendar.md` lists the Australian moments by rule and asks for the user's own market.
-- **Rules:** `references/consumer-law.md` is a hard gate. Check every phase's copy against it before it is briefed.
+- **Calendar:** `references/sale-calendar.md` lists the US and Australian moments by rule, as examples, and asks for the user's own market.
+- **Rules:** `references/consumer-law.md` is a hard gate. Check every phase's copy against it before it is briefed, and cite the sources for the user's market only.
 
 Give the plan as one table, one row per phase: dates, job, creative, copy (the actual lines, checked against the rules), audience, budget shape, and what to watch.
 
@@ -72,5 +72,5 @@ Try:
 - **Why compare with weeks before, not last year?** The script uses the weeks before because the data is there; compare with last year's same event too if you have it.
 - **What is pull-forward?** Sales that would have happened anyway, just earlier. The days after a sale show it as a dip.
 - **Can I extend the sale?** Only if you did not say it was ending. Plan the extension, or do not promise an end you will not keep.
-- **My market is not Australia.** The phases and tactics travel; the rules do not. Check your regulator's guidance.
+- **My market is not Australia or the US.** The phases, tactics and principles travel; the detail of the law does not. Check your regulator's guidance.
 - More: creative-context/references/faq.md
