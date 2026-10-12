@@ -120,11 +120,15 @@ def grade_ads(rows: Sequence[Dict[str, Any]], group_by: Optional[Sequence[str]] 
             "payback_basis": info["what"], "payback_metrics": list(info["metrics"]),
             "impressions": ad.get("impressions"), "graded": graded,
             "ctr_clicks": cm.metric_basis(ad, "ctr")["numerator"],
+            "after_click_clicks": cm.metric_basis(ad, "cvr")["denominator"],
             "conversions_source": ad.get("conversions_source"),
             "hook_source": ad.get("video_views_3s_source"),
             "grades": grades, "diagnosis": diagnosis,
         })
     return results
+
+
+CLICK_WORDS = {"link_clicks": "link clicks", "clicks": "all clicks, because the data has no link clicks"}
 
 
 def _used_group(entry: Dict[str, Any]) -> Tuple[str, Optional[int]]:
@@ -146,7 +150,7 @@ def basis_header(rows: Sequence[Dict[str, Any]], results: Sequence[Dict[str, Any
             name, size = _used_group(entry)
             if size is not None:
                 sizes[name] = size
-    clicks = sorted({r["ctr_clicks"] for r in results if r["ctr_clicks"]})
+    clicks = sorted({CLICK_WORDS[r[k]] for r in results for k in ("ctr_clicks", "after_click_clicks") if r[k]})
     sources = sorted({r["conversions_source"] for r in results if r["conversions_source"]})
     widened = [e for e in results if e["graded"] and e["grades"]["ctr"].get("fallback")]
     thin = sorted(name for name, size in sizes.items() if cm.is_thin(size))
@@ -157,8 +161,8 @@ def basis_header(rows: Sequence[Dict[str, Any]], results: Sequence[Dict[str, Any
             ", ".join(group_by), cm.MIN_GROUP, ", ".join("%s n=%d" % kv for kv in sorted(sizes.items())) or "none"),
         "Bands: top quartile is at or above p75, bottom at or below p25 (costs inverted: a cheap CPM is top).",
         "Ads under %d impressions are not graded (arbitrary default: set it from your own spend per ad)." % min_impressions,
-        "CTR uses: %s. Conversions column: %s." % (", ".join(clicks) or "n/a (no clicks)",
-                                                    ", ".join(sources) or "n/a (no conversions column)"),
+        "Clicks (CTR, CPC, purchase and add-to-cart rates) use: %s. Conversions column: %s." % (
+            " and ".join(clicks) or "n/a (no clicks)", ", ".join(sources) or "n/a (no conversions column)"),
     ]
     if group_note:
         lines.append("Grouping: " + group_note + ".")

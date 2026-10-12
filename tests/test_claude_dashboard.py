@@ -1843,6 +1843,17 @@ class ParentHtmlTest(unittest.TestCase):
         return html.replace("people watch but do not click", "people see the ad but do not click").replace(
             "People watch but do not click", "People see the ad but do not click")
 
+    @staticmethod
+    def apply_link_click_rates(tree):
+        """Give the parent's metrics module the later deliberate change: purchase and add-to-cart rates count link clicks before all clicks."""
+        for path in tree.glob("**/creative_metrics.py"):
+            text = path.read_text(encoding="utf-8")
+            for metric, numerator in (("cvr", "conversions"), ("add_to_cart_rate", "add_to_carts")):
+                old = '"%s": (("%s",), ("clicks", "link_clicks"), 100.0),' % (metric, numerator)
+                assert old in text, (path, old)
+                text = text.replace(old, '"%s": (("%s",), ("link_clicks", "clicks"), 100.0),' % (metric, numerator))
+            path.write_text(text, encoding="utf-8")
+
     SNIPPET = ("import sys, json; sys.path.insert(0, sys.argv[1]); import report, creative_metrics as cm; "
                "grade, verdicts, mix = (json.load(open(p)) for p in sys.argv[3:6]); "
                "sys.stdout.write(report.build_html(rows=cm.load_rows(sys.argv[2]), grade=grade, verdicts=verdicts, mix=mix, "
@@ -1855,6 +1866,7 @@ class ParentHtmlTest(unittest.TestCase):
             archive = subprocess.run(["git", "archive", PARENT, "skills/creative-report", "skills/creative-context", "shared"], cwd=ROOT, capture_output=True)
             self.assertEqual(archive.returncode, 0, archive.stderr)
             subprocess.run(["tar", "-x", "-C", tmp], input=archive.stdout, check=True)
+            ParentHtmlTest.apply_link_click_rates(Path(tmp))
             inputs = []
             for name, (skill, script) in (("grade", ("creative-grader", "grade.py")), ("verdicts", ("keep-or-kill", "verdicts.py")),
                                           ("mix", ("creative-mix", "mix.py"))):
@@ -1880,6 +1892,7 @@ class ParentHtmlTest(unittest.TestCase):
             archive = subprocess.run(["git", "archive", PARENT, "skills/creative-report", "skills/creative-context", "shared"], cwd=ROOT, capture_output=True)
             self.assertEqual(archive.returncode, 0, archive.stderr)
             subprocess.run(["tar", "-x", "-C", tmp], input=archive.stdout, check=True)
+            ParentHtmlTest.apply_link_click_rates(Path(tmp))
             with open(FIXTURE, newline="") as handle:
                 reader = csv.DictReader(handle)
                 fields, rows = reader.fieldnames, list(reader)

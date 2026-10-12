@@ -17,6 +17,7 @@ Nineteen skills, up from twelve. Every new skill judges against the account's ow
 - Metrics: base fields `landing_page_views`, `checkouts`, `new_customers`; package metrics `landing_page_view_rate`, `cart_to_checkout_rate`, `new_customer_purchase_share`. Ad names can carry `persona`, `hook`, `offer` and `version` (`PERSONA:`, `HOOK:`, `OFFER:`, `VER:`).
 - `creative-review` works installed on its own: it carries the four skills it runs (creative-grader, keep-or-kill, creative-mix, creative-report) in `siblings/`, copied by `tools/sync_shared.py` and checked by `--check`, so `creative-review.zip` uploaded alone runs the whole review. CI builds the zips and runs the review from `creative-review.zip` unzipped alone.
 - README install steps for Claude desktop and claude.ai follow Anthropic's upload path, say the all-in-one zip is for unpacking rather than upload, and name the skills to add alongside `spend-analysis`, `creative-report` and `competitor-scan`.
+- Purchase rate (`cvr`) and add-to-cart rate count link clicks, as the shared metric schema does, not all clicks (likes, profile taps and "see more" never reach the site). All clicks are used only when the data has no link clicks, and creative-grader's basis line says so. The grader and funnel-diagnosis now read the same step.
 - A second synthetic Acme export, `examples/acme/ads_daily_extended.csv` (`make_fixture.py --extended`), adds an audience ad set, landing page views, checkouts and new-customer purchases; the original export is unchanged.
 
 ## 0.1.0

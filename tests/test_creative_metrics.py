@@ -32,8 +32,8 @@ class ComputeMetricsTest(unittest.TestCase):
         self.assertAlmostEqual(m["cpc"], 200.0 / 150.0)  # same click type as ctr: link clicks
         self.assertAlmostEqual(m["cpa"], 20.0)
         self.assertAlmostEqual(m["roas"], 4.0)
-        self.assertAlmostEqual(m["cvr"], 4.0)
-        self.assertAlmostEqual(m["add_to_cart_rate"], 10.0)
+        self.assertAlmostEqual(m["cvr"], 1000.0 / 150.0)  # after-click rates count link clicks, as ctr does
+        self.assertAlmostEqual(m["add_to_cart_rate"], 2500.0 / 150.0)
         self.assertAlmostEqual(m["cost_per_add_to_cart"], 8.0)
         self.assertAlmostEqual(m["frequency"], 1.25)
         self.assertAlmostEqual(m["mer"], 5.0)
@@ -44,6 +44,19 @@ class ComputeMetricsTest(unittest.TestCase):
         self.assertAlmostEqual(cm.compute_metrics(no_link)["ctr"], 2.5)
         self.assertEqual(cm.metric_basis(no_link, "ctr")["numerator"], "clicks")
         self.assertEqual(cm.metric_basis(self.ROW, "ctr")["numerator"], "link_clicks")
+
+    def test_after_click_rates_use_link_clicks_and_fall_back_to_all_clicks(self):
+        # All clicks include likes, profile taps and "see more", none of which reach the site.
+        for metric in ("cvr", "add_to_cart_rate"):
+            self.assertEqual(cm.metric_basis(self.ROW, metric)["denominator"], "link_clicks", metric)
+            no_link = dict(self.ROW, link_clicks=None)
+            self.assertEqual(cm.metric_basis(no_link, metric)["denominator"], "clicks", metric)
+        self.assertAlmostEqual(cm.compute_metrics(dict(self.ROW, link_clicks=None))["cvr"], 4.0)
+
+    def test_metrics_md_states_the_link_click_denominator(self):
+        text = (ROOT / "skills" / "creative-context" / "references" / "metrics.md").read_text(encoding="utf-8")
+        self.assertIn("| `cvr` | conversions / link_clicks * 100 |", text)
+        self.assertIn("| `add_to_cart_rate` | add_to_carts / link_clicks * 100 |", text)
 
     def test_thumb_stop_rate_is_an_alias_not_a_second_metric(self):
         self.assertNotIn("thumb_stop_rate", cm.compute_metrics(self.ROW))

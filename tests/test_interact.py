@@ -1140,7 +1140,7 @@ class StructureTest(Fixture):
         card = next(c for c in cards if 'data-ad="120000000001"' in c)
         body = re.search(r'<div class="open-body"[^>]*>(.*)</div></details>', card, re.S).group(1)
         for text in ("among your weakest", "among your best", "Hook rate", "25.52%", "Impressions", "3-second plays", "Refresh it, keep the idea",
-                     "29 days", "Change the first 3 seconds", "Also weak: hold rate, CTR, add-to-cart rate."):
+                     "29 days", "Change the first 3 seconds", "Also weak: hold rate, CTR."):
             self.assertIn(text, body, text)
         self.assertRegex(body, r'<(svg|div) class="(pv|ph) big"')
 

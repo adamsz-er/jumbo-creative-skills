@@ -153,7 +153,20 @@ class FixtureTest(unittest.TestCase):
         self.assertIn("2026-03-01", header)
         self.assertIn("2026-03-30", header)
         self.assertIn("Purchases", header)
-        self.assertIn("link_clicks", header)
+        self.assertIn("Clicks (CTR, CPC, purchase and add-to-cart rates) use: link clicks.", header)
+
+    def test_basis_names_all_clicks_when_link_clicks_are_missing(self):
+        rows = []
+        for i in range(1, 9):
+            row = day_row("ad%d" % i, "static", 10000, link_clicks=None)
+            del row["Link clicks"]
+            row["Clicks (all)"] = 60.0 * i
+            rows.append(row)
+        rows = cm.load_rows(rows)
+        results = grade.grade_ads(rows)
+        header = grade.basis_header(rows, results)
+        self.assertIn("use: all clicks, because the data has no link clicks", header)
+        self.assertNotIn("use: link clicks", header)
 
 
 class ObjectiveAndGroupingTest(unittest.TestCase):
