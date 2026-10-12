@@ -36,7 +36,7 @@ python3 -I ../creative-ideation/scripts/evidence.py ads.csv --for ideation --com
 - **Crowded:** angles most rivals use. Standing out there takes a better execution, not just the angle.
 - **Open ground:** angles one rival or none uses.
 - **Worth testing:** angles rivals keep running that the brand has not tried, and the brand's own winning angles where rivals are thin.
-- **Not to chase:** angles the brand's own ads say have not worked for it, however popular they are with rivals.
+- **Not to chase:** angles the brand's own ads say have not worked for it, however popular they are with rivals. Only a losing angle lands here (weak for its format and paying back worse than the account); one that is only "weakest in format" still pays back at or above the account, so never present it as a losing angle.
 
 ## Present the result
 

@@ -169,6 +169,29 @@ class AngleLabelAndPoolingTest(unittest.TestCase):
         self.assertEqual(self._label(self._rec("a", {"roas": cm.BAND_TOP}, top=True),
                                      self._rec("b", {"roas": cm.BAND_BOTTOM}, bottom=True)), "mixed")
 
+    def test_bottom_quartile_in_its_format_is_losing_only_when_payback_trails_the_account(self):
+        weak = self._rec("a", {"roas": cm.BAND_BOTTOM, "cpa": cm.BAND_BOTTOM}, bottom=True)
+        above = {"account": {"roas": 4.38, "cpa": 28.65}, "concepts": {"trail": {"roas": 4.56, "cpa": 27.23}}}
+        below = {"account": {"roas": 4.38, "cpa": 28.65}, "concepts": {"trail": {"roas": 2.74, "cpa": 44.88}}}
+        split = {"account": {"roas": 4.38, "cpa": 28.65}, "concepts": {"trail": {"roas": 4.0, "cpa": 27.0}}}
+        unknown = {"account": {"roas": None, "cpa": None}, "concepts": {"trail": {"roas": 2.74, "cpa": 44.88}}}
+        label = lambda payback: evidence._angles([weak], 100.0, payback)[0]["label"]
+        self.assertEqual(label(above), "weakest in format")
+        self.assertEqual(label(below), "losing")
+        self.assertEqual(label(split), "weakest in format")
+        self.assertEqual(label(unknown), "weakest in format")
+        self.assertEqual(evidence._angles([weak], 100.0)[0]["label"], "weakest in format")
+
+    def test_a_losing_angle_on_the_fixture_trails_the_account(self):
+        result = evidence.build_evidence(cm.load_rows(str(FIXTURE)))
+        labels = {a["label"] for a in result["angles"]}
+        self.assertIn("weakest in format", labels)
+        for angle in result["angles"]:
+            if angle["label"] == "losing":
+                self.assertLess(angle["roas"], angle["account_roas"], angle["concept"])
+        text = evidence.render_persona(result)
+        self.assertIn("weakest in format = weak for its format but paying back at or above the account", text)
+
     def test_no_angles_says_none(self):
         self.assertEqual(evidence._angle_lines({"angles": []})[-1], "  none")
 

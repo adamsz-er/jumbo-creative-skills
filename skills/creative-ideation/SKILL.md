@@ -27,7 +27,7 @@ python3 -I scripts/evidence.py ads.csv --for ideation --verdicts verdicts.json -
 python3 -I scripts/evidence.py ads.csv --for ideation --json
 ```
 
-It shows each concept as winning, mixed, middle or losing (or ungraded or unjudged when there is too little to grade) with its ads, formats and share of spend; concept by format coverage with spend share, the best band in each cell and the youngest ad's age; the untried cells beside a winner; and, with `--competitor` (from `competitor-scan`), the open ground, the angles worth testing and the ones not to chase.
+It shows each concept as winning, mixed, middle, weakest in format (weak for its format, yet paying back at or above the account) or losing (or ungraded or unjudged when there is too little to grade) with its ads, formats and share of spend; concept by format coverage with spend share, the best band in each cell and the youngest ad's age; the untried cells beside a winner; and, with `--competitor` (from `competitor-scan`), the open ground, the angles worth testing and the ones not to chase.
 
 - Iterate winners into untried formats; do not repeat losing angles as they were; give young cells time before judging them.
 - Prefer open ground the account's own results support over angles rivals have crowded.

@@ -185,7 +185,19 @@ def _segments(ads: Sequence[Dict[str, Any]], records: Dict[str, Dict[str, Any]],
                         "new_customer_purchase_share": account["new_customer_purchase_share"]}}
 
 
-def _angles(records: Sequence[Dict[str, Any]], total_spend: float) -> List[Dict[str, Any]]:
+def _trails_account(concept: Dict[str, Optional[float]], account: Dict[str, Optional[float]]) -> bool:
+    """True when the concept's pooled payback is worse than the account's on every measure both have."""
+    compared = [(concept.get(m), account.get(m), m) for m in PAYBACK
+                if concept.get(m) is not None and account.get(m) is not None]
+    return bool(compared) and all(c > a if m == "cpa" else c < a for c, a, m in compared)
+
+
+def _angles(records: Sequence[Dict[str, Any]], total_spend: float,
+            payback: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    """Concepts labelled by how their ads did. Losing needs a weak ad in its format AND pooled payback worse than
+    the account's own; a weak ad whose concept still pays back at or above the account is "weakest in format"."""
+    account = (payback or {}).get("account") or {}
+    pooled = (payback or {}).get("concepts") or {}
     by_concept: Dict[str, List[Dict[str, Any]]] = {}
     for rec in records:
         if rec.get("concept"):
@@ -202,7 +214,7 @@ def _angles(records: Sequence[Dict[str, Any]], total_spend: float) -> List[Dict[
         elif top and not never and not bottom:
             label = "winning"
         elif (never or bottom) and not top:
-            label = "losing"
+            label = "losing" if _trails_account(pooled.get(concept) or {}, account) else "weakest in format"
         elif top:
             label = "mixed"
         elif any(not b.startswith("not graded") for r in judged for b in r["bands"].values()):
@@ -213,11 +225,22 @@ def _angles(records: Sequence[Dict[str, Any]], total_spend: float) -> List[Dict[
                     "formats": sorted({str(r["format"]) for r in recs if r.get("format")}),
                     "spend_share": _spend_share(spend, total_spend), "spend_reported": spend_reported,
                     "top_quartile_ads": top, "bottom_quartile_ads": bottom, "never_worked_ads": never,
+                    **{m: (pooled.get(concept) or {}).get(m) for m in PAYBACK},
+                    **{"account_" + m: account.get(m) for m in PAYBACK},
                     "fatiguing_ads": [r["ad"] for r in recs if r["fatigue"].get("fatiguing")],
                     "youngest_age_days": min((r["age_days"] for r in recs if r["age_days"] is not None), default=None)})
-    order = {"winning": 0, "mixed": 1, "middle": 2, "losing": 3, "ungraded": 4, "unjudged": 5}
+    order = {"winning": 0, "mixed": 1, "middle": 2, "weakest in format": 3, "losing": 4, "ungraded": 5, "unjudged": 6}
     out.sort(key=lambda a: (order[a["label"]], -(a["spend_share"] or 0), a["concept"]))
     return out
+
+
+def _concept_payback(ads: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """Pooled payback per concept and for the account, over the ads that report each measure."""
+    concepts: Dict[str, List[Dict[str, Any]]] = {}
+    for ad in ads:
+        concepts.setdefault(str(ad["concept"]), []).append(ad)
+    return {"account": {m: _rate_over_reporting(ads, m)[0] for m in PAYBACK},
+            "concepts": {c: {m: _rate_over_reporting(members, m)[0] for m in PAYBACK} for c, members in concepts.items()}}
 
 
 def _hooks(records: Sequence[Dict[str, Any]], top_n: int) -> Dict[str, Any]:
@@ -330,7 +353,7 @@ def build_evidence(rows: Sequence[Dict[str, Any]], window: int = 6, min_change: 
         "hook_derived": any((r.get("video_views_3s_source") or "").startswith("derived") for r in rows),
         "records": records,
         "segments": _segments(ads, by_key, field, total_spend),
-        "angles": _angles(records, total_spend),
+        "angles": _angles(records, total_spend, _concept_payback(ads)),
         "hooks": _hooks(records, top_n),
         "coverage": _coverage(records, total_spend),
         "verdicts_source": "keep-or-kill" if verdicts is not None else
@@ -442,11 +465,14 @@ def render_persona(result: Dict[str, Any]) -> str:
 
 def _angle_lines(result: Dict[str, Any]) -> List[str]:
     out = ["Angles (concepts) by how their ads did: winning = a top-quartile ad and no weak one; losing = weak or "
-           "never-worked ads and no top-quartile one; mixed = both; middle = graded, none top or weak; "
-           "ungraded = too few comparable ads to grade; unjudged = too little delivery:"]
+           "never-worked ads, no top-quartile one, and pooled payback worse than the account's; weakest in format = weak "
+           "for its format but paying back at or above the account (or the account figure is n/a), so not a losing angle; "
+           "mixed = both; middle = graded, none top or weak; ungraded = too few comparable ads to grade; unjudged = too "
+           "little delivery:"]
     for a in result["angles"]:
-        out.append("  %s [%s]: ads %s; %s; formats %s%s" % (
-            a["concept"], a["label"], _ids(a["ads"]),
+        out.append("  %s [%s]: ads %s; roas %s vs account %s, cpa %s vs account %s; %s; formats %s%s" % (
+            a["concept"], a["label"], _ids(a["ads"]), _n(a.get("roas")), _n(a.get("account_roas")),
+            _n(a.get("cpa")), _n(a.get("account_cpa")),
             _spend_text(a["spend_share"], a["spend_reported"], len(a["ads"])), ", ".join(a["formats"]) or "unknown",
             "; fatiguing: %s" % _ids(a["fatiguing_ads"]) if a["fatiguing_ads"] else ""))
     return out if result["angles"] else out + ["  none"]

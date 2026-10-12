@@ -253,6 +253,18 @@ class EdgeCaseTest(unittest.TestCase):
         result = self.build([{"advertiser": "Rival A", "ad_text": "Big sale."}], evidence=evidence)
         self.assertEqual([], result["not_to_chase"])
 
+    def test_an_angle_weak_only_for_its_format_is_not_one_to_chase_away(self):
+        """The account's comparison ad is bottom quartile among statics but pays back above the account: not a losing angle."""
+        sys.path.insert(0, str(ROOT / "skills" / "persona-builder" / "scripts"))
+        import evidence
+        import creative_metrics as cm
+        built = evidence.build_evidence(cm.load_rows(str(ROOT / "examples" / "acme" / "ads_daily.csv")))
+        comparison = next(a for a in built["angles"] if a["concept"] == "comparison")
+        self.assertEqual("weakest in format", comparison["label"])
+        result = self.build([{"advertiser": "Rival A", "ad_text": "Ours vs theirs: compare the specs."}],
+                            evidence={"angles": [{"concept": a["concept"], "label": a["label"]} for a in built["angles"]]})
+        self.assertNotIn("comparison", [i["label"] for i in result["not_to_chase"]])
+
     def test_line_breaks_inside_quoted_ad_text_survive(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "ads.csv"
