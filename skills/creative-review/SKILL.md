@@ -26,7 +26,8 @@ If this is the first run (no `creative-profile.md` and no `creative-review-runs/
 4. **Run it.**
    `python3 -I scripts/review.py run ads.csv --profile creative-profile.md --source "Meta ads connector" --completeness reconciled`
    Pass `--where market=US`, `--target cpa=<their own number>`, `--type-map`, `--key-map`, `--prior prior.csv`, `--previews dir` and `--thumbs dir` only when the user gave them. Never invent a target. `--demo` reviews the built-in sample account and labels every output "sample data".
-5. **Reply** with the three bullets it printed, the report path, and the "Next steps" it printed: two or three skills chosen by fixed rules from this run's findings (unreadable names point to `ad-namer`, a site check or a pause with a weak site step to `funnel-diagnosis`, fatiguing ads to `fatigue-planner`, pause or scale calls to `spend-analysis`, mix gaps to `creative-ideation`, iterate calls to `hook-writer`, scale calls to `copy-tests`; with nothing found, `creative-ideation` and `creative-brief`). Offer to run the first one.
+5. **Reply** with the three bullets it printed, the report path, and the "Next steps" it printed: two or three skills chosen by fixed rules from this run's findings (unreadable names point to `ad-namer`, a site check or a pause with a weak site step to `funnel-diagnosis`, fatiguing ads to `fatigue-planner`, pause or scale calls to `spend-analysis`, mix gaps to `creative-ideation`, refresh calls to `hook-writer`, scale calls to `copy-tests`; with nothing found, `creative-ideation` and `creative-brief`). Offer to run the first one.
+   If you add verdict counts, take them from `verdicts.json`'s summary and use the words a user reads (Scale, Keep, Refresh, Check before cutting, Pause, Too early, Can't judge), never the ids (`iterate`).
 
 ## What a run writes
 

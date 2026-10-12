@@ -110,7 +110,7 @@ Only from you and your data. The skills do not invent testimonials, statistics o
 
 ### How do I make a one-change variant of a winning ad?
 
-Ask hook-writer for variants of the ad, or ask creative-brief for a one-change brief on an ad the review marked Iterate. Changing one thing at a time (the opening, the creator) lets you see what moved the result.
+Ask hook-writer for variants of the ad, or ask creative-brief for a one-change brief on an ad the review marked Refresh. Changing one thing at a time (the opening, the creator) lets you see what moved the result.
 
 ## The report
 

@@ -18,8 +18,8 @@ First matching rule wins. Every verdict lists its reasons, a plain-English sente
 | # | Condition | Verdict (`verdict_id`) |
 |---|---|---|
 | 1 | Learning | Too early (`too_early`) |
-| 2 | No payback measure can be graded (missing data, or too few comparable ads) | Can't judge: missing ... (`cant_judge`). Never iterate, keep or scale. Fatigue is context only. |
-| 3 | Fatiguing and payback is not bottom on every measure | Iterate (`iterate`) |
+| 2 | No payback measure can be graded (missing data, or too few comparable ads) | Can't judge: missing ... (`cant_judge`). Never refresh, keep or scale. Fatigue is context only. |
+| 3 | Fatiguing and payback is not bottom on every measure | Refresh (`iterate`) |
 | 4 | Payback measures disagree (one top, one bottom) | Check before cutting (`check_mixed`) |
 | 4a | Pause case, a small comparison group and under two `--window`s of delivery days | Check before cutting (`check_immature`) |
 | 5 | Pause case (below) but not bottom account-wide within its objective | Keep (watch it) |
@@ -49,12 +49,12 @@ A thin group may produce a Pause, never a Confident one: the confidence is cappe
 
 ## Spend at stake
 
-`spend_at_stake` is the ad's spend in the window. Within each verdict the list is sorted by it, largest first. The do-these-first list is the top 5 by spend at stake across Pause, Check, Iterate and Scale; an ad that cannot be judged never leads it.
+`spend_at_stake` is the ad's spend in the window. Within each verdict the list is sorted by it, largest first. The do-these-first list is the top 5 by spend at stake across Pause, Check, Refresh and Scale; an ad that cannot be judged never leads it.
 
 ## Judgement calls to know about
 
 - Payback top with fatigue unreadable (under two windows of delivery days) is held at Keep, never scaled.
-- Fatiguing with a payback that is bottom on one measure only is Iterate: there is no agreement that it is weak.
+- Fatiguing with a payback that is bottom on one measure only is Refresh: there is no agreement that it is weak.
 - Never-worked uses the same payback measures over the ad's first `--window` delivery days, graded against every ad's own first window.
 - Several ads of one concept share one fatigue clock; read their verdicts together.
 - `--min-change` (default 8) is a materiality size to separate a real move from week-to-week noise. It is not a benchmark for fatigue: set it from how much your own metrics wobble when nothing is wrong.

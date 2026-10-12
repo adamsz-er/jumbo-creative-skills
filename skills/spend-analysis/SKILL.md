@@ -38,7 +38,7 @@ python3 -I scripts/spend.py ads.csv --profile creative-profile.md --where market
 4. **Spend by** concept, format, ad type, age band and verdict group: spend, share, purchases, value, return, cost per sale and the return as a percent of the account's.
 5. **Spend on pause and never-worked ads**, with each ad's verdict sentence and the daily rate.
 6. **Room to scale:** scale and keep ads with their frequency against the median of their format. Rising frequency means the same people are seeing the ad again, so more budget buys less.
-7. **Budget moves:** money from pause ads to scale ads, split by the scale ads' current spend, with the lower of the two confidences and the evidence. Check-before-cutting ads move nothing. Iterate ads get a creative refresh, not a budget change.
+7. **Budget moves:** money from pause ads to scale ads, split by the scale ads' current spend, with the lower of the two confidences and the evidence. Check-before-cutting ads move nothing. Refresh ads get a new creative, not a budget change.
 
 `references/reading-spend.md` explains how to read each part and what the moves do not tell you.
 

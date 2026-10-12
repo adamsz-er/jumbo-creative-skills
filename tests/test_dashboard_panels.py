@@ -135,8 +135,9 @@ class PanelStateTest(unittest.TestCase):
 
     def test_board_columns_carry_counts_and_every_pause_card_the_check_line(self):
         html, _ = panels.verdict_board(self.ctx)
-        for name in ("Scale", "Keep", "Iterate", "Check before cutting", "Pause", "Too early", "Can&#x27;t judge"):
+        for name in ("Scale", "Keep", "Refresh", "Check before cutting", "Pause", "Too early", "Can&#x27;t judge"):
             self.assertIn(name, html)
+        self.assertNotIn("Iterate", html)
         pauses = [e for e in self.verdicts["ads"] if e["verdict_id"].startswith("pause")]
         self.assertTrue(pauses)
         self.assertEqual(html.count("Check first:"), 1)

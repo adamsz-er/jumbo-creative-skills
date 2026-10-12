@@ -714,7 +714,7 @@ DATASETS = (
     ("formats", "Format scorecard", "One row per format: ads, spend share and each rate, graded only against the account's other formats."),
     ("white-space", "Concept by format grid", "Ads and spend in each concept and format cell, with the numbered gaps worth testing."),
     ("gaps", "Gaps worth testing", "Empty or single-ad cells beside a concept or format that performs well in this account, strongest first."),
-    ("briefing", "Briefs and starters", "Finished briefs from the briefs file, or brief starters built from the gaps and Iterate verdicts."),
+    ("briefing", "Briefs and starters", "Finished briefs from the briefs file, or brief starters built from the gaps and Refresh verdicts."),
     ("notes", "Method and caveats", "The basis, every default used, what was read from which column, and what was missing from the inputs."),
     ("ad-media", "Ad images and reasons", "One row per ad, largest spend first: its image as a data URL or why there is none, whether it is a video, and why it got its verdict."),
     ("ad-daily", "Daily series per ad", "Each ad's own days: spend, the payback measure, hook rate, CTR and frequency; null with the reason on a day the ad did not deliver."),

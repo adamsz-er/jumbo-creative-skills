@@ -24,7 +24,7 @@ LABELS = {"hook_rate": "Hook rate", "hold_rate": "Hold rate", "video_completion_
 
 # verdict_id -> display class; the five classes plus the two the board lists last.
 ID_CLASS = {"scale": "scale", "keep": "keep", "iterate": "iterate", "cant_judge": "cant", "too_early": "early"}
-BOARD = (("scale", "Scale"), ("keep", "Keep"), ("iterate", "Iterate"), ("check", "Check before cutting"),
+BOARD = (("scale", "Scale"), ("keep", "Keep"), ("iterate", "Refresh"), ("check", "Check before cutting"),
          ("kill", "Pause"), ("early", "Too early"), ("cant", "Can't judge"))
 VERDICT_LABEL = dict(BOARD)
 NEXT_STEP = {

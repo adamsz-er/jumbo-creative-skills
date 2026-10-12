@@ -212,7 +212,7 @@ def method_lines(ctx: Ctx, grade, verdicts, brand: Optional[str], completeness: 
         lines.append("Funnel columns beyond the standard fields: %s (matched by normalised header)." % interact.plain_ids("; ".join(read)))
     lines.append("Format, White space and Briefing settings (arbitrary defaults): formats graded against each other only with %d or more; "
                  "heatmaps show the top %d concepts; %d example ads per format and %d video ads in the retention chart; brief starters use the top %d gaps "
-                 "and top %d Iterate ads; the copy table lists the top %d ads."
+                 "and top %d Refresh ads; the copy table lists the top %d ads."
                  % (panels.MIN_FORMATS, panels.HEATMAP_CONCEPTS, panels.STRIP_ADS, panels.RETENTION_ADS, panels.briefing.STARTER_GAPS,
                     panels.briefing.STARTER_ITERATE, panels.COPY_ADS))
     if ctx.retention_headers:
@@ -225,7 +225,7 @@ def method_lines(ctx: Ctx, grade, verdicts, brand: Optional[str], completeness: 
         lines.append("Ad copy columns: %s." % "; ".join("%s: %s" % (k, "read from column %r" % v if v else "not found") for k, v in ctx.copy_headers.items()))
     lines.append("Breakdown file: %s." % ("%d rows; segments read from %s" % (len(ctx.breakdowns), ", ".join("%s (column %r)" % kv for kv in ctx.breakdown_dims.items()) or "no known column")
                                          if ctx.breakdowns else "not supplied"))
-    lines.append("Briefs: %s." % ("%d from the briefs file" % len(ctx.briefs) if ctx.briefs else "starters built from the gaps and Iterate verdicts, no briefs file"))
+    lines.append("Briefs: %s." % ("%d from the briefs file" % len(ctx.briefs) if ctx.briefs else "starters built from the gaps and Refresh verdicts, no briefs file"))
     lines.append("Reach and frequency: %s." % ("from the account-level file" if ctx.account else "not shown, they need an account-level pull"))
     lines.append("Prior period: %s." % ("supplied" if ctx.prior else "not supplied"))
     lines.append("Chart settings (arbitrary defaults, set them from your own account): rolling averages cover %d days and need %d days with data; "

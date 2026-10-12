@@ -79,7 +79,7 @@ Try:
 
 - "Write a production brief for the boot test with a new opening."
 - "Brief a creator for this concept."
-- "Write a one-change brief for my first Iterate ad."
+- "Write a one-change brief for my first Refresh ad."
 
 ## Common questions
 

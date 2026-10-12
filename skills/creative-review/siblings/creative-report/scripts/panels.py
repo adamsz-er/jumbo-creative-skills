@@ -2067,7 +2067,7 @@ def _judged_on(ctx: Ctx, entry: Optional[Dict[str, Any]] = None) -> str:
 
 
 def _starters(ctx: Ctx) -> List[Dict[str, Any]]:
-    """Brief starters: the top coverage gaps, then the top Iterate ads, at most STARTERS_PER_FORMAT in any one format.
+    """Brief starters: the top coverage gaps, then the top Refresh ads, at most STARTERS_PER_FORMAT in any one format.
 
     A gap or ad whose format is already full is skipped and the next one takes its place, so each quota still fills when it can.
     """
@@ -2108,7 +2108,7 @@ def _starters(ctx: Ctx) -> List[Dict[str, Any]]:
         taken += 1
         label = rec["label"] if rec else str(entry.get("ad_name") or key)
         fix = interact.improvement(ctx.grade_index.get(key), entry)
-        why = " ".join(t for t in (fix["lead"], fix["fix"]) if t) or "Marked Iterate by keep-or-kill."
+        why = " ".join(t for t in (fix["lead"], fix["fix"]) if t) or "Marked Refresh by keep-or-kill."
         out.append({"title": "A new version of " + label, "make": "A new version of %s, keeping the concept." % label, "why": why,
                     "format": str((rec or {}).get("format") or entry.get("format") or "unknown"), "refs": [key],
                     "judged": _judged_on(ctx, entry), "prompt": briefing.starter_prompt("a new version of %s, keeping the concept" % label, why)})
@@ -2161,9 +2161,9 @@ def ready_briefs(ctx: Ctx) -> Tuple[str, str]:
                 % (len(ctx.briefs), "" if len(ctx.briefs) == 1 else "s", cards)), "data"
     starters = _starters(ctx)
     if not starters:
-        return empty_state("No briefs file was given, and there are no coverage gaps or Iterate ads to build starters from.",
+        return empty_state("No briefs file was given, and there are no coverage gaps or Refresh ads to build starters from.",
                            "Write briefs with the creative-brief and hook-writer skills and add them when you rebuild this report, or run the creative-mix and keep-or-kill skills and add their results.")
-    note = ('<p class="muted">Brief starters, not finished briefs: the top %d gaps and the top %d Iterate ads by spend at stake (arbitrary defaults). '
+    note = ('<p class="muted">Brief starters, not finished briefs: the top %d gaps and the top %d Refresh ads by spend at stake (arbitrary defaults). '
             'A starter never invents a hook or a message; the button copies a prompt for the creative-brief and hook-writer skills. '
             'To show finished briefs here, write them with those skills and add them when you rebuild this report.</p>' % (briefing.STARTER_GAPS, briefing.STARTER_ITERATE))
     return note + '<div class="brief-grid">%s</div>' % "".join(_starter_card(ctx, n, s) for n, s in enumerate(starters, 1)), "data"

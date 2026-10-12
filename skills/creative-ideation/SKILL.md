@@ -29,14 +29,14 @@ python3 -I scripts/evidence.py ads.csv --for ideation --json
 
 It shows each concept as winning, mixed, middle, weakest in format (weak for its format, yet paying back at or above the account) or losing (or ungraded or unjudged when there is too little to grade) with its ads, formats and share of spend; concept by format coverage with spend share, the best band in each cell and the youngest ad's age; the untried cells beside a winner; and, with `--competitor` (from `competitor-scan`), the open ground, the angles worth testing and the ones not to chase.
 
-- Iterate winners into untried formats; do not repeat losing angles as they were; give young cells time before judging them.
+- Carry winners into untried formats; do not repeat losing angles as they were; give young cells time before judging them.
 - Prefer open ground the account's own results support over angles rivals have crowded.
 - Every concept names its source: the ads it iterates, the gap it fills, or the competitor finding. With no data, label each "unbacked: from craft and the profile, not results".
 
 ## Inputs it can use if present
 
 - `mix.md` or the output of `creative-mix`: its gaps and top-quartile concepts steer the whole run.
-- `verdicts.md` or `keep-or-kill` output: "iterate" and "scale" ads are the best seeds for variations; "never worked" ads are things not to repeat as they were.
+- `verdicts.md` or `keep-or-kill` output: "refresh" and "scale" ads are the best seeds for variations; "never worked" ads are things not to repeat as they were.
 - `grade.md` or `creative-grader` output: the first broken funnel step says what a new concept must fix (a weak hook calls for a stronger opening, a weak click calls for a clearer offer).
 - An Ads Manager CSV or a Meta ads connector: run `creative-mix` for the grid if no mix output exists.
 

@@ -36,7 +36,7 @@ It lists the openings that stop people (top-quartile hook rate within their form
 
 ## Inputs it can use if present
 
-- `verdicts.md` from `keep-or-kill`: an ad marked "iterate" is the best source for iteration mode.
+- `verdicts.md` from `keep-or-kill`: an ad marked "refresh" is the best source for iteration mode.
 - `grade.md` from `creative-grader`: a diagnosis of "hook" means the opening is not stopping the scroll; a diagnosis of "hold" means the opening works but the body does not sustain it, so the hook is not the thing to change.
 - An Ads Manager CSV or Meta ads connector. An ad export carries no hook wording, so ask the user for the opening line, or read it from the ad itself.
 
@@ -60,7 +60,7 @@ Every hook must work with the sound off: the on-screen text and the visual carry
 Write the opening line of the primary text so it makes sense **on its own in the first visible line**. Truncation length varies by placement and device: tell the user to check the current cut-off in their placement preview in Ads Manager, and write the first sentence to stand alone whatever the cut-off is. Offer a few openers per archetype and mark which ones need a second line to land (those are riskier).
 
 ### 3. Iteration mode
-Input: a hook that is working or fatiguing (a "scale" or "iterate" verdict, or the user's pick). Keep the concept and **change exactly one thing per variant**: the opening line, the visual, the creator, the setting or the length. Label each variant with the one thing that changed, so the result can be read. If the ad was fatiguing, make variants that change the first moments and keep the idea that still earns. Do not change two things at once: that tests nothing.
+Input: a hook that is working or fatiguing (a "scale" or "refresh" verdict, or the user's pick). Keep the concept and **change exactly one thing per variant**: the opening line, the visual, the creator, the setting or the length. Label each variant with the one thing that changed, so the result can be read. If the ad was fatiguing, make variants that change the first moments and keep the idea that still earns. Do not change two things at once: that tests nothing.
 
 ## Check every hook
 

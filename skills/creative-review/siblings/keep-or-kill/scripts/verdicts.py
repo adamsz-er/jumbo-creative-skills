@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A pause / check / iterate / scale / keep verdict per ad, with confidence, a plain-English sentence and fatigue trend.
+"""A pause / check / refresh / scale / keep verdict per ad, with confidence, a plain-English sentence and fatigue trend.
 
 Usage: python3 verdicts.py ads.csv [--young-days 5] [--window 6] [--min-change 8] [--top-n 3] [--group-by format,ad_type]
            [--key-map PX=concept] [--target cpa=40,roas=3] [--where market=US] [--profile creative-profile.md] [--json]
@@ -40,14 +40,14 @@ LABELS = {
     "check_site": "Check before cutting",
     "check_no_target": "Check before cutting",
     "check_meets_target": "Check before cutting",
-    "iterate": "Iterate: refresh the hook or creator, keep the concept",
+    "iterate": "Refresh: a new hook or creator, keep the concept",
     "pause_fatigued": "Pause: fatigued",
     "pause_never_worked": "Pause: never worked",
     "cant_judge": "Can't judge",
     "too_early": "Too early (learning)",
 }
 # summary group -> name, in display order
-GROUPS = (("scale", "Scale"), ("keep", "Keep"), ("check", "Check before cutting"), ("iterate", "Iterate"),
+GROUPS = (("scale", "Scale"), ("keep", "Keep"), ("check", "Check before cutting"), ("iterate", "Refresh"),
           ("pause", "Pause"), ("cant_judge", "Can't judge"), ("too_early", "Too early"))
 GROUP_NAME = dict(GROUPS)
 ACT_ON = ("pause", "check", "iterate", "scale")
@@ -477,7 +477,7 @@ def _stake(entry: Dict[str, Any]) -> float:
 
 
 def do_first(results: Sequence[Dict[str, Any]], limit: int = DO_FIRST) -> List[Dict[str, Any]]:
-    """The ads to act on first: largest spend at stake across pause, check, iterate and scale. Never can't-judge."""
+    """The ads to act on first: largest spend at stake across pause, check, refresh and scale. Never can't-judge."""
     pool = [e for e in results if group_of(e["verdict_id"]) in ACT_ON]
     return [{k: e[k] for k in ("ad", "ad_name", "verdict", "verdict_id", "spend_at_stake", "confidence", "sentence")}
             for e in sorted(pool, key=lambda e: -_stake(e))[:limit]]
@@ -565,7 +565,7 @@ def render(results: Sequence[Dict[str, Any]], args: argparse.Namespace, rows: Se
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Pause, check, iterate, scale or keep: a verdict per ad.")
+    parser = argparse.ArgumentParser(description="Pause, check, refresh, scale or keep: a verdict per ad.")
     parser.add_argument("path", help="Ads Manager CSV with daily rows, or a .json file of rows")
     parser.add_argument("--young-days", type=int, default=5,
                         help="ads younger than this are still learning (arbitrary default)")

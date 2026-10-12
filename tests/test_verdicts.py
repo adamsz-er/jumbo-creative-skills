@@ -436,5 +436,20 @@ class OrderingTest(unittest.TestCase):
         self.assertIn("known", entry["payback"])
 
 
+
+class RefreshWordTest(unittest.TestCase):
+    """One word for one call: the user reads "Refresh" (as fatigue-planner says it); the id stays `iterate` for the data."""
+
+    def test_the_fading_but_paying_verdict_reads_refresh_and_keeps_its_id(self):
+        import subprocess
+        script = ROOT / "skills" / "keep-or-kill" / "scripts" / "verdicts.py"
+        text = subprocess.run([sys.executable, "-I", str(script), str(FIXTURE)], capture_output=True, text=True, check=True).stdout
+        self.assertIn("Refresh", text)
+        self.assertNotIn("Iterate", text)
+        refreshed = [r for r in fixture_verdicts().values() if r["verdict_id"] == "iterate"]
+        self.assertTrue(refreshed)
+        self.assertTrue(all(r["verdict"].startswith("Refresh:") for r in refreshed))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -39,7 +39,7 @@ A group needs at least 5 comparable ads to stand on its own. A smaller group wid
 
 **Worked example (Acme Outdoor Co., made-up data).** Six UGC video ads in the UGC video / BAU (evergreen) group have these hold-rate quartiles: p25 29.7%, median 33.4%, p75 34.1%. One of them holds 28.4%. That is at or below p25, so its hold rate is in the bottom quartile of its own group. Run `python3 -I skills/creative-grader/scripts/grade.py examples/acme/ads_daily.csv` to see the same table, or read [examples/acme/grade.md](../examples/acme/grade.md). Because the group has six ads, fewer than twice the minimum of five, the output marks the grade as an early read.
 
-Verdicts (`keep-or-kill`) use the same comparison, plus age, a learning flag and a fatigue trend (the first and last few delivery days of an ad compared). The rules are in [verdict-rules.md](../skills/keep-or-kill/references/verdict-rules.md). Two protections matter: an ad that cannot be judged is never told to iterate or pause, and the account's biggest sellers are never paused without a check. A never-worked ad is paused only when it misses a target you set; with no target it reads "Check before cutting" and asks for one.
+Verdicts (`keep-or-kill`) use the same comparison, plus age, a learning flag and a fatigue trend (the first and last few delivery days of an ad compared). The rules are in [verdict-rules.md](../skills/keep-or-kill/references/verdict-rules.md). Two protections matter: an ad that cannot be judged is never told to refresh or pause, and the account's biggest sellers are never paused without a check. A never-worked ad is paused only when it misses a target you set; with no target it reads "Check before cutting" and asks for one.
 
 ## How the make skills read the account
 
@@ -64,7 +64,7 @@ The report's age curve and `fatigue-planner` use the same band: for each day of 
 
 ## What the review suggests next
 
-`creative-review` ends with two or three skills chosen by fixed rules from its own findings, in this order: unreadable names (`ad-namer`), a site check (`funnel-diagnosis`), fatiguing ads (`fatigue-planner`), pause or scale calls (`spend-analysis`), mix gaps (`creative-ideation`), iterate calls (`hook-writer`), scale calls (`copy-tests`). With nothing found it suggests `creative-ideation` and `creative-brief`.
+`creative-review` ends with two or three skills chosen by fixed rules from its own findings, in this order: unreadable names (`ad-namer`), a site check (`funnel-diagnosis`), fatiguing ads (`fatigue-planner`), pause or scale calls (`spend-analysis`), mix gaps (`creative-ideation`), refresh calls (`hook-writer`), scale calls (`copy-tests`). With nothing found it suggests `creative-ideation` and `creative-brief`.
 
 ## Defaults and the flags that change them
 

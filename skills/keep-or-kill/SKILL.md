@@ -1,6 +1,6 @@
 ---
 name: keep-or-kill
-description: Give every Meta ad a pause, check, iterate, scale or keep verdict judged against its own campaign goal, with a confidence level, a plain-English sentence and the reasons shown. Use when the user asks which ads to pause, scale or refresh, runs a weekly creative review, asks "is this ad fatiguing", or wants a keep-or-kill call from an Ads Manager export or a Meta ads connector.
+description: Give every Meta ad a pause, check, refresh, scale or keep verdict judged against its own campaign goal, with a confidence level, a plain-English sentence and the reasons shown. Use when the user asks which ads to pause, scale or refresh, runs a weekly creative review, asks "is this ad fatiguing", or wants a keep-or-kill call from an Ads Manager export or a Meta ads connector.
 license: MIT
 metadata:
   version: "0.2.0"
@@ -9,7 +9,7 @@ metadata:
 
 # Keep or kill
 
-One verdict per ad, with the evidence behind it. Grades are relative to the same account's own ads of the same campaign objective, in the same format and ad type. No benchmarks. An unknown is never a decision: an ad whose payback cannot be graded reads "Can't judge", not keep or iterate.
+One verdict per ad, with the evidence behind it. Grades are relative to the same account's own ads of the same campaign objective, in the same format and ad type. No benchmarks. An unknown is never a decision: an ad whose payback cannot be graded reads "Can't judge", not keep or refresh.
 
 If there is no `creative-profile.md` yet, suggest running `creative-context` first, but do not require it.
 
@@ -42,13 +42,14 @@ python3 -I scripts/verdicts.py ads.csv --target cpa=40,roas=3   # the user's own
 
 ## Present the result
 
-1. Lead with the do-these-first list the script prints (largest spend at stake first), then the verdict counts.
+1. Lead with the do-these-first list the script prints (largest spend at stake first), then the verdict counts. Quote every count, age, group size and list length exactly as the script prints them; never recount or paraphrase them ("the 4 weakest" when it lists 5). Use the verdict words it prints (Refresh, not the id `iterate`).
 2. For each ad, give the verdict, its sentence and its confidence as printed, then the reasons. Do not rephrase a sentence into stronger words.
 3. An "Early read" is a lead, not a ruling: say it rests on a small comparison group, few delivery days or one payback measure.
 4. Before any Pause, state the check line the script prints: rule out tracking, site or audience problems first. Only fatigue and never-worked are creative decisions.
-5. "Can't judge" means the data cannot support a decision: say which field is missing and how to get it. Never turn it into iterate or keep.
+5. "Can't judge" means the data cannot support a decision: say which field is missing and how to get it. Never turn it into refresh or keep.
 6. Name the ads that are too young to judge, the thin-group warning, and the spend concentration line.
 7. Say when fatigue could not be read (fewer than two windows of delivery days) and that such an ad is held, not scaled.
+8. When a `fatigue-planner` plan exists in the conversation, mark each kept ad that sits on its refresh queue as "keep, refresh queued", and say the two skills use different fade tests (the planner projects the line to a floor; this skill compares the first and last delivery days). Never tell the user to leave unchanged an ad the plan queues for a refresh.
 
 ## Guardrails
 

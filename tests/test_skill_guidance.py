@@ -43,5 +43,17 @@ class SalePlannerMarketTest(unittest.TestCase):
         self.assertIn("examples", text.split("## Australia")[0])
 
 
+class OneVerdictWordTest(unittest.TestCase):
+    def test_answers_use_refresh_and_reconcile_with_the_fatigue_plan(self):
+        keep = read("keep-or-kill", "SKILL.md")
+        self.assertIn("keep, refresh queued", keep)
+        self.assertIn("never recount or paraphrase them", keep)
+        self.assertIn("Refresh, not the id `iterate`", keep)
+        self.assertIn("never the ids (`iterate`)", read("creative-review", "SKILL.md"))
+        for path in sorted(SKILLS.glob("*/SKILL.md")) + sorted(SKILLS.glob("*/references/*.md")):
+            if "siblings" not in path.parts:
+                self.assertNotIn("Iterate", path.read_text(encoding="utf-8"), path)
+
+
 if __name__ == "__main__":
     unittest.main()

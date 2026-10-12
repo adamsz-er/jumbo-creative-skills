@@ -25,7 +25,7 @@ A scale call means strong payback and no sign of wearing out. Frequency then say
 
 - **From pause to scale.** The daily spend of each pause ad, split across the scale ads in proportion to their current spend. The confidence is the weaker of the source and the destination verdicts.
 - **No move from check-before-cutting.** The weakness is not proven: find out first.
-- **No budget change for iterate.** The concept still pays; the creative needs a refresh (`hook-writer`, `fatigue-planner`).
+- **No budget change for Refresh.** The concept still pays; the creative needs a refresh (`hook-writer`, `fatigue-planner`).
 - **No step size.** How much and how fast to raise a budget depends on how the account has absorbed increases before. Raise in steps you have seen work, and read the result before the next step.
 
 What the moves do not tell you: whether the business made money (that needs margin and store revenue), whether the platform's attribution over-credits retargeting, or what a new audience would do. Treat each move as a test with a date to read it back.

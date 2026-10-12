@@ -1844,8 +1844,11 @@ class ParentHtmlTest(unittest.TestCase):
             "People watch but do not click", "People see the ad but do not click")
 
     @staticmethod
-    def apply_link_click_rates(tree):
-        """Give the parent's metrics module the later deliberate change: purchase and add-to-cart rates count link clicks before all clicks."""
+    def apply_later_changes(tree):
+        """Give the parent the later deliberate changes: the verdict a user reads as "Refresh" (its id stays `iterate`), and purchase and
+        add-to-cart rates that count link clicks before all clicks."""
+        for path in (tree / "skills" / "creative-report" / "scripts").glob("*.py"):
+            path.write_text(path.read_text(encoding="utf-8").replace("Iterate", "Refresh"), encoding="utf-8")
         for path in tree.glob("**/creative_metrics.py"):
             text = path.read_text(encoding="utf-8")
             for metric, numerator in (("cvr", "conversions"), ("add_to_cart_rate", "add_to_carts")):
@@ -1866,7 +1869,7 @@ class ParentHtmlTest(unittest.TestCase):
             archive = subprocess.run(["git", "archive", PARENT, "skills/creative-report", "skills/creative-context", "shared"], cwd=ROOT, capture_output=True)
             self.assertEqual(archive.returncode, 0, archive.stderr)
             subprocess.run(["tar", "-x", "-C", tmp], input=archive.stdout, check=True)
-            ParentHtmlTest.apply_link_click_rates(Path(tmp))
+            ParentHtmlTest.apply_later_changes(Path(tmp))
             inputs = []
             for name, (skill, script) in (("grade", ("creative-grader", "grade.py")), ("verdicts", ("keep-or-kill", "verdicts.py")),
                                           ("mix", ("creative-mix", "mix.py"))):
@@ -1892,7 +1895,7 @@ class ParentHtmlTest(unittest.TestCase):
             archive = subprocess.run(["git", "archive", PARENT, "skills/creative-report", "skills/creative-context", "shared"], cwd=ROOT, capture_output=True)
             self.assertEqual(archive.returncode, 0, archive.stderr)
             subprocess.run(["tar", "-x", "-C", tmp], input=archive.stdout, check=True)
-            ParentHtmlTest.apply_link_click_rates(Path(tmp))
+            ParentHtmlTest.apply_later_changes(Path(tmp))
             with open(FIXTURE, newline="") as handle:
                 reader = csv.DictReader(handle)
                 fields, rows = reader.fieldnames, list(reader)

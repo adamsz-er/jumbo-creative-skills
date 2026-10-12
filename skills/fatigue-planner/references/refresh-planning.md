@@ -2,7 +2,7 @@
 
 ## What to refresh first
 
-1. **Fading ads that still pay.** Keep-or-kill calls them "Iterate": the concept earns, the execution is tiring. Refresh the opening or the creator and keep the idea.
+1. **Fading ads that still pay.** Keep-or-kill calls them "Refresh": the concept earns, the execution is tiring. Refresh the opening or the creator and keep the idea.
 2. **Ads on course to fade, soonest first.** Brief them early enough that the new version is live before the old one crosses its floor: the brief-to-live time is `--lead-days`.
 3. **Fading ads that no longer pay.** These are pause candidates, not refreshes. A new version of an idea that stopped paying is a new test, so it belongs in `creative-ideation`, not the refresh queue.
 
