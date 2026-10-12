@@ -65,10 +65,10 @@ Add `--skill <name>` to pick one skill, and `-a <agent>` to target one agent.
 <details>
 <summary>Claude desktop and claude.ai</summary>
 
-1. Download `<skill>.zip` from the [latest Release](https://github.com/adamsz-er/jumbo-creative-skills/releases/latest).
-2. Go to Customize > Skills > Upload and choose the zip. This needs code execution enabled.
+1. Download the zip of each skill you want from the [latest Release](https://github.com/adamsz-er/jumbo-creative-skills/releases/latest), named after the skill: start with `creative-review.zip`, the front door. Each zip holds one skill folder with its `SKILL.md`, the layout [Anthropic's guide](https://support.claude.com/en/articles/12512198-how-to-create-custom-skills) asks for.
+2. Go to Customize > Skills, click +, then Create skill > Upload a skill, and choose the zip. Repeat for each skill. This needs code execution turned on (Settings > Capabilities).
 
-Releases appear once the first version is tagged. Until then, build the zips yourself (they land in `dist/`):
+Or build the zips yourself (they land in `dist/`):
 
 ```bash
 python3 tools/build_zips.py
@@ -76,7 +76,13 @@ python3 tools/build_zips.py
 
 </details>
 
-`jumbo-creative-skills-all.zip` on the Release holds every skill in one file. Installing a single skill works too: each one carries its own copy of the shared code and its own FAQ pointer.
+`jumbo-creative-skills-all.zip` on the Release holds all nineteen skill folders in one file, for unpacking into an agent's skills folder. Claude's upload steps describe one skill folder per zip, so upload the single-skill zips there.
+
+Any one skill works installed on its own: each carries its own copy of the shared code, and `creative-review` carries the four skills it runs (grader, keep-or-kill, mix and report). A few skills use another skill's output when you have it, so add these alongside:
+
+- `spend-analysis`: add `keep-or-kill`, whose verdicts drive the budget moves.
+- `creative-report`: add `keep-or-kill`, `creative-grader` and `creative-mix` to fill the verdicts, grading basis and mix.
+- `competitor-scan`: add `creative-ideation` (or `creative-brief`) to compare rivals with your own winners.
 
 ## Quick start
 

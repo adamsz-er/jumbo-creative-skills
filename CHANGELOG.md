@@ -15,6 +15,8 @@ Nineteen skills, up from twelve. Every new skill judges against the account's ow
 - `persona-builder`, `hook-writer` and `creative-ideation` read the account through one shared evidence script (`shared/evidence.py`, moved from creative-brief and synced into each): results by persona or audience, hook and hold rate with faded hooks set apart, concept and format coverage, verdicts and a competitor scan. Every persona, hook or idea names the ads it came from, or says it is unbacked.
 - `creative-review` ends with the two or three skills its findings point to, chosen by fixed rules. The README gains an "I want to..." skill map.
 - Metrics: base fields `landing_page_views`, `checkouts`, `new_customers`; package metrics `landing_page_view_rate`, `cart_to_checkout_rate`, `new_customer_purchase_share`. Ad names can carry `persona`, `hook`, `offer` and `version` (`PERSONA:`, `HOOK:`, `OFFER:`, `VER:`).
+- `creative-review` works installed on its own: it carries the four skills it runs (creative-grader, keep-or-kill, creative-mix, creative-report) in `siblings/`, copied by `tools/sync_shared.py` and checked by `--check`, so `creative-review.zip` uploaded alone runs the whole review. CI builds the zips and runs the review from `creative-review.zip` unzipped alone.
+- README install steps for Claude desktop and claude.ai follow Anthropic's upload path, say the all-in-one zip is for unpacking rather than upload, and name the skills to add alongside `spend-analysis`, `creative-report` and `competitor-scan`.
 - A second synthetic Acme export, `examples/acme/ads_daily_extended.csv` (`make_fixture.py --extended`), adds an audience ad set, landing page views, checkouts and new-customer purchases; the original export is unchanged.
 
 ## 0.1.0
