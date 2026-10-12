@@ -47,7 +47,7 @@ Names that do not match the convention go to an `unclassified` bucket that is co
 
 1. Lead with the unclassified count, then the biggest finding: an over-reliance flag, or the strongest gaps.
 2. Then the format, concept, ad-type and grid tables.
-3. Explain the families: the output lists which ads were grouped into each, so the user can see and override the grouping.
+3. Explain the families: the output lists which ads were grouped into each, so the user can see and override the grouping. When you count inside a format ("5 of its 9 ads"), count ads, not concept families, from the format table or `--json`; say "concepts" when you count families, and never mix the two in one sentence.
 4. Say plainly when performance could not be ranked (too few concepts or formats) or the funnel view is absent.
 
 ## Guardrails

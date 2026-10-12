@@ -55,5 +55,18 @@ class OneVerdictWordTest(unittest.TestCase):
                 self.assertNotIn("Iterate", path.read_text(encoding="utf-8"), path)
 
 
+
+class QuoteTheScriptTest(unittest.TestCase):
+    """Counts come from the script's output, never from a hand count of a list."""
+
+    def test_grader_quotes_its_counts(self):
+        self.assertIn("Quote every count (ads per format, per group, per diagnosis) from the script's output",
+                      read("creative-grader", "SKILL.md"))
+
+    def test_mix_counts_ads_not_families_inside_a_format(self):
+        text = read("creative-mix", "SKILL.md")
+        self.assertIn("count ads, not concept families", text)
+        self.assertIn("say \"concepts\" when you count families", text)
+
 if __name__ == "__main__":
     unittest.main()

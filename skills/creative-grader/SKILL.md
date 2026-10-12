@@ -43,7 +43,7 @@ python3 -I scripts/grade.py ads.csv --profile creative-profile.md --where market
 
 ## Present the result
 
-1. Lead with the diagnosis counts and the three ads that most need attention, each with its step and action.
+1. Lead with the diagnosis counts and the three ads that most need attention, each with its step and action. Quote every count (ads per format, per group, per diagnosis) from the script's output or `--json`; never add up or count a list by hand.
 2. Then the table.
 3. Say what could not be graded and why.
 4. Frame post-click and reach-cost findings as "check the site / the auction first", not "the creative failed". The creative owns hook, hold and click.
