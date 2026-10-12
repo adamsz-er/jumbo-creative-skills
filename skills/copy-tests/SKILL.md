@@ -22,6 +22,7 @@ metadata:
 
 Follow `references/copy-guidance.md`:
 
+- The control is the copy running now. If you do not have it (an export carries no ad text), show it as `[your current headline]` (or primary text) and ask for it: never invent the control, and mark anything else you assumed as assumed.
 - A control and variants that each change **one thing**: the angle of the primary text, the proof, the offer framing, the headline, or the call to action. Name the change in a `changed` column.
 - Within Meta's published text recommendations for the placement (cited in the reference). Over the guidance is flagged, not banned: Meta truncates; it does not reject.
 - Claims the brand can substantiate only; mark anything that needs approval "needs sign-off".
@@ -45,6 +46,7 @@ python3 -I scripts/power.py ads.csv --metric cvr --mde 18 --daily-budget 300 --m
 - `--metric` is the rate the variants should move: click-through for copy that earns the click, purchase rate for copy that sets up the sale.
 - `--mde` is the smallest relative change worth knowing about, in percent of the baseline. It is the user's call, never a default.
 - The baseline rate and the volume per unit of spend come from the account's own rows (`--where` narrows them to the format or market the test runs in).
+- `--daily-budget` is the user's. If they give none and you propose one from the account's own spend, name the ads you summed, leave out promo ads (a sale's spend is not a baseline), and mark the figure assumed.
 - `--alpha` (0.05) and `--power` (0.8) are statistical conventions, not benchmarks. More than two arms split alpha (Bonferroni), and the output says so.
 
 It answers in one line whether the account can power the test inside `--max-days`, and if not, the smallest change it could detect in that time, the daily budget that would fit, and the option of a higher-funnel metric. `references/test-design.md` explains the plan and the stopping rule.

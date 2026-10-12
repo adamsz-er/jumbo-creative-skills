@@ -68,5 +68,17 @@ class QuoteTheScriptTest(unittest.TestCase):
         self.assertIn("count ads, not concept families", text)
         self.assertIn("say \"concepts\" when you count families", text)
 
+
+class CopyTestsHonestyTest(unittest.TestCase):
+    def test_the_budget_base_names_its_ads_and_leaves_out_promos(self):
+        text = read("copy-tests", "SKILL.md")
+        self.assertIn("name the ads you summed", text)
+        self.assertIn("leave out promo ads", text)
+
+    def test_an_unknown_control_is_asked_for_not_invented(self):
+        text = read("copy-tests", "SKILL.md")
+        self.assertIn("`[your current headline]`", text)
+        self.assertIn("never invent the control", text)
+
 if __name__ == "__main__":
     unittest.main()
