@@ -85,5 +85,12 @@ class HookWriterFormatTest(unittest.TestCase):
     def test_each_source_ad_is_named_with_its_own_format(self):
         self.assertIn("with the format the evidence prints for it", read("hook-writer", "SKILL.md"))
 
+
+class IdeationWordsTest(unittest.TestCase):
+    def test_proven_is_reserved_and_no_unrun_test_is_cited(self):
+        text = read("creative-ideation", "SKILL.md")
+        self.assertIn("Say \"proven\" only for a concept over creative-mix's proven-spend bar", text)
+        self.assertIn("Never cite the result of a test that has not run", text)
+
 if __name__ == "__main__":
     unittest.main()

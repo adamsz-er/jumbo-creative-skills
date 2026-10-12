@@ -31,6 +31,7 @@ It shows each concept as winning, mixed, middle, weakest in format (weak for its
 
 - Carry winners into untried formats; do not repeat losing angles as they were; give young cells time before judging them.
 - Prefer open ground the account's own results support over angles rivals have crowded.
+- Say "proven" only for a concept over creative-mix's proven-spend bar (the mix output prints it); otherwise say "best-returning". Never cite the result of a test that has not run ("the winning headline from the copy test"): name the test as planned, with its result still to come.
 - Every concept names its source: the ads it iterates, the gap it fills, or the competitor finding. With no data, label each "unbacked: from craft and the profile, not results".
 
 ## Inputs it can use if present
