@@ -21,6 +21,7 @@ Nineteen skills, up from twelve. Every new skill judges against the account's ow
 - A losing angle (persona-builder, creative-ideation, competitor-scan) now needs pooled payback worse than the account's own as well as a weak ad for its format. An angle that is weak only for its format but pays back at or above the account is "weakest in format", is never sent to "not to chase", and each angle line prints its return and cost per sale against the account's.
 - creative-mix leaves a concept in the bottom quartile on pooled BAU ROAS out of its gaps and lists it as left out, and orders equal gaps by the concept's own return instead of by name, so the review's "biggest opportunity" no longer ports the account's weakest concept into its best format. The review names the concepts it left out, and calls a one-ad cell "only one ad like it so far".
 - One word for a fading ad that still pays: keep-or-kill, the report and every skill's guidance say "Refresh", as fatigue-planner does (the verdict id stays `iterate`, so saved verdicts and dashboards still read). keep-or-kill marks a kept ad on a fatigue plan's queue "keep, refresh queued" and quotes counts as its script prints them.
+- fatigue-planner prints one days-left figure when both ends of its range meet, never a range like "1 to 1".
 - A second synthetic Acme export, `examples/acme/ads_daily_extended.csv` (`make_fixture.py --extended`), adds an audience ad set, landing page views, checkouts and new-customer purchases; the original export is unchanged.
 
 ## 0.1.0

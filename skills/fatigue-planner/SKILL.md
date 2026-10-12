@@ -41,7 +41,7 @@ python3 -I scripts/fatigue_plan.py ads.csv --capacity 2 --json
 
 1. Lead with the two lines it prints: how many ads are fading and on course, and when the queue clears at this capacity, with how many refreshes land late.
 2. Give the calendar week by week. Name late items and anything beyond the horizon, and offer the two levers: more capacity or a longer horizon.
-3. Quote every days-left figure with its range and the straight-line caveat. Never round a range into a promise.
+3. Quote every days-left figure with its range and the straight-line caveat, as printed (when both ends of the range meet, the script prints one figure, so give one). Never round a range into a promise.
 4. **Next step:** `hook-writer` for one-change variants of a fading ad whose concept still pays, `creative-brief` for each refresh in the calendar.
 
 ## Guardrails

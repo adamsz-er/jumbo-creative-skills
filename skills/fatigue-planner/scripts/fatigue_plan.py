@@ -131,7 +131,7 @@ def describe_days_left(entry: Dict[str, Any]) -> str:
     if left == 0:
         return "already at or below the floor"
     span = ""
-    if low is not None:
+    if low is not None and low != high:
         span = "range %d to %s, " % (low, NO_END if high is None else high)
     return "about %d day%s (%sfrom a straight line through its last %d delivery days; %s)" % (
         left, "" if left == 1 else "s", span, entry["fit_days_used"], LINE_CAVEAT)

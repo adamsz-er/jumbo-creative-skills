@@ -315,5 +315,16 @@ class CommandLineTest(unittest.TestCase):
             self.assertNotIn("Traceback", result.stderr)
 
 
+
+class OnePointRangeTest(unittest.TestCase):
+    def test_a_range_whose_ends_meet_is_not_printed_as_a_range(self):
+        entry = {"days_left": 1, "days_left_low": 1, "days_left_high": 1, "fit_days_used": 9}
+        text = fatigue_plan.describe_days_left(entry)
+        self.assertTrue(text.startswith("about 1 day ("), text)
+        self.assertNotIn("range", text)
+        wide = fatigue_plan.describe_days_left(dict(entry, days_left=3, days_left_low=2, days_left_high=5))
+        self.assertIn("range 2 to 5", wide)
+
+
 if __name__ == "__main__":
     unittest.main()
