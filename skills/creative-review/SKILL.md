@@ -34,7 +34,7 @@ Run folders made before the run record existed (no `run.json`) are ignored, so t
 
 One folder per run, `creative-review-runs/<account>/<window end>_<time>/`, holding `ads.csv`, `grade.json`, `verdicts.json`, `mix.json`, `changes.json`, `report.html` and `summary.md`. The dashboard opens in any browser; its first panel on the Overview tab is "What changed since last time" (an empty state on a first run).
 
-The summary ends with the next steps above. Before them come three bullets: the headline (spend, purchases, return on ad spend, and how that moved since the last review), the biggest action (the first "do first" ad with its spend at stake), and the biggest opportunity (the first gap in the creative mix, or "no clear gap yet").
+The summary ends with the next steps above. Before them come three bullets: the headline (spend, purchases, return on ad spend, and how that moved since the last review), the biggest action (the first "do first" ad with its spend at stake), and the biggest opportunity (the first gap in the creative mix, naming any of the account's weakest concepts it left out, or "no clear gap yet").
 
 ## When something goes wrong
 

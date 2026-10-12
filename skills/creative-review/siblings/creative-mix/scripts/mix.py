@@ -11,7 +11,9 @@ formats are top quartile) use pooled ROAS over BAU ads only, relative to this
 account, with no benchmark. Only a concept or format with enough BAU spend counts
 as proven (--min-proven-spend, default three times the account's median ad spend,
 an arbitrary default: set it from your own account), so one with negligible spend
-never leads the gap list. Promo and BAU are shown separately, never blended.
+never leads the gap list. A concept in the bottom quartile on pooled BAU ROAS never
+leads one either: it is listed as left out. Equal gaps are ordered by the concept's own
+return. Promo and BAU are shown separately, never blended.
 """
 from __future__ import annotations
 
@@ -92,6 +94,14 @@ def _top_quartile(values: Dict[str, Optional[float]]) -> List[str]:
     return sorted(k for k, v in known.items() if v >= p75)
 
 
+def _bottom_quartile(values: Dict[str, Optional[float]]) -> List[str]:
+    known = {k: v for k, v in values.items() if v is not None}
+    if len(known) < MIN_FOR_QUARTILES:
+        return []
+    p25 = statistics.quantiles(list(known.values()), n=4, method="inclusive")[0]
+    return sorted(k for k, v in known.items() if v <= p25)
+
+
 def analyse_mix(rows: Sequence[Dict[str, Any]], pattern: Optional[Sequence[str]] = None,
                 families: bool = True, group_by: Optional[Sequence[str]] = None,
                 key_map: Optional[Dict[str, str]] = None,
@@ -167,7 +177,9 @@ def analyse_mix(rows: Sequence[Dict[str, Any]], pattern: Optional[Sequence[str]]
     top_concepts, top_formats = _top_quartile(fam_roas), _top_quartile(fmt_roas)
     proven_concepts = [c for c in top_concepts if c not in unproven["concepts"]]
     proven_formats = [f for f in top_formats if f not in unproven["formats"]]
-    gaps = []
+    # A gap ports a concept into a format, so the account's weakest concepts never lead one, whatever the format.
+    weak_concepts = _bottom_quartile(fam_roas)
+    gaps, left_out = [], []
     for name, line in zip(family_names, cells):
         for fmt in formats:
             count = line[fmt]["ads"]
@@ -179,9 +191,12 @@ def analyse_mix(rows: Sequence[Dict[str, Any]], pattern: Optional[Sequence[str]]
             if fmt in proven_formats:
                 why.append("top format")
             if why:
-                gaps.append({"concept": name, "format": fmt, "ads": count, "why": why,
-                             "strength": len(why)})
-    gaps.sort(key=lambda g: (-g["strength"], g["ads"], g["concept"], g["format"]))
+                gap = {"concept": name, "format": fmt, "ads": count, "why": why,
+                       "strength": len(why), "concept_roas": fam_roas.get(name)}
+                (left_out if name in weak_concepts else gaps).append(gap)
+    gaps.sort(key=lambda g: (-g["strength"], g["ads"],
+                             -g["concept_roas"] if g["concept_roas"] is not None else float("inf"),
+                             g["concept"], g["format"]))
 
     over = []
     scopes = (("all ads", classified), ("BAU ads", bau))
@@ -207,7 +222,7 @@ def analyse_mix(rows: Sequence[Dict[str, Any]], pattern: Optional[Sequence[str]]
         unread_fields.update(concept_key=key, concepts_unread_message=UNREAD_MESSAGE % (key or GENERIC_KEY))
 
     if unread:
-        gaps = []
+        gaps, left_out = [], []
         over = [o for o in over if not (o["kind"] == "concept" and o["name"] == "unknown")]
 
     return {
@@ -227,7 +242,7 @@ def analyse_mix(rows: Sequence[Dict[str, Any]], pattern: Optional[Sequence[str]]
         "grid": {"formats": formats, "families": family_names, "cells": cells},
         "top_concepts": top_concepts, "top_formats": top_formats,
         "min_proven_spend": min_proven_spend, "unproven": unproven,
-        "gaps": gaps, "over_reliance": over,
+        "gaps": gaps, "gaps_left_out": left_out, "over_reliance": over,
         "duplicates": [{"concept": r["concept"], "variants": r["variants"], "ads": r["ad_ids"]}
                        for r in by_concept if len(r["ad_ids"]) > 1],
         "window": cm.data_window(rows),
@@ -322,6 +337,10 @@ def render(result: Dict[str, Any]) -> str:
             out.append("    ... %d more (see --json)" % (len(result["gaps"]) - MAX_GAPS_SHOWN))
         if not result["gaps"]:
             out.append("    none found")
+        weak = sorted({(g["concept"], g["concept_roas"]) for g in result.get("gaps_left_out") or []})
+        if weak:
+            out.append("  Left out of the gaps (bottom quartile on pooled ROAS among BAU concepts, so not worth porting to "
+                       "another format as they are): %s." % ", ".join("%s (ROAS %s)" % (c, _num(r)) for c, r in weak))
     if result["over_reliance"]:
         out.append("  Over-reliance (more than %g%% of spend; an arbitrary default, set it from your own account):" % OVER_RELIANCE)
         out += ["    %s %s holds %.0f%% of %s" % (o["kind"], o["name"], o["share"], o["scope"]) for o in result["over_reliance"]]

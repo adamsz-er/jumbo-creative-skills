@@ -13,7 +13,7 @@ Several versions of one idea are one data point and one fatigue clock. A concept
 
 ## Read-outs
 
-- **Gaps worth testing.** An empty or one-ad cell next to a top-quartile concept (that concept is not yet in this format) or a top-quartile format (this concept is not yet in it). Top quartile is ranked on pooled ROAS across the account's BAU ads only, so promos do not inflate it, and only when there are at least 5 concepts or formats to rank. Treat each as a hypothesis for the next brief.
+- **Gaps worth testing.** An empty or one-ad cell next to a top-quartile concept (that concept is not yet in this format) or a top-quartile format (this concept is not yet in it). Top quartile is ranked on pooled ROAS across the account's BAU ads only, so promos do not inflate it, and only when there are at least 5 concepts or formats to rank. A concept in the bottom quartile on that same ROAS is left out of the gaps and listed as left out: moving the account's weakest idea into its best format is not an opportunity. Gaps of equal strength are ordered by the concept's own ROAS. Treat each as a hypothesis for the next brief.
 - **Over-reliance.** One concept family or format holding more than half of spend (arbitrary default; set it from your own account). One fatigue event then hurts the whole account.
 - **Promo versus BAU.** Shown as separate rows, never blended. Promo performance depends on the offer and dates; launch performance on drops; retention flatters blended numbers and acquires no one.
 - **Near-duplicates.** Families with more than one concept name, counted once.

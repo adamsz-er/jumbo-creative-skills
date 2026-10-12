@@ -263,5 +263,24 @@ class AccountSlugTest(unittest.TestCase):
         self.assertEqual((bare["slug"], bare["fallback"]), ("account", True))
 
 
+
+class BiggestOpportunityTest(unittest.TestCase):
+    def setUp(self):
+        import review
+        self.review = review
+
+    def test_names_the_weak_concepts_it_left_out(self):
+        mix = {"gaps": [{"concept": "staff-picks", "format": "static", "ads": 0, "why": ["top format"]}],
+               "gaps_left_out": [{"concept": "before-after", "format": "carousel", "concept_roas": 2.72},
+                                 {"concept": "guarantee", "format": "carousel", "concept_roas": 0.0}]}
+        text = self.review.biggest_opportunity(mix)
+        self.assertTrue(text.startswith("Try the staff-picks idea as a static (no ads like it yet): top format."), text)
+        self.assertIn("Left out as the account's weakest concepts: before-after, guarantee.", text)
+
+    def test_a_one_ad_cell_is_not_called_empty(self):
+        mix = {"gaps": [{"concept": "staff-picks", "format": "static", "ads": 1, "why": ["top concept"]}]}
+        self.assertIn("(only one ad like it so far)", self.review.biggest_opportunity(mix))
+
+
 if __name__ == "__main__":
     unittest.main()

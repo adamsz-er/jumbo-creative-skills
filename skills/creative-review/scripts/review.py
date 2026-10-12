@@ -187,7 +187,12 @@ def biggest_opportunity(mix: Dict[str, Any]) -> str:
         return "No clear gap yet in the creative mix."
     gap = gaps[0]
     why = ", ".join(gap.get("why") or []) or "not stated"
-    return "Try the %s idea as a %s (no ads like it yet): %s." % (gap.get("concept"), gap.get("format"), why)
+    text = "Try the %s idea as a %s (%s): %s." % (gap.get("concept"), gap.get("format"),
+                                                  "only one ad like it so far" if gap.get("ads") == 1 else "no ads like it yet", why)
+    weak = sorted({g.get("concept") for g in mix.get("gaps_left_out") or [] if g.get("concept")})
+    if weak:
+        text += " Left out as the account's weakest concepts: %s." % ", ".join(weak)
+    return text
 
 
 def summary_text(title: str, bullets: Sequence[str], report: Path, steps: Sequence[Dict[str, str]] = ()) -> str:

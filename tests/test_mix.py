@@ -124,5 +124,43 @@ class ProvenSpendTest(unittest.TestCase):
         self.assertIn("--min-proven-spend", mix.render(result))
 
 
+class WeakConceptGapTest(unittest.TestCase):
+    """A gap ports a concept into a format: the account's weakest concepts never lead one."""
+
+    def setUp(self):
+        self.result = mix.analyse_mix(cm.load_rows(str(FIXTURE)))
+
+    def bau_roas(self):
+        rows = cm.load_rows(str(FIXTURE))
+        ads = [a for a in cm.aggregate_by_ad(rows) if a.get("ad_type") == "bau"]
+        family = {c: f for c, f in mix.concept_families([a["concept"] for a in ads]).items()}
+        pooled = {}
+        for name in set(family.values()):
+            members = [a for a in ads if family[a["concept"]] == name]
+            pooled[name] = sum(a["conversion_value"] for a in members) / sum(a["spend"] for a in members)
+        return pooled
+
+    def test_bottom_quartile_concepts_are_left_out_of_the_gaps_and_listed(self):
+        left_out = {g["concept"] for g in self.result["gaps_left_out"]}
+        self.assertIn("before-after", left_out)
+        self.assertFalse(left_out & {g["concept"] for g in self.result["gaps"]})
+        roas = self.bau_roas()
+        import statistics
+        p25 = statistics.quantiles(list(roas.values()), n=4, method="inclusive")[0]
+        self.assertEqual(left_out, {c for c, v in roas.items() if v <= p25} & left_out)
+        self.assertTrue(all(roas[c] <= p25 for c in left_out))
+        text = mix.render(self.result)
+        self.assertIn("Left out of the gaps", text)
+        self.assertIn("before-after", text.split("Left out of the gaps")[1].splitlines()[0])
+
+    def test_equal_gaps_are_ordered_by_the_concepts_own_return_not_by_name(self):
+        gaps = self.result["gaps"]
+        self.assertNotEqual("before-after", gaps[0]["concept"])
+        for a, b in zip(gaps, gaps[1:]):
+            if (a["strength"], a["ads"]) == (b["strength"], b["ads"]):
+                self.assertGreaterEqual(a["concept_roas"] if a["concept_roas"] is not None else -1,
+                                        b["concept_roas"] if b["concept_roas"] is not None else -1, (a, b))
+
+
 if __name__ == "__main__":
     unittest.main()
