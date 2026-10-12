@@ -23,6 +23,7 @@ Nineteen skills, up from twelve. Every new skill judges against the account's ow
 - One word for a fading ad that still pays: keep-or-kill, the report and every skill's guidance say "Refresh", as fatigue-planner does (the verdict id stays `iterate`, so saved verdicts and dashboards still read). keep-or-kill marks a kept ad on a fatigue plan's queue "keep, refresh queued" and quotes counts as its script prints them.
 - fatigue-planner prints one days-left figure when both ends of its range meet, never a range like "1 to 1".
 - The drafted profile's concept line says it counts concept names, each variant counted, and that creative-mix groups variants into families, so the two counts no longer read as a contradiction.
+- Answer guidance: counts are quoted from the scripts, never recounted (creative-grader, creative-mix, keep-or-kill); copy-tests asks for a control it does not have and names the ads behind a proposed budget, leaving out promos; hook-writer names each source ad with its own format; creative-ideation keeps "proven" for concepts over the mix's bar and cites no test that has not run; ad-transcript flags every claim its rewrites add.
 - A second synthetic Acme export, `examples/acme/ads_daily_extended.csv` (`make_fixture.py --extended`), adds an audience ad set, landing page views, checkouts and new-customer purchases; the original export is unchanged.
 
 ## 0.1.0
