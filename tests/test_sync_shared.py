@@ -75,6 +75,40 @@ class SyncSharedTest(unittest.TestCase):
         copy.write_text("drifted\n")
         self.assertEqual(sync_shared.sync(self.root, check=True), [copy])
 
+    def make_sibling(self):
+        sibling = self.root / "skills" / "keep-or-kill"
+        (sibling / "scripts").mkdir(parents=True)
+        (sibling / "SKILL.md").write_text("---\nname: keep-or-kill\n---\n")
+        (sibling / "scripts" / "verdicts.py").write_text("VERDICTS = 1\n")
+        (sibling / "scripts" / "creative_metrics.py").write_text("VERSION = 0\n")
+        (sibling / "references").mkdir()
+        (sibling / "references" / "rules.md").write_text("rules\n")
+        (self.root / "skills" / "creative-review" / "scripts").mkdir(parents=True)
+        (self.root / "examples" / "acme").mkdir(parents=True)
+        (self.root / "examples" / "acme" / "ads_daily.csv").write_text("a,b\n1,2\n")
+        return self.root / "skills" / "creative-review" / "siblings" / "keep-or-kill"
+
+    def test_siblings_are_bundled_into_creative_review_without_their_skill_md(self):
+        bundled = self.make_sibling()
+        sync_shared.sync(self.root)
+        self.assertEqual((bundled / "scripts" / "verdicts.py").read_text(), "VERDICTS = 1\n")
+        self.assertEqual((bundled / "references" / "rules.md").read_text(), "rules\n")
+        self.assertFalse((bundled / "SKILL.md").exists())
+        self.assertEqual((bundled / "scripts" / "creative_metrics.py").read_text(), "VERSION = 1\n")
+        self.assertEqual(sync_shared.sync(self.root, check=True), [])
+
+    def test_a_drifted_or_stale_bundled_file_fails_the_check_and_sync_repairs_it(self):
+        bundled = self.make_sibling()
+        sync_shared.sync(self.root)
+        (bundled / "scripts" / "verdicts.py").write_text("edited in the bundle\n")
+        stale = bundled / "scripts" / "removed_upstream.py"
+        stale.write_text("old\n")
+        self.assertEqual(sorted(sync_shared.sync(self.root, check=True)), sorted([bundled / "scripts" / "verdicts.py", stale]))
+        self.assertTrue(stale.exists())
+        sync_shared.sync(self.root)
+        self.assertFalse(stale.exists())
+        self.assertEqual(sync_shared.sync(self.root, check=True), [])
+
     def test_real_repo_is_in_sync(self):
         self.assertEqual(sync_shared.sync(ROOT, check=True), [])
 

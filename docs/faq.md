@@ -14,7 +14,7 @@ Say "review my Meta ads". The creative-review skill does the rest: it gets the d
 
 ### Do I need to install all the skills?
 
-No. Each skill works on its own, with its own copy of the shared code. Installing them all is easiest because creative-review calls its siblings; if one is missing it stops with a message naming the skill and the install command.
+No. Each skill works on its own, with its own copy of the shared code. creative-review runs the grader, keep-or-kill, mix and report scripts, and carries its own copy of them in `siblings/`, so it works installed alone too. Installing them all is still easiest: the other skills are what its next steps point to.
 
 ### Where do my results go?
 

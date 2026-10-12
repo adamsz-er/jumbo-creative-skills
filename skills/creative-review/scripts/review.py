@@ -10,8 +10,10 @@ Usage:
 `run` grades the ads, gives each a verdict, maps the creative mix, builds the
 six-tab dashboard and writes a three-bullet summary, all into one run folder
 `<cache-dir>/<account>/<window-end>_<HHMMSS>/`, then says what changed since the
-last run of the same account. Standard library only; the sibling skills'
-scripts are called by path with `python3 -I`. A known failure prints a plain
+last run of the same account. Standard library only; the four skills it runs
+(grader, keep-or-kill, mix, report) are bundled under ../siblings/ by
+tools/sync_shared.py, so this skill works on its own, and are called by path
+with `python3 -I`. A known failure prints a plain
 message and its fix and exits with its own code (see errors.py); `--debug` shows
 tracebacks.
 """
@@ -39,7 +41,7 @@ import next_steps  # noqa: E402
 import profile_draft  # noqa: E402
 from errors import ReviewError  # noqa: E402
 
-SKILLS = HERE.parent.parent
+SIBLINGS_DIR = HERE.parent / "siblings"
 DEMO_CSV = HERE.parent / "assets" / "demo" / "ads_daily.csv"
 DEMO_NAME = "Acme Outdoor Co. (sample data)"
 DEMO_SOURCE = "Sample data (Acme Outdoor Co.)"
@@ -61,7 +63,7 @@ REQUIRED = (("date", "date"), ("ad_name", "ad name"), ("spend", "spend"), ("impr
 
 def sibling(step: str) -> Path:
     skill, script = SIBLINGS[step]
-    path = SKILLS / skill / "scripts" / script
+    path = SIBLINGS_DIR / skill / "scripts" / script
     if not path.exists():
         raise ReviewError("E-SKILL", skill=skill)
     return path

@@ -102,6 +102,29 @@ class BuildZipsTest(unittest.TestCase):
         with zipfile.ZipFile(self.out / "creative-grader.zip") as z:
             self.assertEqual({i.date_time for i in z.infolist()}, {(1980, 1, 1, 0, 0, 0)})
 
+    def unzip_alone(self, skill, into):
+        with zipfile.ZipFile(self.out / (skill + ".zip")) as z:
+            z.extractall(into)
+        return Path(into) / skill
+
+    def test_every_script_starts_from_its_unzipped_skill_alone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for skill in self.skills:
+                folder = self.unzip_alone(skill, Path(tmp) / skill)
+                for script in sorted((folder / "scripts").glob("*.py")):
+                    done = subprocess.run([sys.executable, "-I", str(script), "--help"], cwd=tmp,
+                                          capture_output=True, text=True)
+                    self.assertEqual(done.returncode, 0, "%s/%s: %s" % (skill, script.name, done.stderr))
+
+    def test_creative_review_runs_from_its_unzipped_skill_alone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = self.unzip_alone("creative-review", Path(tmp) / "only")
+            done = subprocess.run([sys.executable, "-I", str(folder / "scripts" / "review.py"), "run", "--demo"],
+                                  cwd=tmp, capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            reports = list(Path(tmp).glob("creative-review-runs/*/*/report.html"))
+            self.assertEqual(len(reports), 1, done.stdout)
+
     def test_invalid_skill_fails_the_build(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "repo"

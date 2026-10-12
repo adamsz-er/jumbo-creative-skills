@@ -48,7 +48,7 @@ Every known failure prints a plain message and its exact fix, and exits with its
 | E-RECONCILE | the pull is short | the percent short and "re-run the pull with pagination" |
 | E-CURRENCY | no currency in the header (a connector pull states it itself) | `--currency XXX` |
 | E-MIXED-CURRENCY | the pull states more than one currency | pull each currency on its own |
-| E-SKILL | a sibling skill is not installed | its name and the install command |
+| E-SKILL | the bundled copy of a skill it runs (under `siblings/`) is missing | its name and how to reinstall |
 | E-PROFILE | the profile cannot be read | fix the line it names, or pass a different `--profile` |
 | E-TARGET | a bad `--target` | the script's own message plus the accepted metrics |
 | E-REPORT | the dashboard failed its structure check | its first failing line |

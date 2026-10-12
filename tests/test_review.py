@@ -81,7 +81,7 @@ class ReviewRunTest(unittest.TestCase):
         copy = self.work / "copy"
         copy.mkdir()
         script = make_repo_copy(copy)
-        stub = copy / "skills" / "creative-report" / "scripts" / "report.py"
+        stub = copy / "skills" / "creative-review" / "siblings" / "creative-report" / "scripts" / "report.py"
         real = stub.read_text()
         stub.write_text('import sys\nif "--check" in sys.argv:\n    print("problem: x")\n    sys.exit(1)\nopen(sys.argv[sys.argv.index("-o") + 1], "w").write("<html></html>")\n')
         self.assertEqual(run(["run", FIXTURE], self.work, script=script).returncode, 18)

@@ -45,10 +45,12 @@ def flip_scale_ad(row):
 
 
 def make_repo_copy(destination, leave_out=()):
-    """A copy of skills/ and shared/ without some skills, to show a missing sibling."""
-    shutil.copytree(ROOT / "skills", Path(destination) / "skills",
-                    ignore=shutil.ignore_patterns("__pycache__", *leave_out))
-    return Path(destination) / "skills" / "creative-review" / "scripts" / "review.py"
+    """A copy of skills/ whose creative-review lacks some bundled siblings, to show a missing one."""
+    skills = Path(destination) / "skills"
+    shutil.copytree(ROOT / "skills", skills, ignore=shutil.ignore_patterns("__pycache__"))
+    for name in leave_out:
+        shutil.rmtree(skills / "creative-review" / "siblings" / name)
+    return skills / "creative-review" / "scripts" / "review.py"
 
 
 class Scratch:

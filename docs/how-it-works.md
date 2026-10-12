@@ -16,7 +16,7 @@ These skills never call a tool that changes your ad account. Your agent could, i
 
 ## The shared metrics module
 
-Every metric id and formula is defined once, in [metrics.md](../skills/creative-context/references/metrics.md), and implemented once, in `shared/creative_metrics.py`. A skill installed on its own (from a zip, or with `npx skills add --skill`) must still run, so each skill that does arithmetic carries a synced copy of that file (and of `from_mcp.py`) in its own `scripts/` folder, and the make skills that read the account (`creative-brief`, `creative-ideation`, `hook-writer`, `persona-builder`) carry a copy of `shared/evidence.py` too. `python3 tools/sync_shared.py` copies `shared/` into the skills, and `--check` fails if any copy has drifted; CI runs it.
+Every metric id and formula is defined once, in [metrics.md](../skills/creative-context/references/metrics.md), and implemented once, in `shared/creative_metrics.py`. A skill installed on its own (from a zip, or with `npx skills add --skill`) must still run, so each skill that does arithmetic carries a synced copy of that file (and of `from_mcp.py`) in its own `scripts/` folder, and the make skills that read the account (`creative-brief`, `creative-ideation`, `hook-writer`, `persona-builder`) carry a copy of `shared/evidence.py` too. `creative-review` runs four other skills (`creative-grader`, `keep-or-kill`, `creative-mix`, `creative-report`), so it carries a copy of each of them, all but their `SKILL.md`, in its own `siblings/` folder. `python3 tools/sync_shared.py` copies `shared/` into the skills and those four into `creative-review/siblings/`, and `--check` fails if any copy has drifted; CI runs it.
 
 Rules the module enforces:
 
