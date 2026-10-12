@@ -55,7 +55,6 @@ class OneVerdictWordTest(unittest.TestCase):
                 self.assertNotIn("Iterate", path.read_text(encoding="utf-8"), path)
 
 
-
 class QuoteTheScriptTest(unittest.TestCase):
     """Counts come from the script's output, never from a hand count of a list."""
 
@@ -91,6 +90,14 @@ class IdeationWordsTest(unittest.TestCase):
         text = read("creative-ideation", "SKILL.md")
         self.assertIn("Say \"proven\" only for a concept over creative-mix's proven-spend bar", text)
         self.assertIn("Never cite the result of a test that has not run", text)
+
+
+class TranscriptClaimsTest(unittest.TestCase):
+    def test_new_claims_in_a_rewrite_are_flagged_not_denied(self):
+        text = read("ad-transcript", "SKILL.md")
+        self.assertIn("Every sentence a rewrite adds that states a fact, a comparison or a first-person experience", text)
+        self.assertIn("Never say a rewrite adds no new claims when it does", text)
+
 
 if __name__ == "__main__":
     unittest.main()
