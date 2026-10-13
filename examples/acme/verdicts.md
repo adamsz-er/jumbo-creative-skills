@@ -16,14 +16,14 @@ Summary:
   Scale                    6
   Keep                     17
   Check before cutting     2
-  Iterate                  1
+  Refresh                  1
   Pause                    3
   Too early                1
   too young to judge: 120000000030
   top 3 ads (N=3, an arbitrary default: set your own) hold 22% of spend. Heavy concentration means one fatigue event hurts the whole account; judge it against your own history.
 
 Do these first (largest spend at stake; an ad that cannot be judged never leads):
-  120000000001  Iterate: refresh the hook or creator, keep the concept  spend USD 9061.59  [Early read]
+  120000000001  Refresh: a new hook or creator, keep the concept  spend USD 9061.59  [Early read]
   120000000021  Scale: raise budget in steps  spend USD 7542.52  [Early read]
   120000000023  Check before cutting  spend USD 5480.99  [Early read]
   120000000020  Pause: never worked  spend USD 4943.16  [Confident]
@@ -240,7 +240,7 @@ Verdicts (largest spend at stake first within each):
     - compared with format: carousel (7 comparable ads); format / ad_type has 3 comparable ads, under 5
     - trend over first vs last 6 delivery days: ctr +0%, frequency +6%, hook rate n/a (fatigue needs ctr down 8%+ and frequency up 8%+ or hook down 8%+)
     - ctr top quartile but payback is bottom quartile
-120000000001  [ugc-video]  age 29 d, Iterate: refresh the hook or creator, keep the concept  (spend USD 9061.59)
+120000000001  [ugc-video]  age 29 d, Refresh: a new hook or creator, keep the concept  (spend USD 9061.59)
     Refresh it, keep the idea: people are tiring of it (more repeat views, fewer clicks), but its payback is not weak. Change the opening or the creator. Early read: small comparison group (6 similar ads).
     confidence: Early read (small comparison group: only 6 similar ads)
     - objective not in the data: judged as sales

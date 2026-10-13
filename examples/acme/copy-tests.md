@@ -54,18 +54,18 @@ The same test judged on purchases instead of clicks:
 `python3 -I skills/copy-tests/scripts/power.py examples/acme/ads_daily.csv --metric cvr --mde 18 --daily-budget 300 --max-days 21 --arms 3`
 
 ```text
-This account cannot power this test within 21 days: it needs about 179 days.
+This account cannot power this test within 21 days: it needs about 178 days.
 Options:
-- Accept a bigger change: the smallest relative change detectable in 21 days is 56.9%.
-- Spend more: about 2,555 USD/day would fit 21 days.
+- Accept a bigger change: the smallest relative change detectable in 21 days is 56.5%.
+- Spend more: about 2,530 USD/day would fit 21 days.
 - Or test on a higher-funnel metric with more volume (e.g. ctr instead of cvr).
 
 Inputs and working:
-- Baseline cvr: 0.0216 (4,173 conversions of 193,226 clicks, pooled over this account's rows)
-- Volume: 1.62 clicks per unit of spend
-- Smallest change to detect: 18.0% relative, so 0.0216 becomes 0.0255
+- Baseline cvr: 0.0303 (4,173 conversions of 137,860 link_clicks, pooled over this account's rows)
+- Volume: 1.15 link_clicks per unit of spend
+- Smallest change to detect: 18.0% relative, so 0.0303 becomes 0.0357
 - Arms: 3; alpha 0.05 two-sided, split to 0.025 per comparison (Bonferroni); power 0.8 (a statistical convention, not a benchmark)
-- Needed: 28,915 clicks per arm; each arm gets about 162 a day
+- Needed: 20,430 link_clicks per arm; each arm gets about 115 a day
 - Budget: 300 USD/day, longest run 21 days
 
 Fixed horizon: decide once, at the planned sample. Do not stop early when one arm looks ahead, and do not extend a test that missed: both inflate false wins. Split budget evenly, change one thing, and keep the other settings the same.

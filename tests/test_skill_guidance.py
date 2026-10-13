@@ -68,6 +68,18 @@ class OneVerdictWordTest(unittest.TestCase):
             text = re.sub(r"`[^`]*`", "", path.read_text(encoding="utf-8"))
             self.assertIsNone(re.search(r"\biterate\b", text, re.I), path)
 
+    def test_the_worked_examples_show_refresh_too(self):
+        # In the page and data files the id lives in classes, CSS variables, data attributes and quoted JSON values; strip those.
+        ids = re.compile(r'`[^`]*`|class="[^"]*"|data-[\w-]+="[^"]*"|--v-iterate[\w-]*|\.(cr-v-)?iterate\b|"iterate"|\\"iterate\\"')
+        examples = ROOT / "examples" / "acme"
+        dashboard = examples / "claude-dashboard"
+        paths = (sorted(examples.glob("*.md")) + [examples / "report.html", dashboard / "manifest.json"]
+                 + sorted((dashboard / "datasets").glob("*.json")))
+        for path in paths:
+            text = ids.sub("", path.read_text(encoding="utf-8"))
+            found = re.search(r".{0,40}\biterate\b.{0,40}", text, re.I)
+            self.assertIsNone(found, (path, found and found.group(0)))
+
 
 class AngleWordsTest(unittest.TestCase):
     def test_every_angle_list_names_the_weakest_in_its_format_bucket(self):

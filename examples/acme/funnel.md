@@ -7,6 +7,7 @@ Generated, not hand-written, on the fictional Acme Outdoor Co. fixture (syntheti
 ```text
 Funnel diagnosis: 30 ads judged: 1 site, 1 both, 15 creative, 13 neither, 0 unjudged, 0 unreadable.
 problem-first | ugc-video | creator-02 | bau | rain-shell | lofi | 2026-03-01: the ad still earns clicks (ctr holds) while landing page view rate fell 46% since its first 6 delivery days and cart to checkout rate is in the bottom quartile of its group: check the page before touching the creative.
+Click-based rates (CTR, CPC, purchase and add-to-cart rates) use link clicks.
 
 account-wide: a sitewide problem (checkout, payment, shipping, stock) shows here first: creative
   a step the ad controls is weak or falling while the site steps hold: the creative is the place to work

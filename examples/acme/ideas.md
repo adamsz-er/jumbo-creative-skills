@@ -50,7 +50,7 @@ Claims that need sign-off before making: any waterproof wording (1, 6, 7), any w
 | 9 | gift-guide-pack \| carousel \| house \| bau \| day-pack \| polished \| 2026-03-02 |
 
 **Split by intent** (ratios are yours to set)
-- Iterate what works: #6, #8
+- Build on what works: #6, #8
 - Adapt to an adjacent audience or product: #3, #5, #9
 - Genuinely new: #1, #2, #4, #7
 

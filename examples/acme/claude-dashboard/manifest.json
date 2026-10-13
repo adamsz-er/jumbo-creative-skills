@@ -81,7 +81,7 @@
     {
       "id": "briefing",
       "title": "Briefs and starters",
-      "description": "Finished briefs from the briefs file, or brief starters built from the gaps and Iterate verdicts.",
+      "description": "Finished briefs from the briefs file, or brief starters built from the gaps and Refresh verdicts.",
       "file": "datasets/briefing.json",
       "format": "json"
     },

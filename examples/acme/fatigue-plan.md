@@ -10,7 +10,7 @@ at 2 refreshes a week the queue clears by 2026-05-04 (8 late).
 Fading (1):
   durability-test (ugc-video): running before the window began: compared with its own start, not the account's delivery-day band; already at or below the floor
 On course to fade (8):
-  packing-list (carousel): running before the window began: compared with its own start, not the account's delivery-day band; about 1 day (range 1 to 1, from a straight line through its last 9 delivery days; a real ad may not fade in a straight line)
+  packing-list (carousel): running before the window began: compared with its own start, not the account's delivery-day band; about 1 day (from a straight line through its last 9 delivery days; a real ad may not fade in a straight line)
   behind-the-seams (founder-video): running before the window began: compared with its own start, not the account's delivery-day band; about 2 days (range 2 to 3, from a straight line through its last 9 delivery days; a real ad may not fade in a straight line)
   sale-countdown (static): about 23 days (range 15 to 59, from a straight line through its last 9 delivery days; a real ad may not fade in a straight line)
   gift-guide (carousel): about 7 days (range 5 to 20, from a straight line through its last 9 delivery days; a real ad may not fade in a straight line)

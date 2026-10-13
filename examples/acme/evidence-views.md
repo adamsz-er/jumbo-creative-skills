@@ -23,37 +23,37 @@ Results by adset_name (pooled over each group's ads; vs account = the group's ra
   past-visitors: 4 ads, 9% of spend, roas 5.38 (123% of account), cpa 25.08, new-customer share 28%
     top-quartile ads: 120000000024, 120000000019; bottom-quartile ads: 120000000012; concepts: sale-bundle, sale-countdown, sale-last-chance, sale-percent-off
 
-Angles (concepts) by how their ads did: winning = a top-quartile ad and no weak one; losing = weak or never-worked ads and no top-quartile one; mixed = both; middle = graded, none top or weak; ungraded = too few comparable ads to grade; unjudged = too little delivery:
-  staff-picks [winning]: ads 120000000021; 6% of spend; formats carousel
-  social-proof-reviews [winning]: ads 120000000026; 3% of spend; formats static
-  sale-bundle [winning]: ads 120000000024; 3% of spend; formats carousel
-  trail-diary [winning]: ads 120000000022; 3% of spend; formats partnership
-  problem-first [winning]: ads 120000000002; 2% of spend; formats ugc-video
-  sale-last-chance [winning]: ads 120000000019; 2% of spend; formats ugc-video
-  durability-test [middle]: ads 120000000001; 8% of spend; formats ugc-video; fatiguing: 120000000001
-  behind-the-seams [middle]: ads 120000000011; 6% of spend; formats founder-video
-  social-proof [middle]: ads 120000000003; 3% of spend; formats static
-  new-drop [middle]: ads 120000000007; 3% of spend; formats carousel
-  partnership-haul [middle]: ads 120000000008; 3% of spend; formats partnership
-  gift-guide-two [middle]: ads 120000000029; 2% of spend; formats carousel
-  sale-countdown [middle]: ads 120000000004; 2% of spend; formats static
-  founder-story [middle]: ads 120000000006; 2% of spend; formats founder-video
-  fix-it-yourself [middle]: ads 120000000028; 2% of spend; formats ugc-video
-  partnership-trail [middle]: ads 120000000016; 2% of spend; formats partnership
-  new-drop-three [middle]: ads 120000000025; 2% of spend; formats static
-  partnership-camp [middle]: ads 120000000027; 1% of spend; formats partnership
-  comparison [losing]: ads 120000000014; 8% of spend; formats static
-  packing-list [losing]: ads 120000000009; 6% of spend; formats carousel
-  weather-ready [losing]: ads 120000000010; 5% of spend; formats ugc-video
-  problem-cold-feet [losing]: ads 120000000023; 5% of spend; formats ugc-video
-  founder-note [losing]: ads 120000000020; 4% of spend; formats founder-video
-  unboxing [losing]: ads 120000000015; 4% of spend; formats ugc-video
-  before-after [losing]: ads 120000000018; 4% of spend; formats ugc-video
-  new-drop-two [losing]: ads 120000000013; 3% of spend; formats carousel
-  guarantee [losing]: ads 120000000017; 3% of spend; formats static
-  sale-percent-off [losing]: ads 120000000012; 2% of spend; formats static
-  gift-guide [losing]: ads 120000000005; 1% of spend; formats carousel
-  new-drop-four [losing]: ads 120000000030; 1% of spend; formats ugc-video
+Angles (concepts) by how their ads did: winning = a top-quartile ad and no weak one; losing = weak or never-worked ads, no top-quartile one, and a combined return across its ads worse than the account's; weakest in its format = weak for its format but paying back at or above the account (or the account figure is n/a), so not a losing angle; mixed = both; middle = graded, none top or weak; ungraded = too few comparable ads to grade; unjudged = too little delivery:
+  staff-picks [winning]: ads 120000000021; roas 8.02 vs account 4.38, cpa 20.39 vs account 28.64; 6% of spend; formats carousel
+  social-proof-reviews [winning]: ads 120000000026; roas 6.95 vs account 4.38, cpa 21.51 vs account 28.64; 3% of spend; formats static
+  sale-bundle [winning]: ads 120000000024; roas 8.13 vs account 4.38, cpa 17.55 vs account 28.64; 3% of spend; formats carousel
+  trail-diary [winning]: ads 120000000022; roas 5.87 vs account 4.38, cpa 21.51 vs account 28.64; 3% of spend; formats partnership
+  problem-first [winning]: ads 120000000002; roas 4.85 vs account 4.38, cpa 16.00 vs account 28.64; 2% of spend; formats ugc-video
+  sale-last-chance [winning]: ads 120000000019; roas 5.57 vs account 4.38, cpa 26.79 vs account 28.64; 2% of spend; formats ugc-video
+  durability-test [middle]: ads 120000000001; roas 3.39 vs account 4.38, cpa 30.72 vs account 28.64; 8% of spend; formats ugc-video; fatiguing: 120000000001
+  behind-the-seams [middle]: ads 120000000011; roas 4.93 vs account 4.38, cpa 32.02 vs account 28.64; 6% of spend; formats founder-video
+  social-proof [middle]: ads 120000000003; roas 6.46 vs account 4.38, cpa 20.11 vs account 28.64; 3% of spend; formats static
+  new-drop [middle]: ads 120000000007; roas 5.19 vs account 4.38, cpa 26.02 vs account 28.64; 3% of spend; formats carousel
+  partnership-haul [middle]: ads 120000000008; roas 6.19 vs account 4.38, cpa 26.25 vs account 28.64; 3% of spend; formats partnership
+  gift-guide-two [middle]: ads 120000000029; roas 4.21 vs account 4.38, cpa 25.88 vs account 28.64; 2% of spend; formats carousel
+  sale-countdown [middle]: ads 120000000004; roas 5.58 vs account 4.38, cpa 26.30 vs account 28.64; 2% of spend; formats static
+  founder-story [middle]: ads 120000000006; roas 3.32 vs account 4.38, cpa 25.00 vs account 28.64; 2% of spend; formats founder-video
+  fix-it-yourself [middle]: ads 120000000028; roas 3.48 vs account 4.38, cpa 38.19 vs account 28.64; 2% of spend; formats ugc-video
+  partnership-trail [middle]: ads 120000000016; roas 3.13 vs account 4.38, cpa 28.63 vs account 28.64; 2% of spend; formats partnership
+  new-drop-three [middle]: ads 120000000025; roas 7.05 vs account 4.38, cpa 21.81 vs account 28.64; 2% of spend; formats static
+  partnership-camp [middle]: ads 120000000027; roas 4.07 vs account 4.38, cpa 19.58 vs account 28.64; 1% of spend; formats partnership
+  comparison [weakest in its format]: ads 120000000014; roas 4.46 vs account 4.38, cpa 27.78 vs account 28.64; 8% of spend; formats static
+  packing-list [weakest in its format]: ads 120000000009; roas 4.40 vs account 4.38, cpa 27.49 vs account 28.64; 6% of spend; formats carousel
+  new-drop-two [weakest in its format]: ads 120000000013; roas 3.59 vs account 4.38, cpa 22.33 vs account 28.64; 3% of spend; formats carousel
+  weather-ready [losing]: ads 120000000010; roas 2.70 vs account 4.38, cpa 38.03 vs account 28.64; 5% of spend; formats ugc-video
+  problem-cold-feet [losing]: ads 120000000023; roas 2.65 vs account 4.38, cpa 39.43 vs account 28.64; 5% of spend; formats ugc-video
+  founder-note [losing]: ads 120000000020; roas 2.55 vs account 4.38, cpa 59.56 vs account 28.64; 4% of spend; formats founder-video
+  unboxing [losing]: ads 120000000015; roas 2.94 vs account 4.38, cpa 46.03 vs account 28.64; 4% of spend; formats ugc-video
+  before-after [losing]: ads 120000000018; roas 2.72 vs account 4.38, cpa 44.91 vs account 28.64; 4% of spend; formats ugc-video
+  guarantee [losing]: ads 120000000017; roas 0.00 vs account 4.38, cpa n/a vs account 28.64; 3% of spend; formats static
+  sale-percent-off [losing]: ads 120000000012; roas 1.63 vs account 4.38, cpa 43.95 vs account 28.64; 2% of spend; formats static
+  gift-guide [losing]: ads 120000000005; roas 3.87 vs account 4.38, cpa 32.24 vs account 28.64; 1% of spend; formats carousel
+  new-drop-four [losing]: ads 120000000030; roas 1.97 vs account 4.38, cpa 83.80 vs account 28.64; 1% of spend; formats ugc-video
 ```
 
 ## Hooks view
@@ -86,12 +86,12 @@ Openings that do not stop people (bottom quartile): do not reuse as they are:
   120000000028 fix-it-yourself (ugc-video): hook 25.14 [bottom quartile], hold 33.42 [middle], 29 days old, verdict Keep; opening: n/a (missing primary text: the export has no ad text column)
   120000000011 behind-the-seams (founder-video): hook 22.82 [bottom quartile], hold n/a [not graded (missing video_thruplay)], 29 days old, verdict Keep; opening: n/a (missing primary text: the export has no ad text column)
   120000000020 founder-note (founder-video): hook 24.37 [bottom quartile], hold 37.12 [top quartile], 14 days old, verdict Pause; opening: n/a (missing primary text: the export has no ad text column)
-  120000000001 durability-test (ugc-video): hook 25.52 [bottom quartile], hold 28.43 [bottom quartile], 29 days old, verdict Iterate; opening: n/a (missing primary text: the export has no ad text column)
+  120000000001 durability-test (ugc-video): hook 25.52 [bottom quartile], hold 28.43 [bottom quartile], 29 days old, verdict Refresh; opening: n/a (missing primary text: the export has no ad text column)
   120000000008 partnership-haul (partnership): hook 24.58 [bottom quartile], hold 31.41 [middle], 29 days old, verdict Keep; opening: n/a (missing primary text: the export has no ad text column)
 
 Faded hooks (hook rate down by at least the min-change since the ad's first days): skip these as models, or vary them one change at a time:
   120000000022 trail-diary (partnership): hook 25.25 [middle], hold 32.78 [middle], 29 days old, verdict Scale; opening: n/a (missing primary text: the export has no ad text column)
-  120000000001 durability-test (ugc-video): hook 25.52 [bottom quartile], hold 28.43 [bottom quartile], 29 days old, verdict Iterate; opening: n/a (missing primary text: the export has no ad text column)
+  120000000001 durability-test (ugc-video): hook 25.52 [bottom quartile], hold 28.43 [bottom quartile], 29 days old, verdict Refresh; opening: n/a (missing primary text: the export has no ad text column)
 ```
 
 ## Ideation view, with the competitor scan
@@ -104,37 +104,37 @@ Basis: this account's own ads, 2026-03-01 to 2026-03-30, each graded against ads
 Settings (arbitrary defaults, set them from your own account): window=6 days, min-change=8%, min-impressions=1000. Ad types used to seed gaps: bau.
 Verdicts: keep-or-kill.
 
-Angles (concepts) by how their ads did: winning = a top-quartile ad and no weak one; losing = weak or never-worked ads and no top-quartile one; mixed = both; middle = graded, none top or weak; ungraded = too few comparable ads to grade; unjudged = too little delivery:
-  staff-picks [winning]: ads 120000000021; 6% of spend; formats carousel
-  social-proof-reviews [winning]: ads 120000000026; 3% of spend; formats static
-  sale-bundle [winning]: ads 120000000024; 3% of spend; formats carousel
-  trail-diary [winning]: ads 120000000022; 3% of spend; formats partnership
-  problem-first [winning]: ads 120000000002; 2% of spend; formats ugc-video
-  sale-last-chance [winning]: ads 120000000019; 2% of spend; formats ugc-video
-  durability-test [middle]: ads 120000000001; 8% of spend; formats ugc-video; fatiguing: 120000000001
-  behind-the-seams [middle]: ads 120000000011; 6% of spend; formats founder-video
-  social-proof [middle]: ads 120000000003; 3% of spend; formats static
-  new-drop [middle]: ads 120000000007; 3% of spend; formats carousel
-  partnership-haul [middle]: ads 120000000008; 3% of spend; formats partnership
-  gift-guide-two [middle]: ads 120000000029; 2% of spend; formats carousel
-  sale-countdown [middle]: ads 120000000004; 2% of spend; formats static
-  founder-story [middle]: ads 120000000006; 2% of spend; formats founder-video
-  fix-it-yourself [middle]: ads 120000000028; 2% of spend; formats ugc-video
-  partnership-trail [middle]: ads 120000000016; 2% of spend; formats partnership
-  new-drop-three [middle]: ads 120000000025; 2% of spend; formats static
-  partnership-camp [middle]: ads 120000000027; 1% of spend; formats partnership
-  comparison [losing]: ads 120000000014; 8% of spend; formats static
-  packing-list [losing]: ads 120000000009; 6% of spend; formats carousel
-  weather-ready [losing]: ads 120000000010; 5% of spend; formats ugc-video
-  problem-cold-feet [losing]: ads 120000000023; 5% of spend; formats ugc-video
-  founder-note [losing]: ads 120000000020; 4% of spend; formats founder-video
-  unboxing [losing]: ads 120000000015; 4% of spend; formats ugc-video
-  before-after [losing]: ads 120000000018; 4% of spend; formats ugc-video
-  new-drop-two [losing]: ads 120000000013; 3% of spend; formats carousel
-  guarantee [losing]: ads 120000000017; 3% of spend; formats static
-  sale-percent-off [losing]: ads 120000000012; 2% of spend; formats static
-  gift-guide [losing]: ads 120000000005; 1% of spend; formats carousel
-  new-drop-four [losing]: ads 120000000030; 1% of spend; formats ugc-video
+Angles (concepts) by how their ads did: winning = a top-quartile ad and no weak one; losing = weak or never-worked ads, no top-quartile one, and a combined return across its ads worse than the account's; weakest in its format = weak for its format but paying back at or above the account (or the account figure is n/a), so not a losing angle; mixed = both; middle = graded, none top or weak; ungraded = too few comparable ads to grade; unjudged = too little delivery:
+  staff-picks [winning]: ads 120000000021; roas 8.02 vs account 4.38, cpa 20.39 vs account 28.64; 6% of spend; formats carousel
+  social-proof-reviews [winning]: ads 120000000026; roas 6.95 vs account 4.38, cpa 21.51 vs account 28.64; 3% of spend; formats static
+  sale-bundle [winning]: ads 120000000024; roas 8.13 vs account 4.38, cpa 17.55 vs account 28.64; 3% of spend; formats carousel
+  trail-diary [winning]: ads 120000000022; roas 5.87 vs account 4.38, cpa 21.51 vs account 28.64; 3% of spend; formats partnership
+  problem-first [winning]: ads 120000000002; roas 4.85 vs account 4.38, cpa 16.00 vs account 28.64; 2% of spend; formats ugc-video
+  sale-last-chance [winning]: ads 120000000019; roas 5.57 vs account 4.38, cpa 26.79 vs account 28.64; 2% of spend; formats ugc-video
+  durability-test [middle]: ads 120000000001; roas 3.39 vs account 4.38, cpa 30.72 vs account 28.64; 8% of spend; formats ugc-video; fatiguing: 120000000001
+  behind-the-seams [middle]: ads 120000000011; roas 4.93 vs account 4.38, cpa 32.02 vs account 28.64; 6% of spend; formats founder-video
+  social-proof [middle]: ads 120000000003; roas 6.46 vs account 4.38, cpa 20.11 vs account 28.64; 3% of spend; formats static
+  new-drop [middle]: ads 120000000007; roas 5.19 vs account 4.38, cpa 26.02 vs account 28.64; 3% of spend; formats carousel
+  partnership-haul [middle]: ads 120000000008; roas 6.19 vs account 4.38, cpa 26.25 vs account 28.64; 3% of spend; formats partnership
+  gift-guide-two [middle]: ads 120000000029; roas 4.21 vs account 4.38, cpa 25.88 vs account 28.64; 2% of spend; formats carousel
+  sale-countdown [middle]: ads 120000000004; roas 5.58 vs account 4.38, cpa 26.30 vs account 28.64; 2% of spend; formats static
+  founder-story [middle]: ads 120000000006; roas 3.32 vs account 4.38, cpa 25.00 vs account 28.64; 2% of spend; formats founder-video
+  fix-it-yourself [middle]: ads 120000000028; roas 3.48 vs account 4.38, cpa 38.19 vs account 28.64; 2% of spend; formats ugc-video
+  partnership-trail [middle]: ads 120000000016; roas 3.13 vs account 4.38, cpa 28.63 vs account 28.64; 2% of spend; formats partnership
+  new-drop-three [middle]: ads 120000000025; roas 7.05 vs account 4.38, cpa 21.81 vs account 28.64; 2% of spend; formats static
+  partnership-camp [middle]: ads 120000000027; roas 4.07 vs account 4.38, cpa 19.58 vs account 28.64; 1% of spend; formats partnership
+  comparison [weakest in its format]: ads 120000000014; roas 4.46 vs account 4.38, cpa 27.78 vs account 28.64; 8% of spend; formats static
+  packing-list [weakest in its format]: ads 120000000009; roas 4.40 vs account 4.38, cpa 27.49 vs account 28.64; 6% of spend; formats carousel
+  new-drop-two [weakest in its format]: ads 120000000013; roas 3.59 vs account 4.38, cpa 22.33 vs account 28.64; 3% of spend; formats carousel
+  weather-ready [losing]: ads 120000000010; roas 2.70 vs account 4.38, cpa 38.03 vs account 28.64; 5% of spend; formats ugc-video
+  problem-cold-feet [losing]: ads 120000000023; roas 2.65 vs account 4.38, cpa 39.43 vs account 28.64; 5% of spend; formats ugc-video
+  founder-note [losing]: ads 120000000020; roas 2.55 vs account 4.38, cpa 59.56 vs account 28.64; 4% of spend; formats founder-video
+  unboxing [losing]: ads 120000000015; roas 2.94 vs account 4.38, cpa 46.03 vs account 28.64; 4% of spend; formats ugc-video
+  before-after [losing]: ads 120000000018; roas 2.72 vs account 4.38, cpa 44.91 vs account 28.64; 4% of spend; formats ugc-video
+  guarantee [losing]: ads 120000000017; roas 0.00 vs account 4.38, cpa n/a vs account 28.64; 3% of spend; formats static
+  sale-percent-off [losing]: ads 120000000012; roas 1.63 vs account 4.38, cpa 43.95 vs account 28.64; 2% of spend; formats static
+  gift-guide [losing]: ads 120000000005; roas 3.87 vs account 4.38, cpa 32.24 vs account 28.64; 1% of spend; formats carousel
+  new-drop-four [losing]: ads 120000000030; roas 1.97 vs account 4.38, cpa 83.80 vs account 28.64; 1% of spend; formats ugc-video
 
 Concept x format coverage (spend share, best band of any ad in the cell, youngest ad's age):
   before-after in ugc-video: ads 120000000018; 4% of spend; best middle; youngest 29 days
@@ -181,5 +181,5 @@ Untried cells beside a winner (a hypothesis to test, not a result):
 Competitor scan (Meta Ad Library (public)): 18 ads from 6 advertisers.
   Open ground: education; problem; proof; story; identity
   Worth testing: feature; problem; proof
-  Not to chase: comparison; story; education
+  Not to chase: story; education
 ```

@@ -71,11 +71,11 @@ Spend by dimension (roas vs account: 100 = the same as the account)
     9-17 days: 6 ads; spend USD 18590.82 (16%); purchases 575; value 69515.82; roas 3.74; cpa 32.33; vs account 85
     under 9 days: 1 ad; spend USD 670.39 (1%); purchases 8; value 1321.27; roas 1.97; cpa 83.80; vs account 45
   Verdict:
-    keep: 17 ads; spend USD 69640.53 (58%); purchases 2428; value 299912.46; roas 4.31; cpa 28.68; vs account 98
-    scale: 6 ads; spend USD 22405.52 (19%); purchases 1120; value 155450.15; roas 6.94; cpa 20.00; vs account 158
-    pause: 3 ads; spend USD 10990.00 (9%); purchases 144; value 16991.98; roas 1.55; cpa 76.32; vs account 35
-    iterate: 1 ad; spend USD 9061.59 (8%); purchases 295; value 30759.34; roas 3.39; cpa 30.72; vs account 77
-    check: 2 ads; spend USD 6738.31 (6%); purchases 178; value 19372.50; roas 2.87; cpa 37.86; vs account 66
+    Keep: 17 ads; spend USD 69640.53 (58%); purchases 2428; value 299912.46; roas 4.31; cpa 28.68; vs account 98
+    Scale: 6 ads; spend USD 22405.52 (19%); purchases 1120; value 155450.15; roas 6.94; cpa 20.00; vs account 158
+    Pause: 3 ads; spend USD 10990.00 (9%); purchases 144; value 16991.98; roas 1.55; cpa 76.32; vs account 35
+    Refresh: 1 ad; spend USD 9061.59 (8%); purchases 295; value 30759.34; roas 3.39; cpa 30.72; vs account 77
+    Check before cutting: 2 ads; spend USD 6738.31 (6%); purchases 178; value 19372.50; roas 2.87; cpa 37.86; vs account 66
     not judged yet: 1 ad; spend USD 670.39 (1%); purchases 8; value 1321.27; roas 1.97; cpa 83.80; vs account 45
 
 Spend on ads judged pause: USD 10990.00 (9% of spend); never worked: USD 10990.00 (9%); USD 366.33 a day across the window

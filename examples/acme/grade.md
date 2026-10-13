@@ -8,13 +8,14 @@ Window: 2026-03-01 to 2026-03-30
 Grouped by: format, ad_type, widening when a group has under 5 comparable ads. Comparable ads per group used: account-wide (sales) n=30, carousel (sales) n=7, static (sales) n=7, ugc-video (sales) n=9, ugc-video / bau (sales) n=6
 Bands: top quartile is at or above p75, bottom at or below p25 (costs inverted: a cheap CPM is top).
 Ads under 1000 impressions are not graded (arbitrary default: set it from your own spend per ad).
-CTR uses: link_clicks. Conversions column: Purchases.
+Click-based rates (CTR, CPC, purchase and add-to-cart rates) use link clicks.
+Conversions column: Purchases.
 Objective: not in the data (or not a known objective) for 30 ads, so they are graded as sales. Add an objective column to grade each ad on its own goal.
 Payback is read by objective: sales: cost per sale and return on ad spend.
 24 of 30 ads were graded in a wider group than format / ad_type because the narrower one had under 5 comparable ads (each ad's own reason is in --json); the group column shows where each was graded.
 WARNING small comparison groups (fewer than twice the 5-ad minimum, so a grade there is an early read): carousel (sales), static (sales), ugc-video (sales), ugc-video / bau (sales).
 
-ad            group            hook%     hold%     ctr%      cpm        cpa        roas      diagnosis                                    
+ad            group            hook%     hold%     ctr%      cpm        cpa        roas      diagnosis                       
 120000000001  ugc-video / bau  25.5 LOW  28.4 LOW  1.42 LOW  12.44 mid  30.72 top  3.39 mid  hook (hook_rate bottom quartile)
 120000000002  ugc-video / bau  26.5 mid  34.4 top  1.83 top  10.32 top  16.00 top  4.85 top  no broken step
 120000000003  static           n/a       n/a       1.18 mid  9.02 top   20.11 top  6.46 mid  no broken step
@@ -26,7 +27,7 @@ ad            group            hook%     hold%     ctr%      cpm        cpa     
 120000000014  static           n/a       n/a       1.62 mid  16.32 LOW  27.78 LOW  4.46 mid  reach cost (cpm bottom quartile)
 120000000017  static           n/a       n/a       0.24 LOW  12.58 mid  n/a        0.00 LOW  click (ctr bottom quartile)
 120000000018  ugc-video / bau  26.8 top  34.6 top  1.06 LOW  9.95 top   44.91 LOW  2.72 mid  click (ctr bottom quartile)
-120000000021  carousel         n/a       n/a       1.61 mid  12.08 mid  20.39 top  8.02 top  post-click (add_to_cart_rate bottom quartile)
+120000000021  carousel         n/a       n/a       1.61 mid  12.08 mid  20.39 top  8.02 top  no broken step
 120000000022  account-wide     25.3 mid  32.8 mid  1.77 top  10.05 top  21.51 top  5.87 top  no broken step
 120000000023  ugc-video / bau  28.3 top  33.3 mid  1.70 mid  15.52 LOW  39.43 LOW  2.65 LOW  reach cost (cpm bottom quartile)
 120000000026  static           n/a       n/a       1.76 top  10.99 top  21.51 top  6.95 top  no broken step
@@ -46,7 +47,7 @@ ad            group            hook%     hold%     ctr%      cpm        cpa     
 120000000027  account-wide     27.3 top  37.3 top  1.73 top  11.78 mid  19.58 top  4.07 mid  no broken step
 120000000030  ugc-video        25.9 mid  30.5 mid  0.92 LOW  17.03 LOW  83.80 LOW  1.97 LOW  reach cost (cpm bottom quartile)
 
-Diagnoses: reach cost=11, none=6, click=5, hook=4, post-click=2, pays back=1, hold=1
+Diagnoses: reach cost=11, none=7, click=5, hook=4, post-click=1, pays back=1, hold=1
 
 What to do, by first broken step (fix that step first, then re-read; 'also weak' lists later bottom-quartile metrics):
   reach cost: Reach is expensive: likely auction or audience saturation, not necessarily the creative. Rule that out before changing the ad.
@@ -56,16 +57,16 @@ What to do, by first broken step (fix that step first, then re-read; 'also weak'
     120000000014 (also weak: cpa)
     120000000023 (also weak: cpa, roas)
     120000000004 (also weak: cvr)
-    120000000005 (also weak: cvr, cpa, roas)
-    120000000016 (also weak: hold_rate)
-    120000000015 (also weak: cpa)
+    120000000005 (also weak: cvr, add_to_cart_rate, cpa, roas)
+    120000000016 (also weak: hold_rate, add_to_cart_rate)
+    120000000015 (also weak: cvr, cpa)
     120000000020 (also weak: hook_rate, ctr, cpa, roas)
     120000000030 (also weak: ctr, add_to_cart_rate, cpa, roas)
   hook: Change the first 3 seconds: the opening is not stopping the scroll.
-    120000000001 (also weak: hold_rate, ctr, add_to_cart_rate)
+    120000000001 (also weak: hold_rate, ctr)
     120000000006 (also weak: add_to_cart_rate)
-    120000000008 (also weak: ctr)
-    120000000028 (also weak: cvr)
+    120000000008 (also weak: ctr, add_to_cart_rate)
+    120000000028 (also weak: cvr, add_to_cart_rate)
   hold: The hook works but the promise is not sustained: tighten the body of the ad.
     120000000019 (also weak: ctr)
   click: People watch but few click: the call to action or the offer is weak.
@@ -75,7 +76,6 @@ What to do, by first broken step (fix that step first, then re-read; 'also weak'
     120000000012 (also weak: add_to_cart_rate, cpa, roas)
     120000000024
   post-click: Clicks arrive but do not convert: likely the landing page or the offer, not the creative. Check the site and whether the page matches the message; also rule out an audience mismatch.
-    120000000021
     120000000029
   pays back: The funnel reads normally but payback is weak: check price, margin, offer and attribution before blaming the creative.
     120000000013

@@ -37,7 +37,6 @@ Worth testing:
   proof: your own ads win with it and rivals are thin there (advertisers using it: 1) | your side: social-proof-reviews: winning; social-proof: middle
 
 Not to chase:
-  comparison: your own ads say this has not worked for you | your side: comparison: losing
   story: your own ads say this has not worked for you | your side: behind-the-seams: middle; founder-story: middle; founder-note: losing
   education: your own ads say this has not worked for you | your side: gift-guide-two: middle; gift-guide: losing
 

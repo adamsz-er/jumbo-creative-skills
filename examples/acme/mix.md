@@ -83,15 +83,16 @@ Funnel stage
 Read-outs
   Top quartile on pooled ROAS among BAU ads: concepts partnership-haul, social-proof, staff-picks, trail-diary; formats carousel, partnership.
   Gaps worth testing: empty or single-ad cells beside a proven top-quartile concept or format, strongest first. Proven means at least 9821 of BAU spend (default: 3 x the median ad spend, an arbitrary default: set it with --min-proven-spend); below it are concepts before-after, behind-the-seams, durability-test, fix-it-yourself, founder-story, guarantee, packing-list, partnership-haul and 6 more (see --json) and formats partnership, which never lead a gap. A hypothesis to test, not a result:
-    before-after in carousel: gap (top format)
+    social-proof in carousel: gap (top format)
+    partnership-haul in carousel: gap (top format)
+    trail-diary in carousel: gap (top format)
     behind-the-seams in carousel: gap (top format)
+    problem-first in carousel: gap (top format)
     comparison in carousel: gap (top format)
-    durability-test in carousel: gap (top format)
     fix-it-yourself in carousel: gap (top format)
-    founder-note in carousel: gap (top format)
-    founder-story in carousel: gap (top format)
-    guarantee in carousel: gap (top format)
-    ... 15 more (see --json)
+    durability-test in carousel: gap (top format)
+    ... 11 more (see --json)
+  Left out of the gaps (bottom quartile on pooled ROAS among BAU concepts, so not worth porting to another format as they are): before-after (ROAS 2.72), guarantee (ROAS 0.00), problem-cold-feet (ROAS 2.65), weather-ready (ROAS 2.70).
   Over-reliance: no concept family or format holds more than 60% of spend.
   Near-duplicates counted as one concept (override with --no-family):
     new-drop: new-drop, new-drop-four, new-drop-three, new-drop-two (ads 120000000007, 120000000013, 120000000025, 120000000030)
