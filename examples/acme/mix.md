@@ -5,7 +5,7 @@ Generated, not hand-written: `python3 -I skills/creative-mix/scripts/mix.py exam
 ```text
 Basis: this account's own ads. Window 2026-03-01 to 2026-03-30. Shares are of classified spend (119506); roas and cpa are pooled from summed spend, conversions and value.
 Classified: 30 ads. unclassified: 0 ads, spend 0 (names that do not match the naming convention are listed, never dropped).
-Concept grouping: '-suffix' variants share a family (--no-family turns it off). Top quartile = at or above p75 of pooled ROAS across this account's BAU concepts or formats.
+Concept grouping: '-suffix' variants share a family (--no-family turns it off). Top quartile = at or above p75 of the combined return (ROAS over summed spend and value) across this account's BAU concepts or formats.
 
 By format
 format         ads  spend  share%  roas  cpa  
@@ -81,7 +81,7 @@ Funnel stage
   Names carry no funnel stage field, so there is no funnel stage view. Add the field to your naming convention and pass --pattern to read it.
 
 Read-outs
-  Top quartile on pooled ROAS among BAU ads: concepts partnership-haul, social-proof, staff-picks, trail-diary; formats carousel, partnership.
+  Top quartile on combined return among BAU ads: concepts partnership-haul, social-proof, staff-picks, trail-diary; formats carousel, partnership.
   Gaps worth testing: empty or single-ad cells beside a proven top-quartile concept or format, strongest first. Proven means at least 9821 of BAU spend (default: 3 x the median ad spend, an arbitrary default: set it with --min-proven-spend); below it are concepts before-after, behind-the-seams, durability-test, fix-it-yourself, founder-story, guarantee, packing-list, partnership-haul and 6 more (see --json) and formats partnership, which never lead a gap. A hypothesis to test, not a result:
     social-proof in carousel: gap (top format)
     partnership-haul in carousel: gap (top format)
@@ -92,7 +92,7 @@ Read-outs
     fix-it-yourself in carousel: gap (top format)
     durability-test in carousel: gap (top format)
     ... 11 more (see --json)
-  Left out of the gaps (bottom quartile on pooled ROAS among BAU concepts, so not worth porting to another format as they are): before-after (ROAS 2.72), guarantee (ROAS 0.00), problem-cold-feet (ROAS 2.65), weather-ready (ROAS 2.70).
+  Left out of the gaps (bottom quartile on combined return among BAU concepts, so not worth porting to another format as they are): before-after (ROAS 2.72), guarantee (ROAS 0.00), problem-cold-feet (ROAS 2.65), weather-ready (ROAS 2.70).
   Over-reliance: no concept family or format holds more than 60% of spend.
   Near-duplicates counted as one concept (override with --no-family):
     new-drop: new-drop, new-drop-four, new-drop-three, new-drop-two (ads 120000000007, 120000000013, 120000000025, 120000000030)

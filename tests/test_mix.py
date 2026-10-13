@@ -187,7 +187,12 @@ class GapEdgeTest(unittest.TestCase):
         unknown = [g for g in result["gaps"] if g["concept"] == "launchy"]
         self.assertTrue(unknown, result["gaps"])
         self.assertIsNone(unknown[0]["concept_roas"])
-        # an unjudged concept sorts after every judged gap; render just its gap to read its line
+        judged = [n for n, g in enumerate(result["gaps"]) if g["concept_roas"] is not None]
+        unjudged = [n for n, g in enumerate(result["gaps"]) if g["concept_roas"] is None]
+        self.assertTrue(judged and unjudged)
+        self.assertLess(max(judged), min(unjudged))
+        self.assertTrue(any(g["strength"] < max(j["strength"] for j in result["gaps"]) for g in result["gaps"] if g["concept_roas"] is not None))
+        # render just the unjudged gap to read its line
         line = next(l for l in mix.render(dict(result, gaps=unknown)).splitlines() if l.strip().startswith("launchy in"))
         self.assertIn("no regular-price return to judge yet", line)
 

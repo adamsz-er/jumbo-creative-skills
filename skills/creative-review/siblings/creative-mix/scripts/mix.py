@@ -196,7 +196,7 @@ def analyse_mix(rows: Sequence[Dict[str, Any]], pattern: Optional[Sequence[str]]
                 gap = {"concept": name, "format": fmt, "ads": count, "why": why,
                        "strength": len(why), "concept_roas": fam_roas.get(name)}
                 (left_out if name in weak_concepts else gaps).append(gap)
-    gaps.sort(key=lambda g: (-g["strength"], g["concept_roas"] is None, g["ads"],
+    gaps.sort(key=lambda g: (g["concept_roas"] is None, -g["strength"], g["ads"],
                              -g["concept_roas"] if g["concept_roas"] is not None else 0.0,
                              g["concept"], g["format"]))
 
@@ -282,7 +282,7 @@ def render(result: Dict[str, Any]) -> str:
             start or "n/a", end or "n/a", _num(result["total_spend"], 0)),
         "Classified: %d ads. unclassified: %d ads, spend %s (names that do not match the naming "
         "convention are listed, never dropped)." % (result["classified"], un["count"], _num(un["spend"], 0)),
-        "Concept grouping: %s. Top quartile = at or above p75 of pooled ROAS across this account's BAU "
+        "Concept grouping: %s. Top quartile = at or above p75 of the combined return (ROAS over summed spend and value) across this account's BAU "
         "concepts or formats." % ("'-suffix' variants share a family (--no-family turns it off)"
                                   if result["families_on"] else "off, every concept name is its own concept"),
     ]
@@ -318,7 +318,7 @@ def render(result: Dict[str, Any]) -> str:
                    "Add the field to your naming convention and pass --pattern to read it.")
     out += ["", "Read-outs"]
     if result["top_concepts"] or result["top_formats"]:
-        out.append("  Top quartile on pooled ROAS among BAU ads: concepts %s; formats %s." % (
+        out.append("  Top quartile on combined return among BAU ads: concepts %s; formats %s." % (
             ", ".join(result["top_concepts"]) or "none", ", ".join(result["top_formats"]) or "none"))
     else:
         out.append("  Performance not read: fewer than %d BAU concepts or formats to rank against each other."
@@ -342,7 +342,7 @@ def render(result: Dict[str, Any]) -> str:
             out.append("    none found")
         weak = sorted({(g["concept"], g["concept_roas"]) for g in result.get("gaps_left_out") or []})
         if weak:
-            out.append("  Left out of the gaps (bottom quartile on pooled ROAS among BAU concepts, so not worth porting to "
+            out.append("  Left out of the gaps (bottom quartile on combined return among BAU concepts, so not worth porting to "
                        "another format as they are): %s." % ", ".join("%s (ROAS %s)" % (c, _num(r)) for c, r in weak))
     if result["over_reliance"]:
         out.append("  Over-reliance (more than %g%% of spend; an arbitrary default, set it from your own account):" % OVER_RELIANCE)
