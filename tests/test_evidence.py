@@ -176,21 +176,21 @@ class AngleLabelAndPoolingTest(unittest.TestCase):
         split = {"account": {"roas": 4.38, "cpa": 28.65}, "concepts": {"trail": {"roas": 4.0, "cpa": 27.0}}}
         unknown = {"account": {"roas": None, "cpa": None}, "concepts": {"trail": {"roas": 2.74, "cpa": 44.88}}}
         label = lambda payback: evidence._angles([weak], 100.0, payback)[0]["label"]
-        self.assertEqual(label(above), "weakest in format")
+        self.assertEqual(label(above), "weakest in its format")
         self.assertEqual(label(below), "losing")
-        self.assertEqual(label(split), "weakest in format")
-        self.assertEqual(label(unknown), "weakest in format")
-        self.assertEqual(evidence._angles([weak], 100.0)[0]["label"], "weakest in format")
+        self.assertEqual(label(split), "weakest in its format")
+        self.assertEqual(label(unknown), "weakest in its format")
+        self.assertEqual(evidence._angles([weak], 100.0)[0]["label"], "weakest in its format")
 
     def test_a_losing_angle_on_the_fixture_trails_the_account(self):
         result = evidence.build_evidence(cm.load_rows(str(FIXTURE)))
         labels = {a["label"] for a in result["angles"]}
-        self.assertIn("weakest in format", labels)
+        self.assertIn("weakest in its format", labels)
         for angle in result["angles"]:
             if angle["label"] == "losing":
                 self.assertLess(angle["roas"], angle["account_roas"], angle["concept"])
         text = evidence.render_persona(result)
-        self.assertIn("weakest in format = weak for its format but paying back at or above the account", text)
+        self.assertIn("weakest in its format = weak for its format but paying back at or above the account", text)
 
     def test_no_angles_says_none(self):
         self.assertEqual(evidence._angle_lines({"angles": []})[-1], "  none")

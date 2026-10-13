@@ -47,7 +47,7 @@ Write 2 rewrites that keep the concept, the persona and every true claim:
 - **Tighter hook:** the same idea, the first line cut to one situation or one claim.
 - **Proof earlier:** the proof moved ahead of the explanation, the explanation shortened.
 
-For each rewrite give the spoken script, the on-screen text for every beat (readable with the sound off), and what changed. Mark every claim that needs sign-off with "needs sign-off". Every sentence a rewrite adds that states a fact, a comparison or a first-person experience ("my old jacket let the rain in") is a new claim: flag it "new: needs sign-off" like the original ones. Never say a rewrite adds no new claims when it does. Any example customer quote is labelled illustrative. For more opening lines, hand off to `hook-writer`.
+For each rewrite give the spoken script, the on-screen text for every beat (readable with the sound off), and what changed. Mark every claim that needs sign-off with "needs sign-off". Every sentence a rewrite adds that states a fact or a comparison is a new claim: flag it "new: needs sign-off" like the original ones. Never write a first-person experience the user did not supply ("my old jacket let the rain in"): that is an invented testimonial. Leave a slot such as `[creator's own experience]` for the creator to fill with their own. Never say a rewrite adds no new claims when it does. Any example customer quote is labelled illustrative. For more opening lines, hand off to `hook-writer`.
 
 ## Present the result
 

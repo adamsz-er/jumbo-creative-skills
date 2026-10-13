@@ -195,7 +195,7 @@ def _trails_account(concept: Dict[str, Optional[float]], account: Dict[str, Opti
 def _angles(records: Sequence[Dict[str, Any]], total_spend: float,
             payback: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     """Concepts labelled by how their ads did. Losing needs a weak ad in its format AND pooled payback worse than
-    the account's own; a weak ad whose concept still pays back at or above the account is "weakest in format"."""
+    the account's own; a weak ad whose concept still pays back at or above the account is "weakest in its format"."""
     account = (payback or {}).get("account") or {}
     pooled = (payback or {}).get("concepts") or {}
     by_concept: Dict[str, List[Dict[str, Any]]] = {}
@@ -214,7 +214,7 @@ def _angles(records: Sequence[Dict[str, Any]], total_spend: float,
         elif top and not never and not bottom:
             label = "winning"
         elif (never or bottom) and not top:
-            label = "losing" if _trails_account(pooled.get(concept) or {}, account) else "weakest in format"
+            label = "losing" if _trails_account(pooled.get(concept) or {}, account) else "weakest in its format"
         elif top:
             label = "mixed"
         elif any(not b.startswith("not graded") for r in judged for b in r["bands"].values()):
@@ -229,7 +229,7 @@ def _angles(records: Sequence[Dict[str, Any]], total_spend: float,
                     **{"account_" + m: account.get(m) for m in PAYBACK},
                     "fatiguing_ads": [r["ad"] for r in recs if r["fatigue"].get("fatiguing")],
                     "youngest_age_days": min((r["age_days"] for r in recs if r["age_days"] is not None), default=None)})
-    order = {"winning": 0, "mixed": 1, "middle": 2, "weakest in format": 3, "losing": 4, "ungraded": 5, "unjudged": 6}
+    order = {"winning": 0, "mixed": 1, "middle": 2, "weakest in its format": 3, "losing": 4, "ungraded": 5, "unjudged": 6}
     out.sort(key=lambda a: (order[a["label"]], -(a["spend_share"] or 0), a["concept"]))
     return out
 
@@ -465,7 +465,7 @@ def render_persona(result: Dict[str, Any]) -> str:
 
 def _angle_lines(result: Dict[str, Any]) -> List[str]:
     out = ["Angles (concepts) by how their ads did: winning = a top-quartile ad and no weak one; losing = weak or "
-           "never-worked ads, no top-quartile one, and pooled payback worse than the account's; weakest in format = weak "
+           "never-worked ads, no top-quartile one, and pooled payback worse than the account's; weakest in its format = weak "
            "for its format but paying back at or above the account (or the account figure is n/a), so not a losing angle; "
            "mixed = both; middle = graded, none top or weak; ungraded = too few comparable ads to grade; unjudged = too "
            "little delivery:"]

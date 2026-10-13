@@ -27,11 +27,11 @@ python3 -I scripts/evidence.py ads.csv --for ideation --verdicts verdicts.json -
 python3 -I scripts/evidence.py ads.csv --for ideation --json
 ```
 
-It shows each concept as winning, mixed, middle, weakest in format (weak for its format, yet paying back at or above the account) or losing (or ungraded or unjudged when there is too little to grade) with its ads, formats and share of spend; concept by format coverage with spend share, the best band in each cell and the youngest ad's age; the untried cells beside a winner; and, with `--competitor` (from `competitor-scan`), the open ground, the angles worth testing and the ones not to chase.
+It shows each concept as winning, mixed, middle, weakest in its format (weak for its format, yet paying back at or above the account) or losing (or ungraded or unjudged when there is too little to grade) with its ads, formats and share of spend; concept by format coverage with spend share, the best band in each cell and the youngest ad's age; the untried cells beside a winner; and, with `--competitor` (from `competitor-scan`), the open ground, the angles worth testing and the ones not to chase.
 
 - Carry winners into untried formats; do not repeat losing angles as they were; give young cells time before judging them.
 - Prefer open ground the account's own results support over angles rivals have crowded.
-- Say "proven" only for a concept over creative-mix's proven-spend bar (the mix output prints it); otherwise say "best-returning". Never cite the result of a test that has not run ("the winning headline from the copy test"): name the test as planned, with its result still to come.
+- Say "proven" only for a winning concept over creative-mix's proven-spend bar (the mix output prints it; the bar measures spend, not results); otherwise say "best-returning". Never cite the result of a test that has not run ("the winning headline from the copy test"): name the test as planned, with its result still to come.
 - Every concept names its source: the ads it iterates, the gap it fills, or the competitor finding. With no data, label each "unbacked: from craft and the profile, not results".
 
 ## Inputs it can use if present
@@ -67,7 +67,7 @@ Change one choice at a time when you want to learn something.
 2. **Test plan.**
    - Group concepts into **one-variable tests**: hold the format constant to compare concepts, hold the concept constant to compare formats.
    - Give each ad a name in the naming convention from `creative-context/references/naming-convention.md` (concept | format | creator | ad type | product | tone | launch date).
-   - Split the set into three buckets: **iterate what works**, **adapt to an adjacent audience or product**, **genuinely new**. Leave the ratios to the user and ask what they want; do not suggest numbers.
+   - Split the set into three buckets: **build on what works**, **adapt to an adjacent audience or product**, **genuinely new**. Leave the ratios to the user and ask what they want; do not suggest numbers.
 3. **Next step.** Offer `hook-writer` for the openings, `persona-builder` if personas are thin, and `creative-brief` to turn a chosen concept into a production brief.
 
 ## Guardrails

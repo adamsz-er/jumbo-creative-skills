@@ -51,7 +51,7 @@ The window lengths and `--min-baseline-days` (7) are arbitrary defaults: set the
 
 ## Guardrails
 
-- Consumer law is a hard rule, not advice: no false urgency, no "final" or "ends today" when an extension is planned, no countdown that resets, only genuine "was" prices, "sitewide" means every product. See `references/consumer-law.md`.
+- Consumer law is a hard rule, not advice: no false urgency, no "final" or "ends today" when an extension is planned, no countdown that resets, only genuine "was" prices, "sitewide" means every product. See `references/consumer-law.md`. It summarises public regulator guidance and is not legal advice: for anything borderline, the brand's own legal adviser for its market decides.
 - No benchmarks: no "a good sale lifts X%". Judge against the account's own baseline.
 - No invented offers, prices, deadlines, stock levels or testimonials.
 - Mystery and chance-based offers: disclose the odds and a guaranteed minimum, and check local law on promotions of chance before running one.

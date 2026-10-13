@@ -260,7 +260,7 @@ class EdgeCaseTest(unittest.TestCase):
         import creative_metrics as cm
         built = evidence.build_evidence(cm.load_rows(str(ROOT / "examples" / "acme" / "ads_daily.csv")))
         comparison = next(a for a in built["angles"] if a["concept"] == "comparison")
-        self.assertEqual("weakest in format", comparison["label"])
+        self.assertEqual("weakest in its format", comparison["label"])
         result = self.build([{"advertiser": "Rival A", "ad_text": "Ours vs theirs: compare the specs."}],
                             evidence={"angles": [{"concept": a["concept"], "label": a["label"]} for a in built["angles"]]})
         self.assertNotIn("comparison", [i["label"] for i in result["not_to_chase"]])

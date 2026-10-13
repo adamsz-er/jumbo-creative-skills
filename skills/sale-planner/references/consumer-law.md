@@ -1,6 +1,6 @@
 # Sale claims: hard rules
 
-These are rules for every phase's copy, not suggestions. The principles below hold in most markets. The sources are the Australian Competition and Consumer Commission's (Australia) and the Federal Trade Commission's (US), which also has state laws on top. Cite only the sources for the user's market; until the market is known, give the principles without naming a regulator. Any other market has its own regulator, and the user must check its rules before running a sale there.
+These are rules for every phase's copy, not suggestions. They summarise public regulator guidance; this is not legal advice, and for anything borderline the brand's own legal adviser for its market decides. The principles below hold in most markets. The sources are the Australian Competition and Consumer Commission's (Australia) and the Federal Trade Commission's (US), which also has state laws on top. Cite only the sources for the user's market; until the market is known, give the principles without naming a regulator. Any other market has its own regulator, and the user must check its rules before running a sale there.
 
 ### Australia (the commission's own pages)
 
@@ -20,7 +20,7 @@ These are rules for every phase's copy, not suggestions. The principles below ho
 
 1. **No false urgency.** "Ends today", "final hours", "3 days only" and countdown timers must match when the sale really ends. If an extension is planned, do not say the sale is ending.
 2. **No resetting timers.** A countdown that restarts, or a discount that carries on after the stated end, misleads.
-3. **Genuine "was" prices.** A "was" price, a struck-through price or a "save X" claim must reflect a price the product was genuinely offered at for a reasonable period before the sale. A price rarely or never charged is not a "was" price. The same goes for comparisons with a recommended retail price. In the US the former-price guide sets the same test: the price must have been offered in good faith, openly, for a reasonable time.
+3. **Genuine "was" prices.** A "was" price, a struck-through price or a "save X" claim must reflect a price the product was genuinely offered at for a reasonable period before the sale. A price rarely or never charged is not a "was" price. The same goes for comparisons with a recommended retail price. In the US the former-price guide sets a similar test: a genuine price, openly offered to the public on a regular basis for a reasonably substantial period.
 4. **"Sitewide" means sitewide.** If some products are excluded, say so plainly, or call it a category sale.
 5. **"Up to" must be fair.** If the ad says "up to X% off", a reasonable part of the range has to carry that full reduction; one item at X% does not count.
 6. **Stock and limits stated.** If an offer is limited (quantity, sizes, while stocks last), say so clearly. Do not advertise a price you cannot supply in reasonable quantities for a reasonable time.

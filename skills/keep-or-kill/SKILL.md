@@ -49,7 +49,7 @@ python3 -I scripts/verdicts.py ads.csv --target cpa=40,roas=3   # the user's own
 5. "Can't judge" means the data cannot support a decision: say which field is missing and how to get it. Never turn it into refresh or keep.
 6. Name the ads that are too young to judge, the thin-group warning, and the spend concentration line.
 7. Say when fatigue could not be read (fewer than two windows of delivery days) and that such an ad is held, not scaled.
-8. When a `fatigue-planner` plan exists in the conversation, mark each kept ad that sits on its refresh queue as "keep, refresh queued", and say the two skills use different fade tests (the planner projects the line to a floor; this skill compares the first and last delivery days). Never tell the user to leave unchanged an ad the plan queues for a refresh.
+8. When a `fatigue-planner` plan exists in the conversation, mark each kept ad that sits on its refresh queue as "keep, refresh queued", and say the two skills use different fade tests (the planner predicts when the ad drops below the account's own low point for its format; this skill compares its first and last days). Never tell the user to leave unchanged an ad the plan queues for a refresh.
 
 ## Guardrails
 
@@ -75,5 +75,6 @@ Try:
 - **Why is an ad too early?** It is younger than `--young-days` or under `--min-impressions`.
 - **Will it pause ads?** These skills never call a tool that changes your ad account. Your agent could, if you asked it to directly, through the Meta connector's own tools. It recommends.
 - **Can I set targets?** Yes: `--target cpa=40,roas=3` or in the profile.
+- **Refresh, or "keep, refresh queued"?** Refresh is this skill's verdict: the ad is tiring now and its concept still pays. "Keep, refresh queued" is a kept ad that fatigue-planner expects to tire soon, so its refresh is already on the calendar.
 - **Why "check the site" instead of Pause?** The ad still earns clicks but people drop on the page. Fix the page first; `funnel-diagnosis` has a checklist.
 - More: creative-context/references/faq.md

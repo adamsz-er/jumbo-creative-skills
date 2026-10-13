@@ -58,7 +58,7 @@ Because it depends on your format, your audience, your offer and your account. A
 
 ### Why does an ad say too early to judge?
 
-An ad is still learning when it is younger than a minimum age or has fewer than a minimum number of impressions. Judging it would mean reading noise. Both minimums are arbitrary defaults (`--young-days`, `--min-impressions`): set them from your own account. Ads that cannot be judged are never told to pause, iterate or scale.
+An ad is still learning when it is younger than a minimum age or has fewer than a minimum number of impressions. Judging it would mean reading noise. Both minimums are arbitrary defaults (`--young-days`, `--min-impressions`): set them from your own account. Ads that cannot be judged are never told to pause, refresh or scale.
 
 ### Why is an ad "not graded (low volume)"?
 
