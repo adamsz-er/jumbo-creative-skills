@@ -151,7 +151,8 @@ def build_funnel(rows: Sequence[Dict[str, Any]], key_map: Optional[Dict[str, str
             missing[metric] = EXPORT_COLUMNS.get(metric, [])
     return {"settings": {"window": window, "min_change": min_change, "min_impressions": min_impressions,
                          "group_by": list(group), "z": z},
-            "window": cm.data_window(rows), "account": account_read(rows, window, min_change, z),
+            "window": cm.data_window(rows), "click_basis": cm.click_basis_line(ads),
+            "account": account_read(rows, window, min_change, z),
             "ads": reads, "too_little_delivery": too_little,
             "counts": {c: sum(1 for r in reads if r["call"] == c) for c in CALL_ORDER},
             "missing_columns": missing}
@@ -179,6 +180,7 @@ def render(result: Dict[str, Any]) -> str:
     out = ["Funnel diagnosis: %d ads judged: %s." % (judged, ", ".join("%d %s" % (counts[c], c) for c in CALL_ORDER))]
     first_site = next((r for r in result["ads"] if r["call"] == "site"), None)
     out.append(_lead_sentence(first_site, result["settings"]) if first_site else "No ad points at the site on its own.")
+    out.append(result["click_basis"])
     account = result["account"]
     out += ["", "%s: %s" % (ACCOUNT_LABEL, account["call"]), "  " + account["reason"]]
     if not account["trend_readable"]:

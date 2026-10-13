@@ -1845,17 +1845,17 @@ class ParentHtmlTest(unittest.TestCase):
 
     @staticmethod
     def apply_later_changes(tree):
-        """Give the parent the later deliberate changes: the verdict a user reads as "Refresh" (its id stays `iterate`), and purchase and
-        add-to-cart rates that count link clicks before all clicks."""
+        """Give the parent the later deliberate changes: the verdict a user reads as "Refresh" (its id stays `iterate`), and today's
+        metrics module (link clicks as the one click basis for purchase and add-to-cart rates)."""
         for path in (tree / "skills" / "creative-report" / "scripts").glob("*.py"):
             path.write_text(path.read_text(encoding="utf-8").replace("Iterate", "Refresh"), encoding="utf-8")
         for path in tree.glob("**/creative_metrics.py"):
-            text = path.read_text(encoding="utf-8")
-            for metric, numerator in (("cvr", "conversions"), ("add_to_cart_rate", "add_to_carts")):
-                old = '"%s": (("%s",), ("clicks", "link_clicks"), 100.0),' % (metric, numerator)
-                assert old in text, (path, old)
-                text = text.replace(old, '"%s": (("%s",), ("link_clicks", "clicks"), 100.0),' % (metric, numerator))
-            path.write_text(text, encoding="utf-8")
+            path.write_text((ROOT / "shared" / "creative_metrics.py").read_text(encoding="utf-8"), encoding="utf-8")
+
+    @staticmethod
+    def without_click_basis(html):
+        """The report now states its click basis in the method notes; the parent did not."""
+        return re.sub(r"(Completeness: [^\n<]*)\nClick-based rates \(CTR, CPC, purchase and add-to-cart rates\)[^\n<]*", r"\1", html)
 
     SNIPPET = ("import sys, json; sys.path.insert(0, sys.argv[1]); import report, creative_metrics as cm; "
                "grade, verdicts, mix = (json.load(open(p)) for p in sys.argv[3:6]); "
@@ -1884,7 +1884,7 @@ class ParentHtmlTest(unittest.TestCase):
                 made[label] = done.stdout
             self.assertGreater(len(made["parent"]), 10000)
             self.assertNotEqual(made["parent"], made["now"])
-            self.assertEqual(self.allowed(made["parent"], FIXTURE), made["now"])
+            self.assertEqual(self.allowed(made["parent"], FIXTURE), self.without_click_basis(made["now"]))
 
     def test_blank_purchase_counts_change_only_the_daily_series_and_each_day_cpa_carries_all_its_spend(self):
         """The one deliberate change from the parent: a day's rate is over all its rows, so a row with spend and a blank purchase count keeps
@@ -1918,7 +1918,7 @@ class ParentHtmlTest(unittest.TestCase):
                 done = subprocess.run([sys.executable, "-I", "-c", self.SNIPPET, str(scripts), str(blanked)] + inputs + [str(PROFILE)],
                                       capture_output=True, text=True)
                 self.assertEqual(done.returncode, 0, done.stderr)
-                made[label] = done.stdout if label == "now" else self.allowed(done.stdout, blanked)
+                made[label] = self.without_click_basis(done.stdout) if label == "now" else self.allowed(done.stdout, blanked)
             panel = re.compile(r'<section class="card panel" id="(panel-[\w-]+)"')
             parts = {label: dict(zip(panel.findall(html), panel.split(html)[2::2])) for label, html in made.items()}
             self.assertEqual(sorted(parts["parent"]), sorted(parts["now"]))

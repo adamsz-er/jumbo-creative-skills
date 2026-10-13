@@ -262,5 +262,13 @@ class PooledPeersTest(unittest.TestCase):
         self.assertAlmostEqual(step["gap_z"], expected)
 
 
+
+class ClickBasisLineTest(unittest.TestCase):
+    def test_the_output_states_the_click_basis(self):
+        rows = cm.load_rows(str(FIXTURE))
+        result = funnel.build_funnel(rows, None, [], ("format",), 6, 8.0, 1000, 1.96)
+        self.assertIn(cm.click_basis_line(cm.aggregate_by_ad(rows)), funnel.render(result))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -153,7 +153,7 @@ class FixtureTest(unittest.TestCase):
         self.assertIn("2026-03-01", header)
         self.assertIn("2026-03-30", header)
         self.assertIn("Purchases", header)
-        self.assertIn("Clicks (CTR, CPC, purchase and add-to-cart rates) use: link clicks.", header)
+        self.assertIn("Click-based rates (CTR, CPC, purchase and add-to-cart rates) use link clicks.", header)
 
     def test_basis_names_all_clicks_when_link_clicks_are_missing(self):
         rows = []
@@ -165,8 +165,8 @@ class FixtureTest(unittest.TestCase):
         rows = cm.load_rows(rows)
         results = grade.grade_ads(rows)
         header = grade.basis_header(rows, results)
-        self.assertIn("use: all clicks, because the data has no link clicks", header)
-        self.assertNotIn("use: link clicks", header)
+        self.assertIn("use all clicks, because the data has no link clicks", header)
+        self.assertNotIn("use link clicks", header)
 
 
 class ObjectiveAndGroupingTest(unittest.TestCase):
@@ -241,6 +241,15 @@ class ObjectiveAndGroupingTest(unittest.TestCase):
         self.assertIsNone(partial["engagement_rate"])
         self.assertIn("missing saves and comments", cm.format_value(partial, "engagement_rate"))
         self.assertIsNone(partial["cost_per_lead"])
+
+
+
+class ClickBasisHeaderTest(unittest.TestCase):
+    def test_the_header_is_one_basis_never_both(self):
+        rows = cm.load_rows(str(FIXTURE))
+        header = grade.basis_header(rows, grade.grade_ads(rows))
+        self.assertIn(cm.click_basis_line(cm.aggregate_by_ad(rows)), header)
+        self.assertNotIn(" and link clicks", header)
 
 
 if __name__ == "__main__":

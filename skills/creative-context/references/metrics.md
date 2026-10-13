@@ -12,7 +12,7 @@ One id, one formula. Use these exactly. All rates are percentages unless stated.
 | `cpc` | spend / clicks | Same click type as CTR. |
 | `cpa` | spend / conversions | |
 | `roas` | conversion_value / spend | |
-| `cvr` | conversions / link_clicks * 100 | Link clicks, as in the shared schema: all clicks include likes, profile taps and "see more", which never reach the site. Only when link clicks are missing does it use all clicks, and the output says so. |
+| `cvr` | conversions / link_clicks * 100 | Link clicks, as in the shared schema: all clicks include likes, profile taps and "see more", which never reach the site. One click basis per dataset: all clicks only when no row has link clicks, and the output says so. A blank link-click cell on a day with clicks makes that ad's rate n/a ("link clicks missing on N days with clicks"), never a rate over part of its days; a blank on a day with no clicks counts as 0. |
 | `add_to_cart_rate` | add_to_carts / link_clicks * 100 | Link clicks, as for `cvr`, with the same all-clicks fallback stated in the output. |
 | `cost_per_add_to_cart` | spend / add_to_carts | |
 | `cost_per_lead` | spend / leads | Judges lead-generation campaigns. `leads` is the lead count Meta reports for the ad. |

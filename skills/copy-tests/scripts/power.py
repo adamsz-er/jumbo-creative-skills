@@ -6,7 +6,7 @@ Usage: python3 power.py ads.csv --metric ctr --mde 18 --daily-budget 300 --max-d
 
 Standard library only. The baseline rate is this account's own pooled rate for the metric (after --where, so
 --where format=ugc-video sizes the test on one format's baseline). From it the script works out how many
-denominator units (impressions for ctr, clicks for cvr) each arm needs for a two-sided two-proportion test to
+denominator units (impressions for ctr, link clicks, else all clicks, for cvr) each arm needs for a two-sided two-proportion test to
 see a relative change of --mde percent, how many days the daily budget takes to deliver them, and whether that
 fits --max-days. If it does not, it says the smallest change that would fit, the budget that would fit, and
 the other way out. More than two arms use a Bonferroni split of alpha across the variant-to-control

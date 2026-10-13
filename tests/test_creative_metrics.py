@@ -352,5 +352,60 @@ class ConnectorFieldsTest(unittest.TestCase):
             self.assertEqual(cm.load_rows(str(path))[0]["spend"], 4.0)
 
 
+
+class ClickBasisTest(unittest.TestCase):
+    """One click basis per dataset: link clicks when any row has them, all clicks only when none does; never a partial sum."""
+
+    STAFF = "120000000021"
+
+    @staticmethod
+    def rows(blank):
+        rows = list(csv.DictReader(open(FIXTURE, newline="", encoding="utf-8")))
+        for n, row in enumerate(rows):
+            if blank(row, n):
+                row["Link clicks"] = ""
+        return cm.load_rows(rows)
+
+    def ads(self, blank):
+        return {a["ad_id"]: a for a in cm.aggregate_by_ad(self.rows(blank))}
+
+    def test_one_ad_without_link_clicks_reads_n_a_and_its_peers_are_unchanged(self):
+        clean = self.ads(lambda r, n: False)
+        blanked = self.ads(lambda r, n: r["Ad ID"] == self.STAFF)
+        for metric in ("cvr", "add_to_cart_rate", "ctr"):
+            self.assertIsNone(blanked[self.STAFF][metric], metric)
+            self.assertRegex(cm.format_value(blanked[self.STAFF], metric), r"^n/a \(link clicks missing on \d+ days with clicks\)$")
+        for key, ad in clean.items():
+            if key != self.STAFF:
+                self.assertEqual(ad["add_to_cart_rate"], blanked[key]["add_to_cart_rate"], key)
+
+    def test_link_clicks_blank_on_some_click_days_is_n_a_not_a_partial_rate(self):
+        ads = self.ads(lambda r, n: r["Ad ID"] == self.STAFF and n % 2 == 0)
+        self.assertIsNone(ads[self.STAFF]["cvr"])
+        self.assertIsNone(ads[self.STAFF]["add_to_cart_rate"])
+
+    def test_no_link_clicks_anywhere_falls_back_to_all_clicks_for_every_ad_and_says_so(self):
+        ads = list(self.ads(lambda r, n: True).values())
+        self.assertTrue(all(cm.metric_basis(a, "cvr")["denominator"] == "clicks" for a in ads))
+        self.assertIn("all clicks, because the data has no link clicks", cm.click_basis_line(ads))
+
+    def test_a_blank_link_click_cell_on_a_day_with_no_clicks_counts_as_zero(self):
+        rows = list(csv.DictReader(open(FIXTURE, newline="", encoding="utf-8")))
+        target = next(r for r in rows if r["Ad ID"] == self.STAFF)
+        target["Clicks (all)"] = "0"
+        clean = {a["ad_id"]: a for a in cm.aggregate_by_ad(cm.load_rows([dict(r) for r in rows]))}
+        target["Link clicks"] = ""
+        blanked = {a["ad_id"]: a for a in cm.aggregate_by_ad(cm.load_rows(rows))}
+        self.assertIsNotNone(blanked[self.STAFF]["add_to_cart_rate"])
+        self.assertNotAlmostEqual(clean[self.STAFF]["add_to_cart_rate"], 0.0)
+
+    def test_the_basis_line_names_the_ads_left_n_a(self):
+        ads = list(self.ads(lambda r, n: r["Ad ID"] == self.STAFF).values())
+        line = cm.click_basis_line(ads)
+        self.assertIn("use link clicks", line)
+        self.assertIn(self.STAFF, line)
+        self.assertNotIn("all clicks, because", line)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -195,6 +195,7 @@ def method_lines(ctx: Ctx, grade, verdicts, brand: Optional[str], completeness: 
     lines.append("Data source: %s. Window: %s. Attribution: %s. Money is shown in %s."
                  % (source, window, attribution, ctx.currency or "the account's own currency (the export did not name one)"))
     lines.append("Completeness: %s." % ("not reconciled" if completeness is None else completeness))
+    lines.append(cm.click_basis_line(ctx.ads))
     if grade:
         lines += [interact.plain_ids(l) for l in str(grade.get("basis", "")).splitlines() if l.strip()]
     if verdicts:
