@@ -169,6 +169,18 @@ class FromMcpTest(unittest.TestCase):
         rows = [r for r in cm.load_rows(str(self.out)) if r["ad_id"] == RAW[0]["id"] and r["date"] == RAW[0]["date_start"]]
         self.assertEqual([r["conversions"] for r in rows], [999.0])
 
+    def test_a_blank_link_click_count_stays_blank_in_the_csv_so_the_disclosure_survives_a_reload(self):
+        raw = [dict(r) for r in RAW]
+        del raw[0]["link_click"]
+        merged = from_mcp.merge(raw)
+        from_mcp.write_csv(merged, str(self.out))
+        reloaded = cm.load_rows(str(self.out))
+        line = "1 ad-day had a blank link-click cell, counted as 0 (exports leave zeros blank)."
+        self.assertIn(line, cm.click_basis_line(cm.aggregate_by_ad(merged)))
+        self.assertIn(line, cm.click_basis_line(cm.aggregate_by_ad(reloaded)))
+        before = {a["ad_id"]: a["ctr"] for a in cm.aggregate_by_ad(merged)}
+        self.assertEqual({a["ad_id"]: a["ctr"] for a in cm.aggregate_by_ad(reloaded)}, before)
+
     def test_csv_is_readable_by_the_analysis_scripts(self):
         run_main([str(FIXTURE), "-o", str(self.out)])
         ads = {a["ad_id"]: a for a in cm.aggregate_by_ad(cm.load_rows(str(self.out)))}
