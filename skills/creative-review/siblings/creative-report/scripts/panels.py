@@ -2018,13 +2018,18 @@ def gap_rows(ctx: Ctx) -> List[Dict[str, Any]]:
              "why": gap_reason(ctx, g)} for n, g in enumerate(ctx.gaps, 1)]
 
 
-def left_out_note(ctx: Ctx) -> str:
+def left_out_text(ctx: Ctx) -> str:
     """The concepts creative-mix left out of the gaps as the account's weakest: named, never silent."""
     weak = sorted({(g["concept"], g.get("concept_roas")) for g in (ctx.mix or {}).get("gaps_left_out") or []}, key=lambda c: c[0])
     if not weak:
         return ""
-    return ('<p class="muted">Left out as your weakest concepts (bottom quarter of your always-on ROAS, so not worth porting to another '
-            'format as they are): %s.</p>' % esc(", ".join("%s (ROAS %s)" % (_plain(c), "n/a" if r is None else "%.2fx" % r) for c, r in weak)))
+    return ('Left out as your weakest concepts (bottom quarter of your always-on ROAS, so not worth porting to another format as they are): %s.'
+            % ", ".join("%s (ROAS %s)" % (_plain(c), "n/a" if r is None else "%.2fx" % r) for c, r in weak))
+
+
+def left_out_note(ctx: Ctx) -> str:
+    text = left_out_text(ctx)
+    return '<p class="muted">%s</p>' % esc(text) if text else ""
 
 
 def gap_list(ctx: Ctx) -> Tuple[str, str]:

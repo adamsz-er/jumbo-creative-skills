@@ -365,6 +365,9 @@ def note_rows(ctx: Ctx) -> List[Dict[str, Any]]:
         lines.append(("not-in-pull", REACH_NOTE))
     lines += [("method", line) for line in ctx.method_lines]
     lines += [("caveat", _plain(note)) for note in ctx.caveats] or [("caveat", "Nothing was missing from the inputs.")]
+    left_out = panels.left_out_text(ctx)
+    if left_out:
+        lines.append(("caveat", left_out))
     return [{"id": n, "section": section, "text": text} for n, (section, text) in enumerate(lines, 1)]
 
 

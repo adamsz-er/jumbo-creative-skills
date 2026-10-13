@@ -1140,6 +1140,16 @@ class NewDatasetTest(unittest.TestCase):
         _, ctx = report.build_report(rows=rows, verdicts=self.verdicts, currency="USD", generated="2026-01-02")
         return dashboard.build_datasets(ctx)[0]
 
+    def test_the_concepts_left_out_of_the_gaps_are_named_in_the_caveats_with_or_without_gaps(self):
+        mix = run_json("creative-mix", "mix.py")
+        self.assertTrue(mix["gaps_left_out"])
+        for gaps in (mix["gaps"], []):
+            _, ctx = report.build_report(rows=self.rows, mix=dict(mix, gaps=gaps), currency="USD", generated="2026-01-02")
+            caveats = [r["text"] for r in dashboard.build_datasets(ctx)[0]["notes"] if r["section"] == "caveat"]
+            line = next((t for t in caveats if t.startswith("Left out as your weakest concepts")), None)
+            self.assertIsNotNone(line, caveats)
+            self.assertIn("Before after (ROAS 2.72x)", line)
+
     def test_unvalued_ad_days_over_the_method_setting_stop_the_running_value_from_the_first_with_their_share(self):
         rows = [dict(r) for r in self.rows]
         days = sorted({r["date"] for r in rows})
@@ -1853,8 +1863,9 @@ class ParentHtmlTest(unittest.TestCase):
             path.write_text((ROOT / "shared" / "creative_metrics.py").read_text(encoding="utf-8"), encoding="utf-8")
 
     @staticmethod
-    def without_click_basis(html):
-        """The report now states its click basis in the method notes; the parent did not."""
+    def without_new_lines(html):
+        """The report now states its click basis in the method notes and names the concepts left out of the gaps; the parent did neither."""
+        html = re.sub(r'<p class="muted">Left out as your weakest concepts [^<]*</p>', "", html)
         return re.sub(r"(Completeness: [^\n<]*)\nClick-based rates \(CTR, CPC, purchase and add-to-cart rates\)[^\n<]*", r"\1", html)
 
     SNIPPET = ("import sys, json; sys.path.insert(0, sys.argv[1]); import report, creative_metrics as cm; "
@@ -1884,7 +1895,7 @@ class ParentHtmlTest(unittest.TestCase):
                 made[label] = done.stdout
             self.assertGreater(len(made["parent"]), 10000)
             self.assertNotEqual(made["parent"], made["now"])
-            self.assertEqual(self.allowed(made["parent"], FIXTURE), self.without_click_basis(made["now"]))
+            self.assertEqual(self.allowed(made["parent"], FIXTURE), self.without_new_lines(made["now"]))
 
     def test_blank_purchase_counts_change_only_the_daily_series_and_each_day_cpa_carries_all_its_spend(self):
         """The one deliberate change from the parent: a day's rate is over all its rows, so a row with spend and a blank purchase count keeps
@@ -1918,7 +1929,7 @@ class ParentHtmlTest(unittest.TestCase):
                 done = subprocess.run([sys.executable, "-I", "-c", self.SNIPPET, str(scripts), str(blanked)] + inputs + [str(PROFILE)],
                                       capture_output=True, text=True)
                 self.assertEqual(done.returncode, 0, done.stderr)
-                made[label] = self.without_click_basis(done.stdout) if label == "now" else self.allowed(done.stdout, blanked)
+                made[label] = self.without_new_lines(done.stdout) if label == "now" else self.allowed(done.stdout, blanked)
             panel = re.compile(r'<section class="card panel" id="(panel-[\w-]+)"')
             parts = {label: dict(zip(panel.findall(html), panel.split(html)[2::2])) for label, html in made.items()}
             self.assertEqual(sorted(parts["parent"]), sorted(parts["now"]))
