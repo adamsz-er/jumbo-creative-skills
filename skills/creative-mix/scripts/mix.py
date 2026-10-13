@@ -12,7 +12,8 @@ account, with no benchmark. Only a concept or format with enough BAU spend count
 as proven (--min-proven-spend, default three times the account's median ad spend,
 an arbitrary default: set it from your own account), so one with negligible spend
 never leads the gap list. A concept in the bottom quartile on pooled BAU ROAS never
-leads one either: it is listed as left out. Equal gaps are ordered by the concept's own
+leads one either (strictly below the lower quartile, so tied returns leave none out): it is listed
+as left out. Equal gaps are ordered by the concept's own
 return. Promo and BAU are shown separately, never blended.
 """
 from __future__ import annotations
@@ -39,6 +40,7 @@ KEYED_NAME_SHARE = 60.0  # percent of ad names that must be KEY:value before the
 UNREAD_MESSAGE = ("Concepts could not be read from your ad names, so gaps were not checked. "
                   "Add key-map: %s=concept to the Script settings of creative-profile.md (or pass --key-map).")
 GENERIC_KEY = "your concept key"
+NO_BAU_RETURN = "no regular-price return to judge yet (the concept has no BAU ads)"
 PROVEN_MULTIPLE = 3  # arbitrary default: proven spend is this many times the account's median ad spend
 
 
@@ -99,7 +101,7 @@ def _bottom_quartile(values: Dict[str, Optional[float]]) -> List[str]:
     if len(known) < MIN_FOR_QUARTILES:
         return []
     p25 = statistics.quantiles(list(known.values()), n=4, method="inclusive")[0]
-    return sorted(k for k, v in known.items() if v <= p25)
+    return sorted(k for k, v in known.items() if v < p25)
 
 
 def analyse_mix(rows: Sequence[Dict[str, Any]], pattern: Optional[Sequence[str]] = None,
@@ -194,8 +196,8 @@ def analyse_mix(rows: Sequence[Dict[str, Any]], pattern: Optional[Sequence[str]]
                 gap = {"concept": name, "format": fmt, "ads": count, "why": why,
                        "strength": len(why), "concept_roas": fam_roas.get(name)}
                 (left_out if name in weak_concepts else gaps).append(gap)
-    gaps.sort(key=lambda g: (-g["strength"], g["ads"],
-                             -g["concept_roas"] if g["concept_roas"] is not None else float("inf"),
+    gaps.sort(key=lambda g: (-g["strength"], g["concept_roas"] is None, g["ads"],
+                             -g["concept_roas"] if g["concept_roas"] is not None else 0.0,
                              g["concept"], g["format"]))
 
     over = []
@@ -331,8 +333,9 @@ def render(result: Dict[str, Any]) -> str:
                        _num(result["min_proven_spend"], 0), PROVEN_MULTIPLE,
                        _short_list(result["unproven"]["concepts"]), _short_list(result["unproven"]["formats"])))
         for gap in result["gaps"][:MAX_GAPS_SHOWN]:
-            out.append("    %s in %s: %s (%s)" % (gap["concept"], gap["format"],
-                                                  "gap" if gap["ads"] == 0 else "1 ad", " and ".join(gap["why"])))
+            out.append("    %s in %s: %s (%s)%s" % (gap["concept"], gap["format"], "gap" if gap["ads"] == 0 else "1 ad",
+                                                    " and ".join(gap["why"]), "" if gap["concept_roas"] is not None else
+                                                    "; " + NO_BAU_RETURN))
         if len(result["gaps"]) > MAX_GAPS_SHOWN:
             out.append("    ... %d more (see --json)" % (len(result["gaps"]) - MAX_GAPS_SHOWN))
         if not result["gaps"]:

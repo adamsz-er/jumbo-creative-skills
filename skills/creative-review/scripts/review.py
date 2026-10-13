@@ -182,17 +182,18 @@ def biggest_action(verdicts: Dict[str, Any], currency: Optional[str]) -> str:
 def biggest_opportunity(mix: Dict[str, Any]) -> str:
     if mix.get("concepts_unread"):
         return mix["concepts_unread_message"]
+    weak = sorted({g.get("concept") for g in mix.get("gaps_left_out") or [] if g.get("concept")})
+    left_out = " Left out as the account's weakest concepts: %s." % ", ".join(weak) if weak else ""
     gaps = mix.get("gaps") or []
     if not gaps:
-        return "No clear gap yet in the creative mix."
+        return "No clear gap yet in the creative mix." + left_out
     gap = gaps[0]
     why = ", ".join(gap.get("why") or []) or "not stated"
-    text = "Try the %s idea as a %s (%s): %s." % (gap.get("concept"), gap.get("format"),
-                                                  "only one ad like it so far" if gap.get("ads") == 1 else "no ads like it yet", why)
-    weak = sorted({g.get("concept") for g in mix.get("gaps_left_out") or [] if g.get("concept")})
-    if weak:
-        text += " Left out as the account's weakest concepts: %s." % ", ".join(weak)
-    return text
+    if "concept_roas" in gap and gap["concept_roas"] is None:
+        why += "; no regular-price return to judge yet"
+    return "Try the %s idea as a %s (%s): %s." % (gap.get("concept"), gap.get("format"),
+                                                  "only one ad like it so far" if gap.get("ads") == 1 else "no ads like it yet",
+                                                  why) + left_out
 
 
 def summary_text(title: str, bullets: Sequence[str], report: Path, steps: Sequence[Dict[str, str]] = ()) -> str:

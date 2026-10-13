@@ -277,6 +277,16 @@ class BiggestOpportunityTest(unittest.TestCase):
         self.assertTrue(text.startswith("Try the staff-picks idea as a static (no ads like it yet): top format."), text)
         self.assertIn("Left out as the account's weakest concepts: before-after, guarantee.", text)
 
+    def test_names_the_left_out_concepts_when_no_gap_survives(self):
+        text = self.review.biggest_opportunity({"gaps": [], "gaps_left_out": [{"concept": "before-after", "format": "carousel"}]})
+        self.assertTrue(text.startswith("No clear gap yet in the creative mix."), text)
+        self.assertIn("Left out as the account's weakest concepts: before-after.", text)
+
+    def test_an_unjudged_concept_carries_its_caveat(self):
+        text = self.review.biggest_opportunity({"gaps": [{"concept": "launchy", "format": "static", "ads": 0, "why": ["top format"],
+                                                          "concept_roas": None}]})
+        self.assertIn("no regular-price return to judge yet", text)
+
     def test_a_one_ad_cell_is_not_called_empty(self):
         mix = {"gaps": [{"concept": "staff-picks", "format": "static", "ads": 1, "why": ["top concept"]}]}
         self.assertIn("(only one ad like it so far)", self.review.biggest_opportunity(mix))

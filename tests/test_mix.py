@@ -147,8 +147,8 @@ class WeakConceptGapTest(unittest.TestCase):
         roas = self.bau_roas()
         import statistics
         p25 = statistics.quantiles(list(roas.values()), n=4, method="inclusive")[0]
-        self.assertEqual(left_out, {c for c, v in roas.items() if v <= p25} & left_out)
-        self.assertTrue(all(roas[c] <= p25 for c in left_out))
+        with_cell = {g["concept"] for g in self.result["gaps"]} | left_out
+        self.assertEqual(left_out, {c for c, v in roas.items() if v < p25} & with_cell)
         text = mix.render(self.result)
         self.assertIn("Left out of the gaps", text)
         self.assertIn("before-after", text.split("Left out of the gaps")[1].splitlines()[0])
@@ -160,6 +160,36 @@ class WeakConceptGapTest(unittest.TestCase):
             if (a["strength"], a["ads"]) == (b["strength"], b["ads"]):
                 self.assertGreaterEqual(a["concept_roas"] if a["concept_roas"] is not None else -1,
                                         b["concept_roas"] if b["concept_roas"] is not None else -1, (a, b))
+
+
+
+class GapEdgeTest(unittest.TestCase):
+    def rows(self, returns):
+        out = []
+        for i, value in enumerate(returns):
+            fmt = "static" if i % 2 else "carousel"
+            out.append(dict(row("c%02d | %s | house | bau | p | polished | 2026-03-01" % (i, fmt), spend=100.0),
+                            **{"Purchases conversion value": value}))
+        return cm.load_rows(out)
+
+    def test_tied_returns_leave_no_concept_out(self):
+        result = mix.analyse_mix(self.rows([300] * 9), min_proven_spend=1.0)
+        self.assertEqual([], result["gaps_left_out"])
+
+    def test_a_gap_without_a_regular_price_return_says_so(self):
+        names = []
+        for i, fmt in enumerate(("f1", "f2", "f3", "f4", "f5")):
+            for j in range(2):
+                names.append(("c%d%d | %s | house | bau | p | polished | 2026-03-01" % (i, j, fmt), 200 + 100 * i + 10 * j))
+        names.append(("launchy | f1 | house | launch | p | polished | 2026-03-01", 300))
+        rows = cm.load_rows([dict(row(n, spend=100.0), **{"Purchases conversion value": v}) for n, v in names])
+        result = mix.analyse_mix(rows, min_proven_spend=1.0)
+        unknown = [g for g in result["gaps"] if g["concept"] == "launchy"]
+        self.assertTrue(unknown, result["gaps"])
+        self.assertIsNone(unknown[0]["concept_roas"])
+        # an unjudged concept sorts after every judged gap; render just its gap to read its line
+        line = next(l for l in mix.render(dict(result, gaps=unknown)).splitlines() if l.strip().startswith("launchy in"))
+        self.assertIn("no regular-price return to judge yet", line)
 
 
 if __name__ == "__main__":
