@@ -1,3 +1,4 @@
+import csv
 import json
 import subprocess
 import sys
@@ -261,6 +262,35 @@ class PooledPeersTest(unittest.TestCase):
                                    weak["landing_page_views"], weak["link_clicks"])
         self.assertAlmostEqual(step["gap_z"], expected)
 
+
+
+class LinkClickGapTest(unittest.TestCase):
+    """One ad with a blank link-click cell on a day with clicks, in a file that writes an explicit 0: that ad's click rates are
+    n/a with the real reason, the account's are read over the other ads, and no export column the file has is asked for."""
+
+    def setUp(self):
+        raw = list(csv.DictReader(open(EXTENDED, newline="", encoding="utf-8")))
+        raw[0]["Link clicks"] = ""
+        raw[1].update({"Link clicks": "0", "Clicks (all)": "0", "Adds to cart": "0", "Purchases": "0", "Purchases conversion value": "0",
+                       "Landing page views": "0", "Checkouts initiated": "0"})
+        self.gap_ad = raw[0]["Ad ID"]
+        self.result = build(cm.load_rows(raw))
+        self.text = funnel.render(self.result)
+
+    def test_the_account_site_steps_stay_readable(self):
+        site = [s for s in self.result["account"]["steps"] if s["side"] == "site"]
+        self.assertIn("add_to_cart_rate", [s["metric"] for s in site])
+        for step in site:
+            self.assertTrue(step["readable"], step["metric"])
+        self.assertNotEqual(self.result["account"]["call"], "unreadable")
+
+    def test_the_gap_ad_says_why_and_asks_for_no_column_it_has(self):
+        read = next(r for r in self.result["ads"] if r["ad"] == self.gap_ad)
+        note = {s["metric"]: s for s in read["steps"]}["add_to_cart_rate"]["note"]
+        self.assertEqual(note, "n/a (link clicks missing on 1 day with clicks)")
+        self.assertIn("add to cart rate: n/a (link clicks missing on 1 day with clicks)\n", self.text + "\n")
+        self.assertNotIn('"Adds to cart"', self.text)
+        self.assertNotIn("add_to_cart_rate", self.result["missing_columns"])
 
 
 class ClickBasisLineTest(unittest.TestCase):

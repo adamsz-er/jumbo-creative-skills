@@ -43,10 +43,7 @@ def _key(ad: Dict[str, Any]) -> str:
 
 def _pooled(ads: Sequence[Dict[str, Any]]) -> Dict[str, Optional[float]]:
     """Base fields summed over ads (None when no ad has the field) and the metrics computed from the sums."""
-    total: Dict[str, Optional[float]] = {}
-    for field in cm.NUMERIC_FIELDS:
-        values = [a[field] for a in ads if a.get(field) is not None]
-        total[field] = sum(values) if values else None
+    total = cm._sum_rows(ads)
     total["reach"] = None
     return dict(total, **cm.compute_metrics(total))
 

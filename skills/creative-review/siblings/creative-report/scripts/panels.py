@@ -536,10 +536,7 @@ def coverage(ads: Sequence[Dict[str, Any]], fields: Sequence[str]) -> List[str]:
 
 def totals(rows: Sequence[Dict[str, Any]]) -> Dict[str, Optional[float]]:
     """Sum each base field over rows. Reach never adds up across ads and days, so it stays None."""
-    out: Dict[str, Optional[float]] = {}
-    for field in cm.NUMERIC_FIELDS:
-        values = [r[field] for r in rows if r.get(field) is not None]
-        out[field] = sum(values) if values else None
+    out = cm._sum_rows(rows)
     out["reach"] = None
     out["video_views_3s_source"] = ("derived" if any(str(r.get("video_views_3s_source") or "").startswith("derived") for r in rows) else None)
     return out

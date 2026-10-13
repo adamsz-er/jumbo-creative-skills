@@ -387,7 +387,7 @@ class ClickBasisTest(unittest.TestCase):
     def test_a_file_that_writes_zeros_reads_a_blank_on_a_click_day_as_unknown(self):
         ad = cm.aggregate_by_ad(self.export(["20", "", "0", "40"]))[0]
         self.assertIsNone(ad["cvr"])
-        self.assertEqual(cm.format_value(ad, "cvr"), "n/a (link clicks missing on 1 days with clicks)")
+        self.assertEqual(cm.format_value(ad, "cvr"), "n/a (link clicks missing on 1 day with clicks)")
         self.assertNotIn("counted as 0", cm.click_basis_line([ad]))
         self.assertIn("n/a for 1 ad", cm.click_basis_line([ad]))
 
@@ -412,6 +412,37 @@ class ClickBasisTest(unittest.TestCase):
             if key != self.STAFF:
                 self.assertEqual(ad["add_to_cart_rate"], blanked[key]["add_to_cart_rate"], key)
         self.assertIn("counted as 0 (exports leave zeros blank)", cm.click_basis_line(list(blanked.values())))
+
+    def gap_rows(self):
+        """Staff picks blank on one day with clicks, in a file that writes an explicit 0 somewhere."""
+        def edit(r, n):
+            if r["Ad ID"] == self.STAFF and n == min(i for i, x in enumerate(self.raw) if x["Ad ID"] == self.STAFF and float(x["Clicks (all)"] or 0) > 0):
+                r["Link clicks"] = ""
+            elif n == 0 and r["Ad ID"] != self.STAFF:
+                r.update({"Link clicks": "0", "Clicks (all)": "0", "Adds to cart": "0", "Purchases": "0"})
+        self.raw = list(csv.DictReader(open(FIXTURE, newline="", encoding="utf-8")))
+        return self.fixture(edit)
+
+    def test_one_gap_ad_is_left_out_of_a_totals_click_rates_only_and_named(self):
+        rows = self.gap_rows()
+        ads = {a["ad_id"]: a for a in cm.aggregate_by_ad(rows)}
+        self.assertIsNone(ads[self.STAFF]["add_to_cart_rate"])
+        whole = cm.compute_metrics(cm._sum_rows(rows))
+        others = cm.compute_metrics(cm._sum_rows([r for r in rows if str(r["ad_id"]) != self.STAFF]))
+        everyone = cm._sum_rows(rows)
+        for metric in ("ctr", "cpc", "cvr", "add_to_cart_rate"):
+            self.assertIsNotNone(whole[metric], metric)
+            self.assertAlmostEqual(whole[metric], others[metric], msg=metric)
+        self.assertAlmostEqual(whole["roas"], everyone["conversion_value"] / everyone["spend"])
+        self.assertEqual(cm.rate_counts(cm._sum_rows(rows), "cvr"), cm.rate_counts(cm._sum_rows([r for r in rows if str(r["ad_id"]) != self.STAFF]), "cvr"))
+        line = cm.click_basis_line(list(ads.values()))
+        self.assertIn("left out of the click rates of every total", line)
+        self.assertIn(self.STAFF, line)
+
+    def test_a_total_of_only_gap_ads_stays_n_a_with_its_reason(self):
+        rows = [r for r in self.gap_rows() if str(r["ad_id"]) == self.STAFF]
+        total = cm._sum_rows(rows)
+        self.assertEqual(cm.format_value(total, "cvr"), "n/a (link clicks missing on 1 day with clicks)")
 
     def test_no_link_clicks_anywhere_falls_back_to_all_clicks_for_every_ad_and_says_so(self):
         ads = list(self.ads(lambda r, n: r.update({"Link clicks": ""})).values())

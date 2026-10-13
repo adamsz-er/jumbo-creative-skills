@@ -1267,6 +1267,25 @@ class PreviewCountTest(unittest.TestCase):
 
 
 
+class LinkClickGapTotalsTest(unittest.TestCase):
+    """One ad with a blank link-click cell on a day with clicks, in a file that writes an explicit 0: the key numbers and any total over
+    several ads read their click rates over the other ads, never n/a because of that one ad."""
+
+    def test_the_ctr_tile_and_a_group_total_read_over_the_other_ads(self):
+        raw = list(csv.DictReader(open(FIXTURE, newline="", encoding="utf-8")))
+        raw[0]["Link clicks"] = ""
+        raw[1].update({"Link clicks": "0", "Clicks (all)": "0"})
+        rows = cm.load_rows(raw)
+        others = [r for r in rows if str(r["ad_id"]) != raw[0]["Ad ID"]]
+        expected = cm.compute_metrics(panels.totals(others))["ctr"]
+        tile = next(t for t in panels.kpi_tiles(panels.Ctx(rows=rows, currency="USD")) if t["metric"] == "ctr")
+        self.assertAlmostEqual(tile["value"], expected)
+        ads = cm.aggregate_by_ad(rows)
+        self.assertIsNone(next(a for a in ads if str(a["ad_id"]) == raw[0]["Ad ID"])["ctr"])
+        self.assertAlmostEqual(cm.compute_metrics(panels.totals(ads))["add_to_cart_rate"],
+                               cm.compute_metrics(panels.totals([a for a in ads if str(a["ad_id"]) != raw[0]["Ad ID"]]))["add_to_cart_rate"])
+
+
 class LeftOutGapsTest(unittest.TestCase):
     def test_the_white_space_panel_names_the_concepts_left_out_of_the_gaps(self):
         rows = cm.load_rows(str(FIXTURE))

@@ -59,6 +59,10 @@ NUMERIC_FIELDS = (
 LINK_GAPS = "link_click_gaps"
 # Days whose blank link-click cell was counted as 0 because the file never writes an explicit 0 (Ads Manager leaves zeros blank).
 LINK_BLANKS = "link_click_blanks"
+# In a total over several ads where some (not all) have link-click gaps: the sums over the other ads, which the rates that
+# count link clicks read instead, so one ad never makes an account, format or day figure unreadable.
+CLICK_TOTAL = "click_total"
+CLICK_METRICS = frozenset(m for m, (num, den, _) in METRICS.items() if "link_clicks" in num + den)
 COST_PER_VIEW = "cost_per_action_type:video_view"
 DERIVED_3S = "derived: spend / cost per 3-second view"
 NOT_DERIVED_3S = "not derived: cost per 3-second view is rounded too coarsely"
@@ -380,8 +384,9 @@ def click_basis_line(ads: Sequence[Dict[str, Any]]) -> str:
         gaps = [str(a.get("ad_id") or a.get("ad_name")) for a in ads if (a.get(LINK_GAPS) or 0) > 0]
         blanks = int(sum(a.get(LINK_BLANKS) or 0 for a in ads))
         return CLICK_RATES + " use link clicks." + (
-            " They are n/a for %d ad%s whose link clicks are missing on days with clicks: %s." % (
-                len(gaps), "" if len(gaps) == 1 else "s", ", ".join(gaps)) if gaps else "") + (
+            " They are n/a for %d ad%s whose link clicks are missing on days with clicks, and %s left out of the click rates of "
+            "every total: %s." % (len(gaps), "" if len(gaps) == 1 else "s", "it is" if len(gaps) == 1 else "they are",
+                                   ", ".join(gaps)) if gaps else "") + (
             " %d ad-day%s had a blank link-click cell, counted as 0 (exports leave zeros blank)." % (
                 blanks, "" if blanks == 1 else "s") if blanks else "")
     if any(a.get("clicks") is not None for a in ads):
@@ -419,6 +424,11 @@ def response_notes(loaded: Any) -> List[str]:
     return [str(i) for i in info] if isinstance(info, list) else [str(info)]
 
 
+def _for_metric(row: Dict[str, Any], metric: str) -> Dict[str, Any]:
+    """The sums a metric reads: a total's CLICK_TOTAL for a rate that counts link clicks, else the row itself."""
+    return row[CLICK_TOTAL] if metric in CLICK_METRICS and row.get(CLICK_TOTAL) else row
+
+
 def _pick(row: Dict[str, Any], fields: Sequence[str]) -> Tuple[str, Optional[float]]:
     link_basis = row.get(LINK_GAPS) is not None
     for field in fields:
@@ -450,16 +460,17 @@ def compute_metrics(row: Dict[str, Any]) -> Dict[str, Optional[float]]:
     row = _with_engagements(row)
     result: Dict[str, Optional[float]] = {}
     for name, (num_fields, den_fields, scale) in METRICS.items():
-        _, num = _pick(row, num_fields)
-        _, den = _pick(row, den_fields)
+        _, num = _pick(_for_metric(row, name), num_fields)
+        _, den = _pick(_for_metric(row, name), den_fields)
         result[name] = None if num is None or den is None or den == 0 else num / den * scale
     return result
 
 
 def metric_basis(row: Dict[str, Any], metric: str) -> Dict[str, Optional[str]]:
     """Say which fields fed a metric, e.g. whether ctr used link or all clicks."""
-    num_fields, den_fields, _ = METRICS[resolve_metric(metric)]
-    row = _with_engagements(row)
+    metric = resolve_metric(metric)
+    num_fields, den_fields, _ = METRICS[metric]
+    row = _with_engagements(_for_metric(row, metric))
     num_field, num = _pick(row, num_fields)
     den_field, den = _pick(row, den_fields)
     return {
@@ -472,13 +483,13 @@ def describe_missing(row: Dict[str, Any], metric: str) -> Optional[str]:
     """Why a metric is unavailable for a row, or None when it can be computed."""
     metric = resolve_metric(metric)
     num_fields, den_fields, _ = METRICS[metric]
-    row = _with_engagements(row)
+    row = _with_engagements(_for_metric(row, metric))
     if metric == "engagement_rate" and row["engagements"] is None:
         return "missing " + " and ".join(f for f in ENGAGEMENT_PARTS if row.get(f) is None)
     for fields in (num_fields, den_fields):
         if _pick(row, fields)[1] is None:
             if "link_clicks" in fields and (row.get(LINK_GAPS) or 0) > 0:
-                return "link clicks missing on %d days with clicks" % row[LINK_GAPS]
+                return "link clicks missing on %d day%s with clicks" % (row[LINK_GAPS], "" if row[LINK_GAPS] == 1 else "s")
             if "link_clicks" in fields and row.get(LINK_GAPS) is not None:
                 return "missing link_clicks"
             return "missing " + " or ".join(fields)
@@ -509,12 +520,17 @@ def _parse_date(value: Any) -> Optional[dt.date]:
     return None
 
 
-def _sum_rows(rows: Sequence[Dict[str, Any]]) -> Dict[str, Optional[float]]:
-    """Sum each base field over rows; a field with no values stays None."""
-    totals: Dict[str, Optional[float]] = {}
+def _sum_rows(rows: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """Sum each base field over rows (or aggregated ads); a field with no values stays None. When some ads, not all, have
+    link-click gaps, every sum keeps them but the click-based rates read CLICK_TOTAL, the sums over the other ads."""
+    totals: Dict[str, Any] = {}
     for field in NUMERIC_FIELDS:
         values = [r[field] for r in rows if r.get(field) is not None]
         totals[field] = sum(values) if values else None
+    gapped = {_row_key(r) for r in rows if (r.get(LINK_GAPS) or 0) > 0}
+    clean = [r for r in rows if _row_key(r) not in gapped]
+    if gapped and clean:
+        totals[CLICK_TOTAL] = _sum_rows(clean)
     return totals
 
 
@@ -1783,7 +1799,9 @@ FUNNEL_Z = 1.96
 
 def rate_counts(total: Dict[str, Any], metric: str) -> Tuple[Optional[float], Optional[float]]:
     """(numerator, denominator) counts behind a rate metric for summed rows, as compute_metrics picks them."""
-    num_fields, den_fields, _ = METRICS[resolve_metric(metric)]
+    metric = resolve_metric(metric)
+    num_fields, den_fields, _ = METRICS[metric]
+    total = _for_metric(total, metric)
     return _pick(total, num_fields)[1], _pick(total, den_fields)[1]
 
 

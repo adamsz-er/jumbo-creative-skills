@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -27,11 +28,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import creative_metrics as cm  # noqa: E402
 
 CALL_ORDER = ("site", "both", "creative", "neither", "unjudged", "unreadable")
+# The export column that carries each field a site step needs: named only when a step is n/a because that field is missing.
 EXPORT_COLUMNS = {
-    "landing_page_view_rate": ["Landing page views"],
-    "add_to_cart_rate": ["Adds to cart"],
-    "cart_to_checkout_rate": ["Checkouts initiated", "Adds to cart"],
-    "cvr": ["Purchases"],
+    "landing_page_views": "Landing page views",
+    "add_to_carts": "Adds to cart",
+    "checkouts": "Checkouts initiated",
+    "conversions": "Purchases",
+    "link_clicks": "Link clicks",
 }
 ACCOUNT_LABEL = "account-wide: a sitewide problem (checkout, payment, shipping, stock) shows here first"
 CHECKLIST = "For a site call, work through references/page-checklist.md before changing the ad."
@@ -51,11 +54,18 @@ def _falling(step: Dict[str, Any], min_change: float, z: float) -> bool:
                 and step["trend_z"] is not None and step["trend_z"] <= -z)
 
 
-def _columns(metrics: Sequence[str]) -> str:
+def _missing_columns(note: Optional[str]) -> List[str]:
+    """The export columns for the fields an n/a note says are missing ("missing add_to_carts"); none for any other reason."""
+    found = re.search(r"\bmissing ([a-z_]+(?: or [a-z_]+)*)", note or "")
+    fields = found.group(1).split(" or ") if found else []
+    return [EXPORT_COLUMNS[f] for f in fields if f in EXPORT_COLUMNS]
+
+
+def _remedy(notes: Sequence[Optional[str]]) -> str:
     names: List[str] = []
-    for metric in metrics:
-        names += [c for c in EXPORT_COLUMNS.get(metric, []) if c not in names]
-    return " and ".join('"%s"' % n for n in names)
+    for note in notes:
+        names += [c for c in _missing_columns(note) if c not in names]
+    return "; add the export column %s" % " and ".join('"%s"' % n for n in names) if names else ""
 
 
 def select_ads(ads: Sequence[Dict[str, Any]], wanted: Sequence[str]) -> List[Dict[str, Any]]:
@@ -83,18 +93,15 @@ def _window_sums(rows: Sequence[Dict[str, Any]], window: int) -> Optional[Dict[s
         return None
     out = {}
     for name, chosen in (("first", ordered[:window]), ("last", ordered[-window:])):
-        total: Dict[str, Any] = {}
-        for field in cm.NUMERIC_FIELDS:
-            values = [r[field] for day in chosen for r in day if r.get(field) is not None]
-            total[field] = sum(values) if values else None
-        out[name] = total
+        out[name] = cm._sum_rows([r for day in chosen for r in day])
     return out
 
 
 def account_read(rows: Sequence[Dict[str, Any]], window: int, min_change: float, z: float) -> Dict[str, Any]:
     """The funnel read for the whole account, by the same rule funnel_read applies to one ad."""
     windows = _window_sums(rows, window)
-    whole = cm.compute_metrics(cm._sum_rows(rows))
+    summed = cm._sum_rows(rows)
+    whole = cm.compute_metrics(summed)
     steps = []
     for metric in cm.ATTENTION_STEPS + cm.SITE_STEPS:
         first = cm.compute_metrics(windows["first"])[metric] if windows else None
@@ -107,6 +114,7 @@ def account_read(rows: Sequence[Dict[str, Any]], window: int, min_change: float,
         steps.append({"metric": metric, "side": "attention" if metric in cm.ATTENTION_STEPS else "site",
                       "first": first, "last": last, "change_pct": change, "trend_z": trend_z,
                       "readable": whole[metric] is not None, "judged": trend_z is not None, "weak": falling,
+                      "note": None if whole[metric] is not None else "n/a (%s)" % (cm.describe_missing(summed, metric) or "no value"),
                       "why": "down %.0f%% from the account's first %d days to its last" % (-change, window) if falling else None})
     attention = [s for s in steps if s["side"] == "attention" and s["weak"]]
     site = [s for s in steps if s["side"] == "site" and s["weak"]]
@@ -147,8 +155,9 @@ def build_funnel(rows: Sequence[Dict[str, Any]], key_map: Optional[Dict[str, str
                               not any(_falling(s, min_change, z) for s in r["steps"]), -(r["spend"] or 0)))
     missing: Dict[str, List[str]] = {}
     for read in reads:
-        for metric in read["missing_site_steps"]:
-            missing[metric] = EXPORT_COLUMNS.get(metric, [])
+        for step in read["steps"]:
+            if step["metric"] in read["missing_site_steps"] and _missing_columns(step["note"]):
+                missing[step["metric"]] = _missing_columns(step["note"])
     return {"settings": {"window": window, "min_change": min_change, "min_impressions": min_impressions,
                          "group_by": list(group), "z": z},
             "window": cm.data_window(rows), "click_basis": cm.click_basis_line(ads),
@@ -188,9 +197,10 @@ def render(result: Dict[str, Any]) -> str:
     for step in account["steps"]:
         if step["weak"]:
             out.append("  %s: %s" % (_label(step["metric"]), step["why"]))
-    unread = [s["metric"] for s in account["steps"] if s["side"] == "site" and not s["readable"]]
+    unread = [s for s in account["steps"] if s["side"] == "site" and not s["readable"]]
     if unread:
-        out.append("  could not be read: %s; add the export column %s" % (", ".join(_label(m) for m in unread), _columns(unread)))
+        out.append("  could not be read: %s%s" % (", ".join("%s %s" % (_label(s["metric"]), s["note"]) for s in unread),
+                                                   _remedy([s["note"] for s in unread])))
     out += ["", "Per ad (site, both, creative, neither, unjudged, unreadable; within a call, ads with a step that fell first, then by spend):"]
     for read in result["ads"]:
         out.append("%s (%s): %s" % (read.get("ad_name") or read["ad"], read["ad"], read["call"]))
@@ -200,9 +210,7 @@ def render(result: Dict[str, Any]) -> str:
                 out.append("  weak: %s, %s" % (_label(step["metric"]), step["why"]))
         for step in read["steps"]:
             if not step["readable"]:
-                out.append("  %s: %s%s" % (_label(step["metric"]), step["note"],
-                                           "; add the export column %s" % _columns([step["metric"]])
-                                           if step["metric"] in EXPORT_COLUMNS else ""))
+                out.append("  %s: %s%s" % (_label(step["metric"]), step["note"], _remedy([step["note"]])))
         if not read["trend_readable"]:
             out.append("  n/a (fewer than twice the window (2 x %d delivery days): the ad's start and end cannot be compared)" % window)
     if result["too_little_delivery"]:
