@@ -50,7 +50,7 @@ One evidence script, `evidence.py`, feeds every make skill, so ideas, hooks and 
 | `--for brief` (default) | `creative-brief` | top-quartile, fatiguing and never-worked ads, and untried concept and format pairs beside a winner |
 | `--for persona` | `persona-builder` | results by persona or audience (a `persona` name field, else an audience or ad set column), each group's return as a percent of the account's, its new-customer share where present, and the angles that won, lost or were weakest in its format (weak for the format, yet paying back at or above the account) |
 | `--for hooks` | `hook-writer` | the openings that stop people and those that do not (hook-rate quartiles within each format), with hold rate, age and verdict, and the hooks that have faded |
-| `--for ideation` | `creative-ideation` | concept by format coverage with spend share and age, winning, losing and weakest in its format angles, and a competitor scan when given |
+| `--for ideation` | `creative-ideation` | concept by format coverage with spend share and age, angles that are winning, losing, or weakest in their format, and a competitor scan when given |
 
 `--verdicts` (keep-or-kill's `--json`) puts each ad's verdict beside it; `--competitor` (competitor-scan's `--json`) adds rivals' open ground. With no usable data every view says so, and the skill labels its output unbacked.
 

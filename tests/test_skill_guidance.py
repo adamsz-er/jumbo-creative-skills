@@ -83,9 +83,9 @@ class OneVerdictWordTest(unittest.TestCase):
 
 class AngleWordsTest(unittest.TestCase):
     def test_every_angle_list_names_the_weakest_in_its_format_bucket(self):
-        self.assertIn("weakest in its format", read("persona-builder", "SKILL.md").split("then the angles")[1].split(".")[0])
+        self.assertIn("weakest in their format", read("persona-builder", "SKILL.md").split("then the angles")[1].split(".")[0])
         how = (ROOT / "docs" / "how-it-works.md").read_text(encoding="utf-8")
-        self.assertEqual(2, how.count("weakest in its format"))
+        self.assertEqual(2, len(re.findall(r"weakest in (?:its|their) format", how)))
 
 
 class QuoteTheScriptTest(unittest.TestCase):
