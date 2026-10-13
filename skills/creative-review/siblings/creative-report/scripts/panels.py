@@ -2018,14 +2018,24 @@ def gap_rows(ctx: Ctx) -> List[Dict[str, Any]]:
              "why": gap_reason(ctx, g)} for n, g in enumerate(ctx.gaps, 1)]
 
 
+def left_out_note(ctx: Ctx) -> str:
+    """The concepts creative-mix left out of the gaps as the account's weakest: named, never silent."""
+    weak = sorted({(g["concept"], g.get("concept_roas")) for g in (ctx.mix or {}).get("gaps_left_out") or []}, key=lambda c: c[0])
+    if not weak:
+        return ""
+    return ('<p class="muted">Left out as your weakest concepts (bottom quarter of your always-on ROAS, so not worth porting to another '
+            'format as they are): %s.</p>' % esc(", ".join("%s (ROAS %s)" % (_plain(c), "n/a" if r is None else "%.2fx" % r) for c, r in weak)))
+
+
 def gap_list(ctx: Ctx) -> Tuple[str, str]:
     if not ctx.mix:
         return empty_state(*NO_MIX)
     if ctx.mix.get("concepts_unread"):
         return UNREAD_PANEL % esc(ctx.mix["concepts_unread_message"]), "empty"
     if not ctx.gaps:
-        return empty_state("creative-mix found no gap worth testing: no empty or single-ad cell sits beside a proven top-quarter concept or format.",
-                           "Widen the window, lower the minimum proven spend in creative-mix, or add more concepts and formats to compare.")
+        html, state = empty_state("creative-mix found no gap worth testing: no empty or single-ad cell sits beside a proven top-quarter concept or format.",
+                                  "Widen the window, lower the minimum proven spend in creative-mix, or add more concepts and formats to compare.")
+        return html + left_out_note(ctx), state
 
     rows = ['<tr class="gap" data-gap="%d"><td data-label="Gap"><b>#%d %s</b></td><td data-label="Why test it">%s</td></tr>'
             % (g["number"], g["number"], esc(g["label"]), esc(g["why"])) for g in gap_rows(ctx)]
@@ -2038,7 +2048,7 @@ def gap_list(ctx: Ctx) -> Tuple[str, str]:
     note = ('<p class="muted">A gap is an empty or single-ad cell beside a concept or format in the top quarter of your own ROAS, with at least %s of always-on '
             'spend behind it (an arbitrary default, set in creative-mix). The top %d show here (N=%d); the numbers match the outlines on the heatmap.</p>'
             % (esc(ctx.money(floor)) if floor is not None else "the proven spend", ctx.top_n, ctx.top_n))
-    return lead + table(head, rows[:ctx.top_n], stack=True) + rest + note, "data"
+    return lead + table(head, rows[:ctx.top_n], stack=True) + rest + left_out_note(ctx) + note, "data"
 
 
 # ----- Briefing -----

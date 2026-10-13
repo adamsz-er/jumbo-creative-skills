@@ -354,53 +354,83 @@ class ConnectorFieldsTest(unittest.TestCase):
 
 
 class ClickBasisTest(unittest.TestCase):
-    """One click basis per dataset: link clicks when any row has them, all clicks only when none does; never a partial sum."""
+    """One click basis per dataset. Ads Manager leaves a zero link-click cell blank, so a file that never writes an explicit 0
+    counts its blanks as 0 and says so; a file that does write zeros has genuinely unknown blanks, and an ad with one on a day
+    with clicks reads n/a rather than a rate over part of its days. All clicks only when the file has no link clicks at all."""
 
     STAFF = "120000000021"
 
     @staticmethod
-    def rows(blank):
+    def fixture(edit):
         rows = list(csv.DictReader(open(FIXTURE, newline="", encoding="utf-8")))
         for n, row in enumerate(rows):
-            if blank(row, n):
-                row["Link clicks"] = ""
+            edit(row, n)
         return cm.load_rows(rows)
 
-    def ads(self, blank):
-        return {a["ad_id"]: a for a in cm.aggregate_by_ad(self.rows(blank))}
+    def ads(self, edit):
+        return {a["ad_id"]: a for a in cm.aggregate_by_ad(self.fixture(edit))}
 
-    def test_one_ad_without_link_clicks_reads_n_a_and_its_peers_are_unchanged(self):
-        clean = self.ads(lambda r, n: False)
-        blanked = self.ads(lambda r, n: r["Ad ID"] == self.STAFF)
-        for metric in ("cvr", "add_to_cart_rate", "ctr"):
-            self.assertIsNone(blanked[self.STAFF][metric], metric)
-            self.assertRegex(cm.format_value(blanked[self.STAFF], metric), r"^n/a \(link clicks missing on \d+ days with clicks\)$")
+    @staticmethod
+    def export(link_cells):
+        """A small synthetic export shaped like Ads Manager's: one ad, one row per day, link clicks as written."""
+        return cm.load_rows([{"Day": "2026-03-%02d" % (i + 1), "Ad name": "trail | static | house | bau | p | t | 2026-03-01",
+                              "Ad ID": "a1", "Amount spent (USD)": 50, "Impressions": 4000, "Link clicks": cell,
+                              "Clicks (all)": 30, "Adds to cart": 3, "Purchases": 1, "Purchases conversion value": 80}
+                             for i, cell in enumerate(link_cells)])
+
+    def test_a_file_that_never_writes_zero_counts_blanks_as_zero_and_says_so(self):
+        ad = cm.aggregate_by_ad(self.export(["20", "", "40"]))[0]
+        self.assertEqual(ad["link_clicks"], 60.0)
+        self.assertAlmostEqual(ad["cvr"], 3 / 60 * 100)
+        self.assertIn("1 ad-day had a blank link-click cell, counted as 0 (exports leave zeros blank).", cm.click_basis_line([ad]))
+
+    def test_a_file_that_writes_zeros_reads_a_blank_on_a_click_day_as_unknown(self):
+        ad = cm.aggregate_by_ad(self.export(["20", "", "0", "40"]))[0]
+        self.assertIsNone(ad["cvr"])
+        self.assertEqual(cm.format_value(ad, "cvr"), "n/a (link clicks missing on 1 days with clicks)")
+        self.assertNotIn("counted as 0", cm.click_basis_line([ad]))
+        self.assertIn("n/a for 1 ad", cm.click_basis_line([ad]))
+
+    def test_staff_picks_blank_on_some_days_counts_zero_unless_the_file_writes_zeros(self):
+        blank_some = lambda r, n: r.update({"Link clicks": ""}) if r["Ad ID"] == self.STAFF and n % 2 == 0 else None
+        counted = self.ads(blank_some)[self.STAFF]
+        self.assertIsNotNone(counted["cvr"])
+        self.assertGreater(counted["link_click_blanks"], 0)
+
+        def blank_and_one_zero(r, n):
+            blank_some(r, n)
+            if n == 1:
+                r["Link clicks"] = "0"
+        self.assertIsNone(self.ads(blank_and_one_zero)[self.STAFF]["cvr"])
+
+    def test_one_ad_with_every_link_cell_blank_reads_zero_link_clicks_and_its_peers_are_unchanged(self):
+        clean = self.ads(lambda r, n: None)
+        blanked = self.ads(lambda r, n: r.update({"Link clicks": ""}) if r["Ad ID"] == self.STAFF else None)
+        self.assertEqual(blanked[self.STAFF]["link_clicks"], 0.0)
+        self.assertEqual(cm.format_value(blanked[self.STAFF], "cvr"), "n/a (zero link_clicks)")
         for key, ad in clean.items():
             if key != self.STAFF:
                 self.assertEqual(ad["add_to_cart_rate"], blanked[key]["add_to_cart_rate"], key)
-
-    def test_link_clicks_blank_on_some_click_days_is_n_a_not_a_partial_rate(self):
-        ads = self.ads(lambda r, n: r["Ad ID"] == self.STAFF and n % 2 == 0)
-        self.assertIsNone(ads[self.STAFF]["cvr"])
-        self.assertIsNone(ads[self.STAFF]["add_to_cart_rate"])
+        self.assertIn("counted as 0 (exports leave zeros blank)", cm.click_basis_line(list(blanked.values())))
 
     def test_no_link_clicks_anywhere_falls_back_to_all_clicks_for_every_ad_and_says_so(self):
-        ads = list(self.ads(lambda r, n: True).values())
+        ads = list(self.ads(lambda r, n: r.update({"Link clicks": ""})).values())
         self.assertTrue(all(cm.metric_basis(a, "cvr")["denominator"] == "clicks" for a in ads))
         self.assertIn("all clicks, because the data has no link clicks", cm.click_basis_line(ads))
 
     def test_a_blank_link_click_cell_on_a_day_with_no_clicks_counts_as_zero(self):
-        rows = list(csv.DictReader(open(FIXTURE, newline="", encoding="utf-8")))
-        target = next(r for r in rows if r["Ad ID"] == self.STAFF)
-        target["Clicks (all)"] = "0"
-        clean = {a["ad_id"]: a for a in cm.aggregate_by_ad(cm.load_rows([dict(r) for r in rows]))}
-        target["Link clicks"] = ""
-        blanked = {a["ad_id"]: a for a in cm.aggregate_by_ad(cm.load_rows(rows))}
-        self.assertIsNotNone(blanked[self.STAFF]["add_to_cart_rate"])
-        self.assertNotAlmostEqual(clean[self.STAFF]["add_to_cart_rate"], 0.0)
+        ad = cm.aggregate_by_ad(cm.load_rows([dict(r, **{"Clicks (all)": 0}) if i == 1 else r for i, r in enumerate(
+            {"Day": "2026-03-0%d" % (i + 1), "Ad ID": "a1", "Ad name": "x | static | h | bau | p | t | 2026-03-01", "Impressions": 4000,
+             "Link clicks": c, "Clicks (all)": 30, "Purchases": 1} for i, c in enumerate(["20", "", "0"]))]))[0]
+        self.assertAlmostEqual(ad["cvr"], 3 / 20 * 100)
 
     def test_the_basis_line_names_the_ads_left_n_a(self):
-        ads = list(self.ads(lambda r, n: r["Ad ID"] == self.STAFF).values())
+        def edit(r, n):
+            if r["Ad ID"] == self.STAFF:
+                r["Link clicks"] = ""
+            if n == 0:
+                r["Link clicks"] = "0"
+        ads = list(self.ads(edit).values())
         line = cm.click_basis_line(ads)
         self.assertIn("use link clicks", line)
         self.assertIn(self.STAFF, line)

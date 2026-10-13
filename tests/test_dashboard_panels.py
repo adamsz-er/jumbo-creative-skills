@@ -1266,5 +1266,19 @@ class PreviewCountTest(unittest.TestCase):
         self.assertIn("Previews for 0 of 3 ads", panels.previews_note(ctx))
 
 
+
+class LeftOutGapsTest(unittest.TestCase):
+    def test_the_white_space_panel_names_the_concepts_left_out_of_the_gaps(self):
+        rows = cm.load_rows(str(FIXTURE))
+        mix = {"gaps": [{"concept": "social-proof", "format": "carousel", "ads": 0, "why": ["top format"], "strength": 1, "concept_roas": 6.68}],
+               "gaps_left_out": [{"concept": "before-after", "format": "carousel", "concept_roas": 2.72}], "min_proven_spend": 900.0,
+               "by_format": [], "by_concept": []}
+        html, _ = panels.gap_list(panels.Ctx(rows=rows, mix=mix, currency="USD"))
+        self.assertIn("Left out as your weakest concepts", html)
+        self.assertIn("Before after", html)
+        empty, _ = panels.gap_list(panels.Ctx(rows=rows, mix=dict(mix, gaps=[]), currency="USD"))
+        self.assertIn("Before after", empty)
+
+
 if __name__ == "__main__":
     unittest.main()

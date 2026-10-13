@@ -51,12 +51,14 @@ NUMERIC_FIELDS = (
     "link_clicks", "clicks", "conversions", "conversion_value", "add_to_carts",
     "revenue", "leads", "shares", "saves", "comments",
     "landing_page_views", "checkouts", "new_customers",
-    "link_click_gaps",
+    "link_click_gaps", "link_click_blanks",
 )
 # Days whose link clicks are blank while all clicks are not. Set on every row of a dataset that carries link clicks
 # anywhere (load_rows), so it sums with the other fields: above 0 makes every link-click rate n/a for that ad or total,
 # and its presence means the dataset's click basis is link clicks, so no rate ever falls back to all clicks.
 LINK_GAPS = "link_click_gaps"
+# Days whose blank link-click cell was counted as 0 because the file never writes an explicit 0 (Ads Manager leaves zeros blank).
+LINK_BLANKS = "link_click_blanks"
 COST_PER_VIEW = "cost_per_action_type:video_view"
 DERIVED_3S = "derived: spend / cost per 3-second view"
 NOT_DERIVED_3S = "not derived: cost per 3-second view is rounded too coarsely"
@@ -351,16 +353,21 @@ def load_rows(path_or_rows: Union[str, "os.PathLike[str]", Iterable[Dict[str, An
 
 
 def _settle_click_basis(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """One click basis for the whole dataset. With link clicks on any row, every row is on link clicks: a blank cell on a
-    day with no clicks (or no click count) is 0, and a blank on a day with clicks is counted in `link_click_gaps`, which
-    makes that ad's link-click rates n/a rather than a rate over part of its days. With none, rates use all clicks."""
+    """One click basis for the whole dataset. With link clicks on any row, every row is on link clicks. Ads Manager leaves a zero
+    cell blank, so in a file that never writes an explicit 0 a blank counts as 0 and is tallied in `link_click_blanks` for the
+    basis line. In a file that does write zeros a blank is unknown: on a day with no clicks (or no click count) it is still 0,
+    and on a day with clicks it is tallied in `link_click_gaps`, which makes that ad's link-click rates n/a rather than a rate
+    over part of its days. With no link clicks at all, rates use all clicks."""
     if not any(r.get("link_clicks") is not None for r in rows):
         return rows
+    writes_zeros = any(r.get("link_clicks") == 0 for r in rows)
     for row in rows:
-        gap = row.get("link_clicks") is None and bool(row.get("clicks"))
-        if row.get("link_clicks") is None and not gap:
+        blank = row.get("link_clicks") is None
+        gap = blank and writes_zeros and bool(row.get("clicks"))
+        if blank and not gap:
             row["link_clicks"] = 0.0
         row[LINK_GAPS] = 1.0 if gap else 0.0
+        row[LINK_BLANKS] = 1.0 if blank and not writes_zeros else 0.0
     return rows
 
 
@@ -371,9 +378,12 @@ def click_basis_line(ads: Sequence[Dict[str, Any]]) -> str:
     """The one sentence every output prints about which clicks its rates count."""
     if any(a.get(LINK_GAPS) is not None for a in ads):
         gaps = [str(a.get("ad_id") or a.get("ad_name")) for a in ads if (a.get(LINK_GAPS) or 0) > 0]
+        blanks = int(sum(a.get(LINK_BLANKS) or 0 for a in ads))
         return CLICK_RATES + " use link clicks." + (
             " They are n/a for %d ad%s whose link clicks are missing on days with clicks: %s." % (
-                len(gaps), "" if len(gaps) == 1 else "s", ", ".join(gaps)) if gaps else "")
+                len(gaps), "" if len(gaps) == 1 else "s", ", ".join(gaps)) if gaps else "") + (
+            " %d ad-day%s had a blank link-click cell, counted as 0 (exports leave zeros blank)." % (
+                blanks, "" if blanks == 1 else "s") if blanks else "")
     if any(a.get("clicks") is not None for a in ads):
         return (CLICK_RATES + " use all clicks, because the data has no link clicks. All clicks include likes, profile "
                 "taps and \"see more\", so purchase and add-to-cart rates read lower than they would over link clicks.")
