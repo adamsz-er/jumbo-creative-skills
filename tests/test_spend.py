@@ -270,5 +270,22 @@ class CliTest(unittest.TestCase):
         self.assertEqual(run_cli(str(FIXTURE), "--pareto-share", "0").returncode, 2)
 
 
+
+class VerdictWordsTest(unittest.TestCase):
+    def test_the_verdict_breakdown_shows_the_words_a_user_reads(self):
+        root = Path(__file__).resolve().parents[1]
+        fixture = str(root / "examples" / "acme" / "ads_daily.csv")
+        with tempfile.TemporaryDirectory() as tmp:
+            verdicts = Path(tmp) / "verdicts.json"
+            verdicts.write_text(subprocess.run([sys.executable, "-I", str(root / "skills" / "keep-or-kill" / "scripts" / "verdicts.py"),
+                                                fixture, "--target", "roas=3", "--json"], capture_output=True, text=True, check=True).stdout)
+            text = subprocess.run([sys.executable, "-I", str(SCRIPTS / "spend.py"), fixture, "--verdicts", str(verdicts)],
+                                  capture_output=True, text=True, check=True).stdout
+        block = text.split("  Verdict:\n")[1].split("\n\n")[0]
+        self.assertIn("    Refresh: 1 ad;", block)
+        self.assertIn("    Keep: 17 ads;", block)
+        self.assertNotIn("iterate", block)
+
+
 if __name__ == "__main__":
     unittest.main()

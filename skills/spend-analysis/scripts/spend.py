@@ -96,6 +96,10 @@ def _age_band(age: Optional[int], edges: Sequence[int], labels: Sequence[str]) -
     return labels[sum(1 for e in edges if age >= e)]
 
 
+# verdict group -> the word a user reads (keep-or-kill's own labels); the group stays an id in --json
+GROUP_WORDS = {"keep": "Keep", "scale": "Scale", "pause": "Pause", "iterate": "Refresh", "check": "Check before cutting"}
+
+
 def verdict_group(verdict_id: Optional[str]) -> str:
     if verdict_id is None:
         return "no verdict"
@@ -374,7 +378,7 @@ def render(result: Dict[str, Any]) -> str:
         out.append("  %s:" % title)
         for r in rows:
             out.append("    %s: %d ad%s; spend %s (%s); purchases %s; value %s; roas %s; cpa %s; vs account %s" % (
-                r["value"], r["ads"], "" if r["ads"] == 1 else "s", _money(result, r["spend"]), _pct(r["spend_share"]),
+                GROUP_WORDS.get(r["value"], r["value"]) if field == "verdict_group" else r["value"], r["ads"], "" if r["ads"] == 1 else "s", _money(result, r["spend"]), _pct(r["spend_share"]),
                 "n/a (missing conversions)" if r["purchases"] is None else "%.0f" % r["purchases"],
                 "n/a (missing conversion_value)" if r["purchase_value"] is None else "%.2f" % r["purchase_value"],
                 _cell(r["roas"], r["roas_note"]), _cell(r["cpa"], r["cpa_note"]),

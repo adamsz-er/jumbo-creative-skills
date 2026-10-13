@@ -465,7 +465,7 @@ def render_persona(result: Dict[str, Any]) -> str:
 
 def _angle_lines(result: Dict[str, Any]) -> List[str]:
     out = ["Angles (concepts) by how their ads did: winning = a top-quartile ad and no weak one; losing = weak or "
-           "never-worked ads, no top-quartile one, and pooled payback worse than the account's; weakest in its format = weak "
+           "never-worked ads, no top-quartile one, and a combined return across its ads worse than the account's; weakest in its format = weak "
            "for its format but paying back at or above the account (or the account figure is n/a), so not a losing angle; "
            "mixed = both; middle = graded, none top or weak; ungraded = too few comparable ads to grade; unjudged = too "
            "little delivery:"]
