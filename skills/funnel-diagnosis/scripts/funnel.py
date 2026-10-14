@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import creative_metrics as cm  # noqa: E402
 
-CALL_ORDER = ("site", "both", "creative", "neither", "unjudged", "unreadable")
+CALL_ORDER = ("site", "both", "creative", "untested", "neither", "unjudged", "unreadable")
 # The export column that carries each field a site step needs: named only when a step is n/a because that field is missing.
 EXPORT_COLUMNS = {
     "landing_page_views": "Landing page views",
@@ -207,7 +207,7 @@ def render(result: Dict[str, Any]) -> str:
     if unread:
         out.append("  could not be read: %s%s" % (", ".join("%s %s" % (_label(s["metric"]), s["note"]) for s in unread),
                                                    _remedy([s["note"] for s in unread])))
-    out += ["", "Per ad (site, both, creative, neither, unjudged, unreadable; within a call, ads with a step that fell first, then by spend):"]
+    out += ["", "Per ad (site, both, creative, untested, neither, unjudged, unreadable; within a call, ads with a step that fell first, then by spend):"]
     for read in result["ads"]:
         out.append("%s (%s): %s" % (read.get("ad_name") or read["ad"], read["ad"], read["call"]))
         out.append("  " + read["reason"])
@@ -216,7 +216,8 @@ def render(result: Dict[str, Any]) -> str:
                 out.append("  weak: %s, %s" % (_label(step["metric"]), step["why"]))
         for step in read["steps"]:
             if step["untested"]:
-                out.append("  could not test: %s is bottom quartile of its group, but %s" % (_label(step["metric"]), step["untested"]))
+                out.append("  could not test: %s is bottom quartile of its group, but the gap can't be tested: %s" % (
+                    _label(step["metric"]), step["untested"]))
         for step in read["steps"]:
             if not step["readable"]:
                 out.append("  %s: %s%s" % (_label(step["metric"]), step["note"], _remedy([step["note"]])))

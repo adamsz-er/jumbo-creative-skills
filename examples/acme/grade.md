@@ -80,10 +80,10 @@ What to do, by first broken step (fix that step first, then re-read; 'also weak'
   pays back: The funnel reads normally but payback is weak: check price, margin, offer and attribution before blaming the creative.
     120000000013
 
-Steps skipped, never read as healthy:
-  hook_rate not graded (missing video_views_3s); hold_rate not graded (missing video_thruplay): 13 ads (120000000003, 120000000009, 120000000014, 120000000021, 120000000026, 120000000007, 120000000004, 120000000005, 120000000012, 120000000024, 120000000029, 120000000013, 120000000025)
-  hold_rate not graded (missing video_thruplay): 1 ads (120000000011)
-  hook_rate not graded (missing video_views_3s); hold_rate not graded (missing video_thruplay); cpa not graded (zero conversions): 1 ads (120000000017)
+Steps skipped, never read as healthy (one line per step: quote its count, never recount):
+  hook_rate not graded (missing video_views_3s) on 14 ads: 120000000003, 120000000009, 120000000014, 120000000017, 120000000021, 120000000026, 120000000007, 120000000004, 120000000005, 120000000012, 120000000024, 120000000029, 120000000013, 120000000025
+  hold_rate not graded (missing video_thruplay) on 15 ads: 120000000003, 120000000009, 120000000011, 120000000014, 120000000017, 120000000021, 120000000026, 120000000007, 120000000004, 120000000005, 120000000012, 120000000024, 120000000029, 120000000013, 120000000025
+  cpa not graded (zero conversions) on 1 ad: 120000000017
 
 LOW = bottom quartile, top = top quartile, mid = middle; n/a = missing or zero operand, never 0.
 ```

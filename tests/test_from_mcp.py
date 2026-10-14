@@ -81,7 +81,7 @@ class LoaderMappingTest(unittest.TestCase):
 
     def test_age_comes_from_created_time(self):
         ad = next(a for a in cm.aggregate_by_ad(self.rows) if a["ad_id"] == VIDEO_AD)
-        self.assertEqual(ad["age_days"], (dt.date(2026, 3, 3) - dt.date(2026, 1, 15)).days)
+        self.assertEqual(ad["age_days"], (dt.date(2026, 3, 3) - dt.date(2026, 1, 15)).days + 1)
         self.assertEqual(ad["age_basis"], "created_time")
 
     def test_age_falls_back_to_first_delivery_and_says_so(self):
@@ -127,7 +127,7 @@ class ReviewFixesTest(unittest.TestCase):
         later = cm.load_rows([{"ad_name": "a", "date_start": "2026-03-01", "created_time": "2026-02-25T00:00:00+0000",
                                "impressions": 100}, {"ad_name": "a", "date_start": "2026-03-04", "impressions": 100}])
         ad = cm.aggregate_by_ad(later)[0]
-        self.assertEqual((ad["age_days"], ad["age_basis"]), (7, "created_time"))
+        self.assertEqual((ad["age_days"], ad["age_basis"]), (8, "created_time"))
 
     def test_a_created_time_after_first_delivery_falls_back_to_first_delivery(self):
         rows = cm.load_rows([{"ad_name": "a", "date_start": "2026-03-01", "created_time": "2026-03-02T00:00:00+0000",

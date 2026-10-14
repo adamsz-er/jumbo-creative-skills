@@ -95,6 +95,9 @@ class AngleWordsTest(unittest.TestCase):
 class QuoteTheScriptTest(unittest.TestCase):
     """Counts come from the script's output, never from a hand count of a list."""
 
+    def test_grader_quotes_its_skipped_step_counts(self):
+        self.assertIn("Never count n/a rows in the table yourself.", read("creative-grader", "SKILL.md"))
+
     def test_grader_quotes_its_counts(self):
         self.assertIn("Quote every count (ads per format, per group, per diagnosis) from the script's output",
                       read("creative-grader", "SKILL.md"))

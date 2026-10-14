@@ -87,14 +87,21 @@ class AfterClickAgreementTest(unittest.TestCase):
         data = daily([lambda d, n=n: 30 + n for n in range(3)] + [lambda d: 8] + [lambda d, n=n: 33 + n for n in range(4)], adds=20)
         graded, funnels, text = reads(data)
         grade_band = graded[TARGET]["grades"]["cart_to_purchase_rate"]["band"]
-        self.assertTrue(grade_band.startswith("not graded (bottom quartile of its group, but"), grade_band)
-        self.assertIn("more purchases than adds to cart, so the gap can't be tested", grade_band)
+        self.assertEqual(grade_band, "not graded (bottom quartile of its group, but the gap can't be tested: its group has more purchases than "
+                                     "adds to cart)")
         self.assertNotEqual(graded[TARGET]["diagnosis"]["step"], "post-click")
         self.assertTrue(any("cart_to_purchase_rate" in s for s in graded[TARGET]["diagnosis"]["skipped"]))
         step = next(s for s in funnels[TARGET]["steps"] if s["metric"] == "cart_to_purchase_rate")
         self.assertFalse(step["weak"])
         self.assertIn("more purchases than adds to cart", step["untested"])
-        self.assertIn("could not test: cart to purchase rate is bottom quartile of its group, but its group has more purchases", text)
+        self.assertIn("could not test: cart to purchase rate is bottom quartile of its group, but the gap can't be tested: its group has "
+                      "more purchases than adds to cart", text)
+        self.assertEqual(funnels[TARGET]["call"], "untested")
+        self.assertEqual(funnels[TARGET]["reason"], "no step is weak or falling, but cart to purchase rate could not be tested (its group "
+                                                    "has more purchases than adds to cart), so the funnel is not known to be fine")
+        self.assertNotIn("reads normally", graded[TARGET]["diagnosis"]["action"])
+        self.assertIn("cart to purchase rate could not be tested (its group has more purchases than adds to cart), so the funnel is "
+                      "not known to read normally", graded[TARGET]["diagnosis"]["action"])
 
     def test_the_significance_test_pools_only_the_peers_the_band_was_read_against(self):
         rows = [dict(r) for r in rows_raw([88, 89, 90, 91, 92, 93, 94, 95], [30, 30, 31, 27, 31, 30, 31, 30], 20)]

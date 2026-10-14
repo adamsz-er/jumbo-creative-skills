@@ -183,6 +183,18 @@ def judge(rows, **kwargs):
     return {r["ad"]: r for r in verdicts.judge_ads(cm.load_rows(rows), **kwargs)}
 
 
+class YoungDaysBoundaryTest(unittest.TestCase):
+    """An ad with exactly --young-days delivery days has delivered long enough to judge; one day fewer is still learning."""
+
+    def test_exactly_young_days_of_delivery_is_judged_one_fewer_is_learning(self):
+        rows = crowd(6, days=9) + make_rows("acme-five", days=5) + make_rows("acme-four", days=4)
+        judged = judge(rows, young_days=5)
+        self.assertEqual(judged["acme-five"]["age_days"], 5)
+        self.assertFalse(judged["acme-five"]["learning"])
+        self.assertEqual(judged["acme-four"]["age_days"], 4)
+        self.assertTrue(judged["acme-four"]["learning"])
+
+
 class SafetyTest(unittest.TestCase):
     def test_true_pause_in_a_big_group_is_confident(self):
         weakest = judge(crowd(11), targets=MISSED)["acme-ad-01"]

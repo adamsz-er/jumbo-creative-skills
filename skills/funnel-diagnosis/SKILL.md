@@ -43,6 +43,7 @@ Each step is weak when either holds, both against the account itself:
 | site | a site step is weak while the ad still earns attention and clicks: check the page first |
 | creative | a step the ad controls is weak while the site holds: work on the ad |
 | both | weak on both sides: check the page before judging the creative |
+| untested | nothing is weak or falling, but a step's gap to its group could not be tested (it names the step and why): never read it as fine |
 | neither | nothing is weak against the ad's group or its own start |
 | unjudged | too few delivery days and too few comparable ads to judge a step on each side: no call |
 | unreadable | no site step has data: add the column it names |

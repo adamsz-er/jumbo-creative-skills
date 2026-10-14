@@ -5,7 +5,7 @@ Generated, not hand-written, on the fictional Acme Outdoor Co. fixture (syntheti
 `python3 -I skills/funnel-diagnosis/scripts/funnel.py examples/acme/ads_daily_extended.csv`
 
 ```text
-Funnel diagnosis: 30 ads judged: 5 site, 3 both, 13 creative, 9 neither, 0 unjudged, 0 unreadable.
+Funnel diagnosis: 30 ads judged: 5 site, 3 both, 13 creative, 0 untested, 9 neither, 0 unjudged, 0 unreadable.
 problem-first | ugc-video | creator-02 | bau | rain-shell | lofi | 2026-03-01: the ad still earns clicks (ctr holds) while landing page view rate fell 46% since its first 6 delivery days: check the page before touching the creative.
 Click-based rates (CTR, CPC, purchase and add-to-cart rates) use link clicks.
 
@@ -14,7 +14,7 @@ account-wide: a sitewide problem (checkout, payment, shipping, stock) shows here
   hook rate: down 16% from the account's first 6 days to its last
   ctr: down 10% from the account's first 6 days to its last
 
-Per ad (site, both, creative, neither, unjudged, unreadable; within a call, ads with a step that fell first, then by spend):
+Per ad (site, both, creative, untested, neither, unjudged, unreadable; within a call, ads with a step that fell first, then by spend):
 problem-first | ugc-video | creator-02 | bau | rain-shell | lofi | 2026-03-01 (120000000002): site
   the ad still earns attention and clicks while a step on the site is weak or falling: check the page first
   weak: landing page view rate, bottom quartile of its group, down 46% since its first 6 delivery days

@@ -568,7 +568,8 @@ def aggregate_by_ad(rows: Sequence[Dict[str, Any]],
 
     Adds first_date, last_date, active_days (days with delivery), age_days and
     age_basis. With a `created_time` on the rows (and no later than first
-    delivery), age is the days from creation to the latest date in the data.
+    delivery), age is the days from creation to the latest date in the data, both
+    days counted, as delivery days are.
     Without one it is the days the ad delivered in the window (an ad live 27 to
     30 March is 4 days old), so an ad older than the window looks younger than
     it is, and age_basis says so. Reach is summed across rows, so with
@@ -615,7 +616,7 @@ def aggregate_by_ad(rows: Sequence[Dict[str, Any]],
             created = None
         start = created or first
         if created and data_end:
-            ad["age_days"] = (data_end - created).days
+            ad["age_days"] = (data_end - created).days + 1
         else:
             ad["age_days"] = ad["active_days"] if start and data_end else None
         ad["age_basis"] = (AGE_FROM_CREATED if created else AGE_FROM_DELIVERY) if ad["age_days"] is not None else None
@@ -1818,6 +1819,7 @@ FUNNEL_CALLS = {
     "creative": "a step the ad controls is weak or falling while the site steps hold: the creative is the place to work",
     "both": "steps on both sides are weak or falling: check the page before judging the creative",
     "neither": "no funnel step is weak or falling against the ad's own group or its own start",
+    "untested": "no step is weak or falling, but a step could not be tested, so the funnel is not known to be fine",
     "unjudged": "too little history and too few comparable ads to judge a step on each side: no call",
     "unreadable": "the site steps cannot be read from this data",
 }
@@ -1857,9 +1859,9 @@ def _untestable(pooled: Dict[str, Any], ad: Dict[str, Any], metric: str) -> str:
         basis = metric_basis(row, metric)
         num, den = rate_counts(row, metric)
         if num is not None and den and num > den:
-            return "%s more %s than %s, so the gap can't be tested" % (
+            return "%s more %s than %s" % (
                 who, COUNT_WORDS.get(basis["numerator"], basis["numerator"]), COUNT_WORDS.get(basis["denominator"], basis["denominator"]))
-    return "its group has no counts to test the gap against"
+    return "its group has no counts to test against"
 
 
 def below_group(ad: Dict[str, Any], ads: Sequence[Dict[str, Any]], metric: str, grade: Dict[str, Any],
@@ -1910,7 +1912,8 @@ def funnel_read(rows: Sequence[Dict[str, Any]], ad: Dict[str, Any], ads: Sequenc
     A step is weak when either holds. Purchase rate is reported as context and never decides the call. When every
     weak site step comes after the cart (CART_STEPS), the reason points at checkout, price and shipping.
     The call is "site" when a site step is weak and no attention step is,
-    "creative" for the reverse, "both", "neither", or "unreadable" when no site step has data. A call that
+    "creative" for the reverse, "both", "neither", or "unreadable" when no site step has data. "neither" with a step
+    whose gap could not be tested is "untested", and a "creative" call with one says the site is not known to hold. A call that
     says one side holds needs at least one step on that side that could be judged (a trend or a graded band);
     otherwise the call is "unjudged". A step with no value is never read as fine: it is listed as missing.
     """
@@ -1957,7 +1960,15 @@ def funnel_read(rows: Sequence[Dict[str, Any]], ad: Dict[str, Any], ads: Sequenc
     else:
         call = "unjudged"
     cart_only = bool(site) and all(s["metric"] in CART_STEPS for s in site)
-    return {"ad": key, "call": call, "reason": CART_CALLS[call] if cart_only and call in CART_CALLS else FUNNEL_CALLS[call],
+    reason = CART_CALLS[call] if cart_only and call in CART_CALLS else FUNNEL_CALLS[call]
+    untested = [s for s in steps if s["untested"] and s["side"] in ("attention", "site")]
+    if untested and call in ("neither", "creative"):
+        named = "; ".join("%s could not be tested (%s)" % (s["metric"].replace("_", " "), s["untested"]) for s in untested)
+        if call == "neither":
+            call, reason = "untested", "no step is weak or falling, but %s, so the funnel is not known to be fine" % named
+        else:
+            reason = "a step the ad controls is weak or falling; %s, so the site is not known to hold" % named
+    return {"ad": key, "call": call, "reason": reason,
             "weak_steps": [s["metric"] for s in attention + site], "steps": steps,
             "trend_readable": windows is not None,
             "missing_site_steps": [s["metric"] for s in steps if s["side"] == "site" and not s["readable"]],

@@ -178,6 +178,13 @@ class AggregateTest(unittest.TestCase):
         self.assertEqual((one["first_date"], one["last_date"]), ("2026-03-01", "2026-03-04"))
         self.assertEqual(one["active_days"], 2)
 
+    def test_an_ad_live_27_to_30_march_is_4_days_old_with_or_without_a_creation_date(self):
+        rows = [{"ad_id": "x", "ad_name": "x", "date": "2026-03-%02d" % d, "impressions": 100, "spend": 1.0} for d in (27, 28, 29, 30)]
+        with_created = [dict(r, created_time="2026-03-27T09:00:00+0000") for r in rows]
+        for data, basis in ((rows, cm.AGE_FROM_DELIVERY), (with_created, cm.AGE_FROM_CREATED)):
+            ad = cm.aggregate_by_ad(cm.load_rows(data))[0]
+            self.assertEqual((ad["age_days"], ad["age_basis"]), (4, basis))
+
     def test_age_without_a_creation_date_is_the_days_the_ad_delivered(self):
         ads = {a["ad_id"]: a for a in cm.aggregate_by_ad(self.rows())}
         self.assertEqual((ads["1"]["first_date"], ads["1"]["last_date"], ads["1"]["age_days"]), ("2026-03-01", "2026-03-04", 2))

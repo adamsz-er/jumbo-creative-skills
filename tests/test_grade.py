@@ -173,6 +173,18 @@ class FixtureTest(unittest.TestCase):
         self.assertNotIn("use link clicks", header)
 
 
+class SkippedCountTest(unittest.TestCase):
+    """Each skipped step is printed once with its own count, so an answer quotes it rather than counting n/a rows."""
+
+    def test_each_skipped_step_has_one_line_with_its_count(self):
+        rows = cm.load_rows(str(FIXTURE))
+        text = grade.render(rows, grade.grade_ads(rows))
+        hook = [l for l in text.splitlines() if l.startswith("  hook_rate not graded")]
+        self.assertEqual(len(hook), 1, hook)
+        self.assertTrue(hook[0].startswith("  hook_rate not graded (missing video_views_3s) on 14 ads: "), hook[0])
+        self.assertEqual(len(hook[0].split(": ", 1)[1].split(", ")), 14)
+
+
 class ObjectiveAndGroupingTest(unittest.TestCase):
     def rows(self):
         rows = []
