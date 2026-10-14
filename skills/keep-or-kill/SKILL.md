@@ -34,7 +34,7 @@ python3 -I scripts/verdicts.py ads.csv --target cpa=40,roas=3   # the user's own
 
 `--young-days` (5), `--window` (6), `--min-impressions` (1000) and `--min-change` (8) are arbitrary defaults, as is `--top-n` (3, how many top-spend ads the concentration line counts), `--protect-top` (3, the biggest sellers are never paused unchecked), and so is the minimum of 5 comparable ads needed to grade within a group. Set them from the account: how long its ads take to settle, how many days make a fair comparison, and how much ctr, frequency and hook rate move from one week to the next when nothing is wrong. `--min-change` is a materiality size, not a fatigue benchmark. The output states the values used. The rules are in `references/verdict-rules.md`.
 
-**The site gets checked before a Pause.** When the data has landing page views, adds to cart or checkouts initiated, every would-be Pause is read through the funnel (`funnel-diagnosis` uses the same read). If the ad still earns attention and clicks while a step on the site is weak, the call is "Check before cutting" and the sentence names the weak step: fix the page before judging the ad. Without those columns the Pause stands, and the output names the missing steps.
+**The site gets checked before a Pause.** When the data has landing page views, adds to cart or checkouts initiated, every would-be Pause is read through the funnel (`funnel-diagnosis` uses the same read). If the ad still earns attention and clicks while a step on the site is weak, the call is "Check before cutting" and the sentence names the weak step: fix the page before judging the ad, or, when the only weak steps come after the cart (cart to checkout, cart to purchase), check checkout, price and shipping costs. Without those columns the Pause stands, and the output names the missing steps.
 
 **Targets decide "never worked".** Bottom quartile only means weaker than the account's other ads, which may still be profitable. So a never-worked ad is paused only when it also misses the user's own target for its payback measure (`--target cpa=40`, or `target:` in the profile's `Script settings`). With no target set it is "Check before cutting", and the sentence asks for one; when it meets a target it is "Check before cutting" too. Ask the user for their target cost per sale (or per click, per lead) and record it in the profile; never supply one yourself. A fatigued ad can still be paused without a target, because fatigue is a trend in the ad's own numbers.
 
@@ -72,7 +72,7 @@ Try:
 ## Common questions
 
 - **Why Check before cutting?** A weakness is not proven: mixed payback, small group, top seller or no target set.
-- **Why is an ad too early?** It is younger than `--young-days` or under `--min-impressions`.
+- **Why is an ad too early?** It has delivered on fewer than `--young-days` days (with a `created_time` in the data, it was created fewer than that many days ago), or it is under `--min-impressions`.
 - **Will it pause ads?** These skills never call a tool that changes your ad account. Your agent could, if you asked it to directly, through the Meta connector's own tools. It recommends.
 - **Can I set targets?** Yes: `--target cpa=40,roas=3` or in the profile.
 - **Refresh, or "keep, refresh queued"?** Refresh is this skill's verdict: the ad is tiring now and its concept still pays. "Keep, refresh queued" is a kept ad that fatigue-planner expects to tire soon, so its refresh is already on the calendar.

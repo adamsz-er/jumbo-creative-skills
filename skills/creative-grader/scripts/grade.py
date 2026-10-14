@@ -22,9 +22,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import creative_metrics as cm  # noqa: E402
 
-GRADED = ("cpm", "hook_rate", "hold_rate", "ctr", "cvr", "add_to_cart_rate", "cpa", "roas",
+GRADED = ("cpm", "hook_rate", "hold_rate", "ctr", "cvr", "add_to_cart_rate", "cart_to_purchase_rate", "cpa", "roas",
           "cpc", "cost_per_lead", "engagement_rate")
 LOW_VOLUME = "not graded (low volume)"
+# An after-click step in the bottom quartile but not significantly below its group (creative_metrics.below_group):
+# shown as graded, never a broken step, the same call funnel-diagnosis makes.
+NOT_SIGNIFICANT = "bottom quartile, not significantly below its group"
 
 HOOK_ACTION = "Change the first 3 seconds: the opening is not stopping the scroll."
 ACTIONS = {
@@ -35,6 +38,8 @@ ACTIONS = {
     "click": "People watch but few click: the call to action or the offer is weak.",
     "post-click": "Clicks arrive but do not convert: likely the landing page or the offer, not the creative. "
                   "Check the site and whether the page matches the message; also rule out an audience mismatch.",
+    "post-click cart": "People add to cart but do not buy: check checkout, price and shipping costs first, not the landing "
+                       "page or the creative.",
     "pays back": "The funnel reads normally but payback is weak: check price, margin, offer and attribution "
                  "before blaming the creative.",
 }
@@ -45,7 +50,7 @@ STEPS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
     ("hook", ("hook_rate",)),
     ("hold", ("hold_rate",)),
     ("click", ("ctr",)),
-    ("post-click", ("cvr", "add_to_cart_rate")),
+    ("post-click", cm.AFTER_CLICK_STEPS),
     ("pays back", ("cpa", "roas")),
 )
 
@@ -59,7 +64,8 @@ def diagnose(bands: Dict[str, str], notes: Sequence[str] = (),
     """Name the FIRST broken step reading the funnel in order, with its one-line action.
 
     `bands` maps metric id to its band. A step is broken when any of its metrics
-    is in the bottom quartile; post-click is only read while CTR is not bottom,
+    is in the bottom quartile (an after-click metric only when it is also significantly
+    below its group, see grade_ads); post-click is only read while CTR is not bottom,
     since a weak CTR is already the broken step. Steps whose metrics could not
     be graded are listed under `skipped`, never read as healthy. `payback` names
     the metrics that decide the last step for the ad's campaign objective.
@@ -80,9 +86,10 @@ def diagnose(bands: Dict[str, str], notes: Sequence[str] = (),
                 "also_weak": [], "skipped": skipped}
     step, metrics = broken[0]
     also_weak = [m for _, later in broken[1:] for m in later]
+    cart_only = step == "post-click" and all(m in cm.CART_STEPS for m in metrics)
     return {"step": step, "metrics": metrics, "also_weak": also_weak,
             "summary": "%s (%s bottom quartile)" % (step, ", ".join(metrics)),
-            "action": ACTIONS[step], "skipped": skipped}
+            "action": ACTIONS["post-click cart" if cart_only else step], "skipped": skipped}
 
 
 def grade_ads(rows: Sequence[Dict[str, Any]], group_by: Optional[Sequence[str]] = None,
@@ -98,16 +105,19 @@ def grade_ads(rows: Sequence[Dict[str, Any]], group_by: Optional[Sequence[str]] 
     for ad in ads:
         graded = (ad.get("impressions") or 0) >= min_impressions
         info = cm.payback_metrics(ad.get("objective"))
-        pool = [a for a in ads if cm.payback_metrics(a.get("objective"))["objective"] == info["objective"]]
         grades = {}
         for metric in GRADED:
-            grade = cm.grade_with_fallback(ad, pool, metric, group_by, min_impressions)
+            grade = cm.grade_in_objective(ad, ads, metric, group_by, min_impressions)
             if not graded:
                 grade["band"] = LOW_VOLUME
             grade["display"] = cm.format_value(ad, metric)
             grades[metric] = grade
+        for metric in cm.AFTER_CLICK_STEPS:
+            grades[metric]["gap_z"], grades[metric]["significant"] = cm.below_group(ad, ads, metric, grades[metric])
         if graded:
-            diagnosis = diagnose({m: g["band"] for m, g in grades.items()}, payback=info["metrics"])
+            bands = {m: NOT_SIGNIFICANT if g["band"] == cm.BAND_BOTTOM and g.get("significant") is False else g["band"]
+                     for m, g in grades.items()}
+            diagnosis = diagnose(bands, payback=info["metrics"])
         else:
             diagnosis = {"step": "not graded", "metrics": [], "summary": LOW_VOLUME,
                          "action": "Too few impressions to judge: let it deliver, or raise the threshold knowingly.",
@@ -214,12 +224,11 @@ def render(rows, results, group_by=("format",), min_impressions=1000, group_note
     out += ["", "What to do, by first broken step (fix that step first, then re-read; 'also weak' lists later bottom-quartile metrics):"]
     for step, _ in STEPS:
         hits = [e for e in results if e["diagnosis"]["step"] == step]
-        if not hits:
-            continue
-        out.append("  %s: %s" % (step, ACTIONS[step]))
-        for e in hits:
-            extra = " (also weak: %s)" % ", ".join(e["diagnosis"]["also_weak"]) if e["diagnosis"]["also_weak"] else ""
-            out.append("    %s%s" % (e["ad"], extra))
+        for action in dict.fromkeys(e["diagnosis"]["action"] for e in hits):
+            out.append("  %s: %s" % (step, action))
+            for e in (e for e in hits if e["diagnosis"]["action"] == action):
+                extra = " (also weak: %s)" % ", ".join(e["diagnosis"]["also_weak"]) if e["diagnosis"]["also_weak"] else ""
+                out.append("    %s%s" % (e["ad"], extra))
     notes: Dict[Tuple[str, ...], List[str]] = {}
     for e in results:
         if e["diagnosis"]["skipped"]:

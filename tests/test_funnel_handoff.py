@@ -58,13 +58,20 @@ class FunnelHandoffTest(unittest.TestCase):
         self.assertTrue(any("funnel points at the site" in r for r in entry["reasons"]))
         self.assertIsNone(entry["check"])
 
-    def test_a_weak_purchase_rate_alone_never_reads_as_the_site(self):
+    def test_a_weak_step_after_the_cart_sends_the_check_to_checkout_not_the_page(self):
+        entry = _verdict("none")
+        self.assertEqual(entry["verdict_id"], "check_site")
+        self.assertIn("Check checkout, price and shipping costs before pausing the ad.", entry["sentence"])
+        self.assertNotIn("landing page", entry["sentence"])
+
+    def test_purchases_that_fall_away_after_the_cart_read_as_checkout_not_the_page(self):
         read = cm.funnel_read(_rows("none"), next(a for a in cm.aggregate_by_ad(_rows("none")) if a["ad_id"] == WEAK),
                               cm.aggregate_by_ad(_rows("none")))
         cvr = next(s for s in read["steps"] if s["metric"] == "cvr")
-        self.assertTrue(cvr["weak"])
         self.assertEqual(cvr["side"], "context")
-        self.assertEqual(read["call"], "neither")
+        self.assertEqual(read["call"], "site")
+        self.assertEqual(read["weak_steps"], ["cart_to_purchase_rate"])
+        self.assertIn("check checkout, price and shipping costs first, not the landing page", read["reason"])
 
     def test_a_weak_click_stays_a_pause(self):
         entry = _verdict("click")
@@ -98,7 +105,8 @@ class FunnelReadTest(unittest.TestCase):
     def test_site_call_names_the_weak_step_and_holds_attention(self):
         read = cm.funnel_read(self.rows, self.weak, self.ads)
         self.assertEqual(read["call"], "site")
-        self.assertEqual(read["weak_steps"], ["landing_page_view_rate"])
+        self.assertEqual(read["weak_steps"], ["landing_page_view_rate", "cart_to_purchase_rate"])
+        self.assertIn("check the page first", read["reason"])
         ctr = next(s for s in read["steps"] if s["metric"] == "ctr")
         self.assertFalse(ctr["weak"])
 

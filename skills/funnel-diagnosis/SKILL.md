@@ -23,7 +23,7 @@ A sale needs the ad to stop someone, hold them, earn the click, and then the pag
 ```
 python3 -I scripts/funnel.py ads.csv
 python3 -I scripts/funnel.py ads.csv --ad 120000000002
-python3 -I scripts/funnel.py ads.csv --group-by format,ad_type --json
+python3 -I scripts/funnel.py ads.csv --group-by format,ad_type --json   # default grouping is format,ad_type, as creative-grader
 python3 -I scripts/funnel.py ads.csv --profile creative-profile.md --where market=US
 ```
 
@@ -31,7 +31,7 @@ python3 -I scripts/funnel.py ads.csv --profile creative-profile.md --where marke
 
 ## How it decides
 
-The steps the ad controls: hook rate, hold rate, click-through rate. The steps on the site: landing-page view rate (page loads per link click), add-to-cart rate, cart-to-checkout rate. Purchase rate is shown beside them but decides nothing, because a weak one can be the offer or the audience as much as the page.
+The steps the ad controls: hook rate, hold rate, click-through rate. The steps on the site: landing-page view rate (page loads per link click), add-to-cart rate, cart-to-checkout rate, cart-to-purchase rate. Purchase rate is shown beside them but decides nothing: it is add-to-cart rate times cart-to-purchase rate, which are judged. Add-to-cart and cart-to-purchase are judged by the same rule and against the same group as `creative-grader`'s post-click step, so the two skills never disagree. When the only weak site steps come after the cart, the call points at checkout, price and shipping costs, not the landing page.
 
 Each step is weak when either holds, both against the account itself:
 

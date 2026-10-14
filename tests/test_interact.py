@@ -41,6 +41,14 @@ def record(ad_id, spend, **extra):
     return base
 
 
+class GradedMetricWordsTest(unittest.TestCase):
+    def test_every_metric_the_grader_grades_has_a_report_label_and_unit(self):
+        graded = run_json("creative-grader", "grade.py")
+        metrics = set(graded[0]["grades"]) if isinstance(graded, list) else set(graded["ads"][0]["grades"])
+        self.assertEqual(sorted(metrics - set(interact.LABELS)), [])
+        self.assertEqual(sorted(metrics - set(interact.METRIC_KIND)), [])
+
+
 class UniqueLabelsTest(unittest.TestCase):
     def labels(self, *recs):
         return interact.unique_labels(list(recs))

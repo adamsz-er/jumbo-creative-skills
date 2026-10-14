@@ -19,7 +19,7 @@ import creative_metrics as cm  # noqa: E402
 LABEL_WORDS = 64  # arbitrary: where a fallback ad name is cut, at a word boundary
 LABELS = {"hook_rate": "Hook rate", "hold_rate": "Hold rate", "video_completion_rate": "Video completion rate",
           "ctr": "CTR", "cvr": "CVR", "cpm": "CPM", "cpc": "CPC", "cpa": "CPA", "roas": "ROAS", "mer": "MER",
-          "add_to_cart_rate": "Add-to-cart rate", "cost_per_add_to_cart": "Cost per add to cart",
+          "add_to_cart_rate": "Add-to-cart rate", "cart_to_purchase_rate": "Cart-to-purchase rate", "cost_per_add_to_cart": "Cost per add to cart",
           "cost_per_lead": "Cost per lead", "engagement_rate": "Engagement rate"}
 
 # verdict_id -> display class; the five classes plus the two the board lists last.
@@ -94,7 +94,7 @@ NOTHING_WEAK = "Nothing in the funnel reads weak against this account."
 NO_FIX = "Not enough data to suggest a fix."
 BAND_WORDS = {cm.BAND_TOP: "among your best", cm.BAND_MID: "middle", cm.BAND_BOTTOM: "among your weakest"}
 METRIC_KIND = {"hook_rate": "pct", "hold_rate": "pct", "video_completion_rate": "pct", "ctr": "pct", "cvr": "pct",
-               "add_to_cart_rate": "pct", "engagement_rate": "pct", "roas": "x", "cpm": "money", "cpa": "money",
+               "add_to_cart_rate": "pct", "cart_to_purchase_rate": "pct", "engagement_rate": "pct", "roas": "x", "cpm": "money", "cpa": "money",
                "cpc": "money", "cost_per_lead": "money", "cost_per_add_to_cart": "money"}
 AD_FUNNEL = (("Impressions", "impressions"), ("3-second plays", "video_views_3s"), ("ThruPlays", "video_thruplay"),
              ("Link clicks", "link_clicks"), ("Adds to cart", "add_to_carts"), ("Purchases", "conversions"))

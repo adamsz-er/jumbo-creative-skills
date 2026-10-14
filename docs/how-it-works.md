@@ -121,7 +121,7 @@ Scripts live in `skills/<skill>/scripts/`. `creative_metrics.py` and `from_mcp.p
 | `from_mcp.py` | `--output` | required | CSV to write (also `-o`) |
 | `from_mcp.py` | `--tolerance` | 0.5 | percent of the expected total a pull may fall short before it counts as incomplete |
 | `funnel.py` | `--ad` | every ad with enough delivery | ad id or name to judge (repeatable) |
-| `funnel.py` | `--group-by` | `format` | columns that define similar ads for the bottom-quartile read |
+| `funnel.py` | `--group-by` | `format,ad_type` | columns that define similar ads for the bottom-quartile read, narrowest first, as `grade.py`; a group with fewer than 5 comparable ads widens to the next |
 | `funnel.py` | `--json` | off | print machine-readable JSON instead of text |
 | `funnel.py` | `--key-map` | none | name unlabelled or private `KEY:value` segments of ad names, e.g. `PX=concept,6=tone` |
 | `funnel.py` | `--min-change` | 8.0 | percent a step must fall to count as falling |
@@ -253,7 +253,7 @@ Scripts live in `skills/<skill>/scripts/`. `creative_metrics.py` and `from_mcp.p
 | `verdicts.py` | `--target` | none | your own payback targets, e.g. `cpa=40,roas=3` or `cpc=0.5`; a never-worked ad is paused only when it misses them |
 | `verdicts.py` | `--top-n` | 3 | how many top-spend ads the concentration line counts |
 | `verdicts.py` | `--window` | 6 | days compared at the start and end of an ad's life when looking for fatigue |
-| `verdicts.py` | `--young-days` | 5 | ads younger than this are still learning |
+| `verdicts.py` | `--young-days` | 5 | ads that have delivered on fewer days than this (or were created fewer days ago, when the data has a creation date) are still learning |
 
 ## The report
 

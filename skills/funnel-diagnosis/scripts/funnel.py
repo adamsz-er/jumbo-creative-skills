@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Is a drop (or a weak result) the creative or the site? One call per ad, and one for the whole account.
 
-Usage: python3 funnel.py ads.csv [--ad 123 --ad name] [--group-by format] [--window 6] [--min-change 8]
+Usage: python3 funnel.py ads.csv [--ad 123 --ad name] [--group-by format,ad_type] [--window 6] [--min-change 8]
                          [--min-impressions 1000] [--z 1.96] [--json]
 
 Standard library only. The decision rule lives in creative_metrics.funnel_read and this script only reports
 it: each funnel step (hook rate, hold rate, ctr, then landing page view rate, add to cart rate, cart to
-checkout rate, cvr) is weak when it fell since the ad's first delivery days or sits in the bottom quartile of
-the ad's own group. A weak site step with healthy attention is "site"; the reverse is "creative". The
+checkout rate, cart to purchase rate; cvr beside them as context) is weak when it fell since the ad's first
+delivery days or sits in the bottom quartile of the ad's own group, the group creative-grader grades it in. Add
+to cart rate and cart to purchase rate are judged by creative-grader's own rule, so the two skills agree on
+whether an ad's clicks turn into sales. A weak site step with healthy attention is "site"; the reverse is
+"creative"; site steps that are weak only after the cart point at checkout, price and shipping. The
 account-wide read pools every ad per calendar day and compares the account's first --window days with its
 last, so a sitewide problem (checkout, payment, shipping, stock) shows here first. A step with no data is
 named with the export column that adds it, never read as fine. --window, --min-change and --min-impressions
@@ -142,7 +145,7 @@ def build_funnel(rows: Sequence[Dict[str, Any]], key_map: Optional[Dict[str, str
                  group_by: Sequence[str], window: int, min_change: float, min_impressions: int,
                  z: float) -> Dict[str, Any]:
     ads = cm.aggregate_by_ad(rows, key_map)
-    group = cm.resolve_group_by(ads, group_by)
+    group, _ = cm.default_group_by(ads, group_by)
     chosen = select_ads(ads, wanted)
     judged = [a for a in chosen if (a.get("impressions") or 0) >= min_impressions]
     too_little = [{"ad": _key(a), "ad_name": a.get("ad_name"), "impressions": a.get("impressions"),
@@ -179,8 +182,9 @@ def _lead_sentence(read: Dict[str, Any], settings: Dict[str, Any]) -> str:
             parts.append("%s fell %.0f%% since its first %d delivery days" % (_label(step["metric"]), -step["change_pct"], settings["window"]))
         else:
             parts.append("%s is in the bottom quartile of its group" % _label(step["metric"]))
-    return "%s: %s while %s: check the page before touching the creative." % (
-        read.get("ad_name") or read["ad"], earns, " and ".join(parts))
+    where = "checkout, price and shipping costs" if all(s["metric"] in cm.CART_STEPS for s in site) else "the page"
+    return "%s: %s while %s: check %s before touching the creative." % (
+        read.get("ad_name") or read["ad"], earns, " and ".join(parts), where)
 
 
 def render(result: Dict[str, Any]) -> str:
@@ -228,8 +232,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("path", help="Ads Manager CSV with daily rows, or a .json file of rows")
     parser.add_argument("--ad", action="append", default=[],
                         help="ad id or name to judge (repeatable; default: every ad with enough delivery)")
-    parser.add_argument("--group-by", default="format",
-                        help="comma-separated columns that define 'the same kind of ad' (default: format)")
+    parser.add_argument("--group-by",
+                        help="comma-separated columns that define 'the same kind of ad' (default: format then ad type, "
+                             "as creative-grader; a group too small to grade in widens)")
     parser.add_argument("--window", type=int, default=6,
                         help="delivery days compared at the start and end of an ad's life (arbitrary default)")
     parser.add_argument("--min-change", type=float, default=8.0,
@@ -245,7 +250,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parser.parse_args(argv)
     try:
         rows, key_map, run_notes = cm.prepare_run(args, cm.load_rows(args.path))
-        result = build_funnel(rows, key_map, args.ad, [g.strip() for g in args.group_by.split(",") if g.strip()],
+        result = build_funnel(rows, key_map, args.ad, [g.strip() for g in (args.group_by or "").split(",") if g.strip()],
                               args.window, args.min_change, args.min_impressions, args.z)
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)

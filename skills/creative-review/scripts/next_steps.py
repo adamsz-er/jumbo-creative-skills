@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence
 
+from creative_metrics import SITE_STEPS
+
 MAX_STEPS = 3
 MIN_STEPS = 2
 
@@ -24,9 +26,6 @@ def _unread_names(verdicts: Dict[str, Any], mix: Dict[str, Any]) -> Optional[str
     if mix.get("concepts_unread"):
         return "your ad names could not be read for concepts: audit them and get a rename plan, so the next review can compare ideas"
     return None
-
-
-SITE_STEPS = ("landing_page_view_rate", "add_to_cart_rate", "cart_to_checkout_rate")
 
 
 def _site(verdicts: Dict[str, Any], mix: Dict[str, Any]) -> Optional[str]:

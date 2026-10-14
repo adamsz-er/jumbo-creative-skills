@@ -112,9 +112,13 @@ class BottomHookAndCtrTest(unittest.TestCase):
         self.assertEqual(grade.diagnose(bands)["step"], "click")
 
     def test_post_click_needs_a_healthy_ctr(self):
-        diagnosis = grade.diagnose({"ctr": MID, "cvr": BOTTOM})
+        diagnosis = grade.diagnose({"ctr": MID, "add_to_cart_rate": BOTTOM})
         self.assertEqual(diagnosis["step"], "post-click")
         self.assertIn("not the creative", diagnosis["action"])
+        self.assertEqual(grade.diagnose({"ctr": BOTTOM, "add_to_cart_rate": BOTTOM})["step"], "click")
+
+    def test_cvr_is_shown_but_never_decides_post_click(self):
+        self.assertEqual(grade.diagnose({"ctr": MID, "cvr": BOTTOM})["step"], "none")
 
     def test_payback_is_last_and_nothing_broken_says_so(self):
         self.assertEqual(grade.diagnose({"ctr": MID, "roas": BOTTOM})["step"], "pays back")

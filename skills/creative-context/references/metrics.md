@@ -21,6 +21,7 @@ One id, one formula. Use these exactly. All rates are percentages unless stated.
 | `mer` | revenue / spend | Revenue is the store's own total revenue, which Ads Manager does not report. Ask for it. |
 | `landing_page_view_rate` | landing_page_views / link_clicks * 100 | Package metric, not in the shared schema. Of the link clicks, how many loaded the page. A fall while CTR holds points at the page (speed, a broken link), not the ad. |
 | `cart_to_checkout_rate` | checkouts / add_to_carts * 100 | Package metric. Of the adds to cart, how many started checkout. Not the same as a checkout rate measured against site sessions. |
+| `cart_to_purchase_rate` | conversions / add_to_carts * 100 | Package metric. Of the adds to cart, how many became purchases. With `add_to_cart_rate` it is one of the two after-click steps creative-grader and funnel-diagnosis judge by the same rule. A weak one with a normal add-to-cart rate points at checkout, price or shipping costs, not the landing page. |
 | `new_customer_purchase_share` | new_customers / conversions * 100 | Package metric, count based: of the purchases, how many were from new customers. Only where the data carries a new-customer purchase count. |
 
 ## Base fields

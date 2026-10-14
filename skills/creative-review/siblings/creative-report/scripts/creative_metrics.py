@@ -40,6 +40,7 @@ METRICS: Dict[str, Tuple[Tuple[str, ...], Tuple[str, ...], float]] = {
     "mer": (("revenue",), ("spend",), 1.0),
     "landing_page_view_rate": (("landing_page_views",), ("link_clicks",), 100.0),
     "cart_to_checkout_rate": (("checkouts",), ("add_to_carts",), 100.0),
+    "cart_to_purchase_rate": (("conversions",), ("add_to_carts",), 100.0),
     "new_customer_purchase_share": (("new_customers",), ("conversions",), 100.0),
 }
 
@@ -1304,7 +1305,8 @@ def _describe(found: Dict[str, Any]) -> str:
 
 BAND_TOP, BAND_MID, BAND_BOTTOM = "top quartile", "middle", "bottom quartile"
 HIGHER_IS_BETTER = ("hook_rate", "hold_rate", "video_completion_rate", "ctr", "cvr",
-                    "add_to_cart_rate", "roas", "engagement_rate", "landing_page_view_rate", "cart_to_checkout_rate")
+                    "add_to_cart_rate", "roas", "engagement_rate", "landing_page_view_rate", "cart_to_checkout_rate",
+                    "cart_to_purchase_rate")
 LOWER_IS_BETTER = ("cpm", "cpc", "cpa", "cost_per_add_to_cart", "cost_per_lead")
 # Fewer comparable ads than this is not enough to grade against. An arbitrary
 # default, not a statistical rule: set your own from how many ads you run per format.
@@ -1418,6 +1420,15 @@ def grade_with_fallback(ad: Dict[str, Any], ads: Sequence[Dict[str, Any]], metri
     grade["group_size"] = grade.get("n_comparable")
     grade["fallback"] = "; ".join(skipped) or None
     return grade
+
+
+def grade_in_objective(ad: Dict[str, Any], ads: Sequence[Dict[str, Any]], metric: str,
+                       group_by: Sequence[str] = ("format",), min_impressions: int = 1000) -> Dict[str, Any]:
+    """grade_with_fallback against the ads of the same campaign objective: the comparison group creative-grader and
+    funnel-diagnosis both judge an ad's steps in."""
+    objective = payback_metrics(ad.get("objective"))["objective"]
+    pool = [a for a in ads if payback_metrics(a.get("objective"))["objective"] == objective]
+    return grade_with_fallback(ad, pool, metric, group_by, min_impressions)
 
 
 def is_thin(group_size: Optional[int]) -> bool:
@@ -1784,10 +1795,21 @@ def delivery_curve(rows: Sequence[Dict[str, Any]], metrics: Sequence[str] = ("ho
 
 
 # The funnel in order: the steps the ad itself controls, then the steps on the site. Purchase rate (cvr) is
-# shown beside them but decides nothing: a weak one can be the offer or the audience as much as the page.
+# shown beside them but decides nothing: it is add to cart rate times cart to purchase rate, which are judged.
 ATTENTION_STEPS = ("hook_rate", "hold_rate", "ctr")
-SITE_STEPS = ("landing_page_view_rate", "add_to_cart_rate", "cart_to_checkout_rate")
+SITE_STEPS = ("landing_page_view_rate", "add_to_cart_rate", "cart_to_checkout_rate", "cart_to_purchase_rate")
 CONTEXT_STEPS = ("cvr",)
+# The after-click steps creative-grader and funnel-diagnosis judge by one rule (below_group), so the two skills never
+# disagree about whether an ad's clicks turn into sales.
+AFTER_CLICK_STEPS = ("add_to_cart_rate", "cart_to_purchase_rate")
+# Steps after the cart: weak ones point at checkout, price and shipping rather than the landing page.
+CART_STEPS = ("cart_to_checkout_rate", "cart_to_purchase_rate")
+CART_CALLS = {
+    "site": "the ad still earns attention and clicks, and people add to cart, but a step after the cart is weak or falling: "
+            "check checkout, price and shipping costs first, not the landing page",
+    "both": "steps on both sides are weak or falling, and the site's weak steps come after the cart: check checkout, price "
+            "and shipping costs before judging the creative",
+}
 FUNNEL_CALLS = {
     "site": "the ad still earns attention and clicks while a step on the site is weak or falling: check the page first",
     "creative": "a step the ad controls is weak or falling while the site steps hold: the creative is the place to work",
@@ -1821,6 +1843,23 @@ def proportion_z(x1: Optional[float], n1: Optional[float], x2: Optional[float], 
     return None if se == 0 else (x2 / n2 - x1 / n1) / se
 
 
+def below_group(ad: Dict[str, Any], ads: Sequence[Dict[str, Any]], metric: str, grade: Dict[str, Any],
+                z: float = FUNNEL_Z) -> Tuple[Optional[float], bool]:
+    """(gap_z, low) for a rate step. `grade` is grade_in_objective's; gap_z is the ad's rate against its group's
+    pooled rate in standard errors, None unless the band is bottom quartile. Low means bottom quartile AND at
+    least `z` standard errors below the pool, so a narrow spread never flags a quarter of the ads from noise."""
+    if grade["band"] != BAND_BOTTOM:
+        return None, False
+    objective = payback_metrics(ad.get("objective"))["objective"]
+    pool = [a for a in ads if a is not ad and payback_metrics(a.get("objective"))["objective"] == objective]
+    peers = [a for a in pool if group_key(a, grade["group_by"]) == grade["group_value"]] if grade["group_by"] else pool
+    peers = [a for a in peers if None not in rate_counts(a, metric)]
+    present = {f: [a[f] for a in peers if a.get(f) is not None] for f in NUMERIC_FIELDS}
+    pooled = {f: sum(v) if v else None for f, v in present.items()}
+    gap = proportion_z(*rate_counts(pooled, metric), *rate_counts(ad, metric))
+    return gap, gap is not None and gap <= -z
+
+
 def _window_totals(rows: Sequence[Dict[str, Any]], ad_key: str, window: int) -> Optional[Tuple[Dict[str, Any], Dict[str, Any]]]:
     days = [t for _, t in ad_days(rows, ad_key) if (t.get("impressions") or 0) > 0]
     if len(days) < 2 * window:
@@ -1841,9 +1880,11 @@ def funnel_read(rows: Sequence[Dict[str, Any]], ad: Dict[str, Any], ads: Sequenc
     Each funnel step is judged two ways, both against the account itself:
     - falling: down at least `min_change` percent from the ad's first `window` delivery days to its last, and
       the drop is at least `z` standard errors on the ad's own counts;
-    - low: bottom quartile of the ad's group (as grade_against), and below the group's pooled rate by at least
-      `z` standard errors.
-    A step is weak when either holds. Purchase rate is reported as context and never decides the call.
+    - low: below_group, bottom quartile of the ad's group (grade_in_objective: same campaign objective, the
+      narrowest grouping with enough ads) and below the group's pooled rate by at least `z` standard errors.
+      creative-grader judges the AFTER_CLICK_STEPS by the same rule, so the two skills agree.
+    A step is weak when either holds. Purchase rate is reported as context and never decides the call. When every
+    weak site step comes after the cart (CART_STEPS), the reason points at checkout, price and shipping.
     The call is "site" when a site step is weak and no attention step is,
     "creative" for the reverse, "both", "neither", or "unreadable" when no site step has data. A call that
     says one side holds needs at least one step on that side that could be judged (a trend or a graded band);
@@ -1853,23 +1894,16 @@ def funnel_read(rows: Sequence[Dict[str, Any]], ad: Dict[str, Any], ads: Sequenc
     windows = _window_totals(rows, key, window)
     steps = []
     for metric in ATTENTION_STEPS + SITE_STEPS + CONTEXT_STEPS:
-        grade = grade_against(ad, ads, metric, group_by, min_impressions)
+        grade = grade_in_objective(ad, ads, metric, group_by, min_impressions)
         readable = ad.get(metric) is not None
-        change = trend_z = gap_z = None
+        change = trend_z = None
         if windows and readable:
             first, last = windows
             first_value, last_value = compute_metrics(first)[metric], compute_metrics(last)[metric]
             change = _pct_change(first_value, last_value)
             trend_z = proportion_z(*rate_counts(first, metric), *rate_counts(last, metric))
-        if grade["band"] == BAND_BOTTOM:
-            peers = [a for a in ads if group_key(a, group_by) == grade["group"] and a is not ad] if grade["basis"] == "group" \
-                else [a for a in ads if a is not ad]
-            peers = [a for a in peers if None not in rate_counts(a, metric)]
-            present = {f: [a[f] for a in peers if a.get(f) is not None] for f in NUMERIC_FIELDS}
-            pooled = {f: sum(v) if v else None for f, v in present.items()}
-            gap_z = proportion_z(*rate_counts(pooled, metric), *rate_counts(ad, metric))
+        gap_z, low = below_group(ad, ads, metric, grade, z)
         falling = change is not None and change <= -min_change and trend_z is not None and trend_z <= -z
-        low = gap_z is not None and gap_z <= -z
         why = []
         if low:
             why.append("bottom quartile of its group")
@@ -1898,7 +1932,8 @@ def funnel_read(rows: Sequence[Dict[str, Any]], ad: Dict[str, Any], ads: Sequenc
         call = "neither"
     else:
         call = "unjudged"
-    return {"ad": key, "call": call, "reason": FUNNEL_CALLS[call],
+    cart_only = bool(site) and all(s["metric"] in CART_STEPS for s in site)
+    return {"ad": key, "call": call, "reason": CART_CALLS[call] if cart_only and call in CART_CALLS else FUNNEL_CALLS[call],
             "weak_steps": [s["metric"] for s in attention + site], "steps": steps,
             "trend_readable": windows is not None,
             "missing_site_steps": [s["metric"] for s in steps if s["side"] == "site" and not s["readable"]],

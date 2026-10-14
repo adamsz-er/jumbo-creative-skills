@@ -88,6 +88,12 @@ class FixtureVerdictsTest(unittest.TestCase):
         self.assertEqual(verdict["confidence"], "Can't judge yet")
         self.assertNotIn("pause", " ".join(verdict["reasons"]).lower())
 
+    def test_a_young_ads_age_counts_the_days_it_delivered_as_the_sibling_skills_do(self):
+        verdict = fixture_verdicts()["120000000030"]
+        self.assertEqual(verdict["active_days"], 4)
+        self.assertIn("learning: has delivered on 4 days, under the 5-day learning window", verdict["reasons"])
+        self.assertIn("it has delivered on 4 days", verdict["sentence"])
+
     def test_never_worked_ad_is_paused_as_never_worked(self):
         verdict = fixture_verdicts(targets=MISSED)["120000000017"]
         self.assertEqual(verdict["verdict"], "Pause: never worked")
