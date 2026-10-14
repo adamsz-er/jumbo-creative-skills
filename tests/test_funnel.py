@@ -293,6 +293,27 @@ class LinkClickGapTest(unittest.TestCase):
         self.assertNotIn("add_to_cart_rate", self.result["missing_columns"])
 
 
+class WindowGapTest(unittest.TestCase):
+    """A gap day inside the last window: both windows leave the gap ad out of their click rates, so the account's trend compares the same
+    ads, and the first window does not keep an ad the last one drops."""
+
+    def setUp(self):
+        raw = list(csv.DictReader(open(FIXTURE, newline="", encoding="utf-8")))
+        zero = {k: "0" for k in raw[0]}
+        zero.update({"Day": "2026-03-30", "Ad ID": BROKEN_PAGE_AD, "Ad name": next(r["Ad name"] for r in raw if r["Ad ID"] == BROKEN_PAGE_AD)})
+        raw.append(zero)
+        gap = next(r for r in raw if r["Ad ID"] == FATIGUING_AD and r["Day"] == "2026-03-28")
+        gap["Link clicks"] = ""
+        self.rows = cm.load_rows(raw)
+        self.others = [r for r in self.rows if str(r["ad_id"]) != FATIGUING_AD]
+
+    def test_both_windows_read_ctr_over_the_other_ads(self):
+        step = {s["metric"]: s for s in funnel.account_read(self.rows, 6, 8.0, 1.96)["steps"]}["ctr"]
+        expected = funnel._window_sums(self.others, 6)
+        self.assertAlmostEqual(step["first"], cm.compute_metrics(expected["first"])["ctr"])
+        self.assertAlmostEqual(step["last"], cm.compute_metrics(expected["last"])["ctr"])
+
+
 class ClickBasisLineTest(unittest.TestCase):
     def test_the_output_states_the_click_basis(self):
         rows = cm.load_rows(str(FIXTURE))

@@ -177,13 +177,13 @@ def daily_rows(ctx: Ctx) -> List[Dict[str, Any]]:
     days = [day for day, _ in cal]
     found = []
     for key, name, kind in panels.TIME_METRICS + EXTRA_DAILY:
-        values = panels.day_values(cal, key)
+        values = panels.day_values(cal, key, ctx.gapped)
         if any(v is not None for v in values):
             unit = "%s (%s)" % (name, ctx.currency or "account currency") if kind == "money" else "%s (%%)" % name if kind == "pct" else \
                 "%s (x)" % name if kind == "x" else name
-            found.append({"key": key, "name": name, "kind": kind, "unit": unit, "values": values, "average": panels.rolling_values(cal, key)})
+            found.append({"key": key, "name": name, "kind": kind, "unit": unit, "values": values, "average": panels.rolling_values(cal, key, ctx.gapped)})
     gap = "n/a (fewer than %d days with data in the %d-day window)" % (panels.charts.ROLLING_MIN_VALUES, panels.charts.SPARK_AVERAGE_DAYS)
-    totals = [panels.totals(rows) if rows else None for _, rows in cal]
+    totals = [panels.totals(rows, ctx.gapped) if rows else None for _, rows in cal]
     return [{"day": day, "metric": s["key"], "name": s["name"], "kind": s["kind"], "unit": s["unit"],
              "value": _num(value), "value_note": None if value is not None else _day_note(total, s["key"]),
              "average": _num(average), "average_note": None if average is not None else gap}

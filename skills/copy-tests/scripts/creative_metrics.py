@@ -18,7 +18,7 @@ import math
 import re
 import statistics
 import sys
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
 
 # metric -> (numerator fields, denominator fields, scale). The first field in a
 # tuple that has a value is used; the others are fallbacks.
@@ -520,17 +520,23 @@ def _parse_date(value: Any) -> Optional[dt.date]:
     return None
 
 
-def _sum_rows(rows: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+def gap_ads(rows: Sequence[Dict[str, Any]]) -> Set[str]:
+    """The ads (by ad id, else ad name) with a link-click gap on any of the rows: the ads every total leaves out of its click rates."""
+    return {_row_key(r) for r in rows if (r.get(LINK_GAPS) or 0) > 0}
+
+
+def _sum_rows(rows: Sequence[Dict[str, Any]], gapped: Optional[Set[str]] = None) -> Dict[str, Any]:
     """Sum each base field over rows (or aggregated ads); a field with no values stays None. When some ads, not all, have
-    link-click gaps, every sum keeps them but the click-based rates read CLICK_TOTAL, the sums over the other ads."""
+    link-click gaps, every sum keeps them but the click-based rates read CLICK_TOTAL, the sums over the other ads. A slice of
+    the data (a window, a day, a period) passes `gapped`, the dataset's gap_ads, so it leaves out the same ads as the whole."""
     totals: Dict[str, Any] = {}
     for field in NUMERIC_FIELDS:
         values = [r[field] for r in rows if r.get(field) is not None]
         totals[field] = sum(values) if values else None
-    gapped = {_row_key(r) for r in rows if (r.get(LINK_GAPS) or 0) > 0}
+    gapped = gap_ads(rows) if gapped is None else gapped
     clean = [r for r in rows if _row_key(r) not in gapped]
-    if gapped and clean:
-        totals[CLICK_TOTAL] = _sum_rows(clean)
+    if clean and len(clean) < len(rows):
+        totals[CLICK_TOTAL] = _sum_rows(clean, gapped)
     return totals
 
 

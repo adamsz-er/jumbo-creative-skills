@@ -1286,6 +1286,33 @@ class LinkClickGapTotalsTest(unittest.TestCase):
                                cm.compute_metrics(panels.totals([a for a in ads if str(a["ad_id"]) != raw[0]["Ad ID"]]))["add_to_cart_rate"])
 
 
+class SliceGapTest(unittest.TestCase):
+    """Days and the prior period leave out the same gap ads as the whole window, so a day without the gap row and a period without it
+    still read their click rates over the other ads."""
+
+    def setUp(self):
+        raw = list(csv.DictReader(open(FIXTURE, newline="", encoding="utf-8")))
+        self.gap_ad = raw[0]["Ad ID"]
+        raw[0]["Link clicks"] = ""
+        raw[1].update({"Link clicks": "0", "Clicks (all)": "0"})
+        self.rows = cm.load_rows(raw)
+        self.others = [r for r in self.rows if str(r["ad_id"]) != self.gap_ad]
+
+    def test_every_day_reads_ctr_over_the_other_ads(self):
+        labels, series = panels.time_series(panels.Ctx(rows=self.rows, currency="USD"))
+        days = dict(panels.calendar(self.others))
+        for day, value in zip(labels, next(s for s in series if s["key"] == "ctr")["values"]):
+            self.assertAlmostEqual(value, panels._kpi_value(panels.totals(days[day]), "ctr"), msg=day)
+
+    def test_the_change_against_a_prior_period_with_the_gap_compares_the_same_ads(self):
+        clean = cm.load_rows(list(csv.DictReader(open(FIXTURE, newline="", encoding="utf-8"))))
+        tile = next(t for t in panels.kpi_tiles(panels.Ctx(rows=clean, prior=self.rows, currency="USD")) if t["metric"] == "ctr")
+        current = [r for r in clean if str(r["ad_id"]) != self.gap_ad]
+        expected = panels._pct_change(panels._kpi_value(panels.totals(current), "ctr"), panels._kpi_value(panels.totals(self.others), "ctr"))
+        self.assertAlmostEqual(tile["change_pct"], expected)
+        self.assertAlmostEqual(tile["value"], panels._kpi_value(panels.totals(clean), "ctr"))
+
+
 class LeftOutGapsTest(unittest.TestCase):
     def test_the_white_space_panel_names_the_concepts_left_out_of_the_gaps(self):
         rows = cm.load_rows(str(FIXTURE))

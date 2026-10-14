@@ -12,7 +12,7 @@ import re
 import statistics
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -128,6 +128,7 @@ class Ctx:
                  briefs: Optional[Any] = None, key_map: Optional[Dict[str, str]] = None) -> None:
         self.rows = list(rows or [])
         self.ads = cm.aggregate_by_ad(self.rows, key_map=key_map) if self.rows else []
+        self.gapped = cm.gap_ads(self.rows)
         self.ad_index = {str(a.get("ad_id") or a.get("ad_name")): a for a in self.ads}
         self.verdicts, self.grade, self.mix = verdicts, grade, mix
         self.currency, self.top_n, self.pareto_share = currency, top_n, pareto_share
@@ -534,9 +535,10 @@ def coverage(ads: Sequence[Dict[str, Any]], fields: Sequence[str]) -> List[str]:
     return notes
 
 
-def totals(rows: Sequence[Dict[str, Any]]) -> Dict[str, Optional[float]]:
-    """Sum each base field over rows. Reach never adds up across ads and days, so it stays None."""
-    out = cm._sum_rows(rows)
+def totals(rows: Sequence[Dict[str, Any]], gapped: Optional[Set[str]] = None) -> Dict[str, Optional[float]]:
+    """Sum each base field over rows. Reach never adds up across ads and days, so it stays None. A slice in time passes `gapped`,
+    the dataset's cm.gap_ads, so its click rates leave out the same ads as the whole."""
+    out = cm._sum_rows(rows, gapped)
     out["reach"] = None
     out["video_views_3s_source"] = ("derived" if any(str(r.get("video_views_3s_source") or "").startswith("derived") for r in rows) else None)
     return out
@@ -688,7 +690,9 @@ def kpi_tiles(ctx: Ctx) -> List[Dict[str, Any]]:
     if not ctx.rows:
         return []
     total = totals(ctx.rows)
-    prior_total = totals(ctx.prior) if ctx.prior else None
+    both = ctx.gapped | cm.gap_ads(ctx.prior or [])
+    compared = totals(ctx.rows, both)
+    prior_total = totals(ctx.prior, both) if ctx.prior else None
     ctr_basis = cm.metric_basis(total, "ctr")["numerator"]
     gone = gone_metrics(ctx)
     needs = {"spend": ("spend",), "impressions": ("impressions",), "conversions": ("conversions",), "conversion_value": ("conversion_value",),
@@ -696,9 +700,9 @@ def kpi_tiles(ctx: Ctx) -> List[Dict[str, Any]]:
              "roas": ("conversion_value", "spend"), "hook_rate": ("video_views_3s", "impressions"), "hold_rate": ("video_thruplay", "video_views_3s")}
     tiles = []
     for key, name, kind in KPI_ORDER:
-        tot, ptot, video_note = total, prior_total, ""
+        tot, ctot, ptot, video_note = total, compared, prior_total, ""
         if key in VIDEO_KPIS:
-            tot = totals(video_rows(ctx.rows, key))
+            tot = ctot = totals(video_rows(ctx.rows, key))
             ptot = totals(video_rows(ctx.prior, key)) if ctx.prior else None
             video_note = "" if key in gone else video_basis(ctx, key)
         if key == "reach":
@@ -721,7 +725,7 @@ def kpi_tiles(ctx: Ctx) -> List[Dict[str, Any]]:
             if key in ACCOUNT_KPIS:
                 change_note = "n/a (reach is account-level only)"
             else:
-                change = _pct_change(_kpi_value(tot, key), _kpi_value(ptot, key)) if ptot is not None else None
+                change = _pct_change(_kpi_value(ctot, key), _kpi_value(ptot, key)) if ptot is not None else None
                 change_note = "n/a (prior value missing or zero)" if change is None else None
         unit = " (%s)" % (ctx.currency or "account currency") if kind.startswith("money") else ""
         partial = [] if video_note or key in gone else coverage(ctx.ads, needs.get(key, ()))
@@ -750,10 +754,10 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
         spark = ""
         if key not in ACCOUNT_KPIS:
             cal = calendar(rows)
-            values = day_values(cal, key)
-            tips = ["%s: %s" % (charts.day_label(d), _kpi_text(ctx, totals(_day_rows(rs, key)), key, kind)) if v is not None else ""
+            values = day_values(cal, key, ctx.gapped)
+            tips = ["%s: %s" % (charts.day_label(d), _kpi_text(ctx, totals(_day_rows(rs, key), ctx.gapped), key, kind)) if v is not None else ""
                     for (d, rs), v in zip(cal, values)]
-            spark = charts.sparkline(values, "%s by day" % tile["base_name"], tips=tips, average=rolling_values(cal, key))
+            spark = charts.sparkline(values, "%s by day" % tile["base_name"], tips=tips, average=rolling_values(cal, key, ctx.gapped))
         spark_note = spark or ("" if key in ACCOUNT_KPIS or key in gone_metrics(ctx) else
                                '<span class="muted">%s</span>' % ("one day of data" if len(daily(rows)) == 1 else "no dates in the data"))
         note_html = '<p class="kpi-note">%s</p>' % esc("; ".join(tile["notes"])) if tile["notes"] else ""
@@ -812,17 +816,18 @@ def _day_rows(rows: Sequence[Dict[str, Any]], key: str) -> List[Dict[str, Any]]:
     return video_rows(rows, key) if key in VIDEO_KPIS else list(rows)
 
 
-def day_values(cal: Sequence[Tuple[str, List[Dict[str, Any]]]], key: str) -> List[Optional[float]]:
-    """A measure per calendar day as a ratio of that day's sums; a day with no usable rows is None, never 0."""
+def day_values(cal: Sequence[Tuple[str, List[Dict[str, Any]]]], key: str, gapped: Optional[Set[str]] = None) -> List[Optional[float]]:
+    """A measure per calendar day as a ratio of that day's sums; a day with no usable rows is None, never 0. `gapped` is the dataset's
+    cm.gap_ads, left out of every day's click rates."""
     out: List[Optional[float]] = []
     for _, rows in cal:
         used = _day_rows(rows, key)
-        out.append(_kpi_value(totals(used), key) if used else None)
+        out.append(_kpi_value(totals(used, gapped), key) if used else None)
     return out
 
 
-def rolling_values(cal: Sequence[Tuple[str, List[Dict[str, Any]]]], key: str, window: int = charts.SPARK_AVERAGE_DAYS,
-                   need: int = charts.ROLLING_MIN_VALUES) -> List[Optional[float]]:
+def rolling_values(cal: Sequence[Tuple[str, List[Dict[str, Any]]]], key: str, gapped: Optional[Set[str]] = None,
+                   window: int = charts.SPARK_AVERAGE_DAYS, need: int = charts.ROLLING_MIN_VALUES) -> List[Optional[float]]:
     """A rolling average over `window` days: a count (spend, impressions, ...) is its mean per day, a ratio is the ratio of the window's sums.
 
     Only days with rows on the measure's basis (see _day_rows) count, and only those rows are summed; fewer than `need` such days is a gap.
@@ -836,7 +841,7 @@ def rolling_values(cal: Sequence[Tuple[str, List[Dict[str, Any]]]], key: str, wi
         elif key in cm.NUMERIC_FIELDS:
             out.append(sum(totals(d)[key] or 0 for d in days) / len(days))
         else:
-            out.append(_kpi_value(totals([r for d in days for r in d]), key))
+            out.append(_kpi_value(totals([r for d in days for r in d], gapped), key))
     return out
 
 
@@ -845,9 +850,10 @@ def time_series(ctx: Ctx) -> Tuple[List[str], List[Dict[str, Any]]]:
     cal = calendar(ctx.rows)
     out = []
     for key, name, kind in TIME_METRICS:
-        values = day_values(cal, key)
+        values = day_values(cal, key, ctx.gapped)
         if any(v is not None for v in values):
-            out.append({"key": key, "name": name, "kind": kind, "unit": _unit_of(ctx, name, kind), "values": values, "average": rolling_values(cal, key)})
+            out.append({"key": key, "name": name, "kind": kind, "unit": _unit_of(ctx, name, kind), "values": values,
+                        "average": rolling_values(cal, key, ctx.gapped)})
     return [d for d, _ in cal], out
 
 
@@ -1595,7 +1601,7 @@ def formats_over_time(ctx: Ctx) -> Tuple[str, str]:
         out: List[Optional[float]] = []
         for bucket in buckets:
             used = _measure_rows(bucket, key)
-            total = totals(used)
+            total = totals(used, ctx.gapped)
             out.append(_kpi_value(total, key) if used and (total.get("impressions") or 0) >= charts.MIN_WEEK_IMPRESSIONS else None)
         return out
 

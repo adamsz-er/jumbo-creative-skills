@@ -82,7 +82,9 @@ def select_ads(ads: Sequence[Dict[str, Any]], wanted: Sequence[str]) -> List[Dic
 
 
 def _window_sums(rows: Sequence[Dict[str, Any]], window: int) -> Optional[Dict[str, Dict[str, Any]]]:
-    """The account's first and last `window` calendar days, every ad's rows pooled per day."""
+    """The account's first and last `window` calendar days, every ad's rows pooled per day. Both leave the dataset's gap ads
+    out of their click rates, so the two windows compare the same ads."""
+    gapped = cm.gap_ads(rows)
     days: Dict[Any, List[Dict[str, Any]]] = {}
     for row in rows:
         day = cm._parse_date(row.get("date"))
@@ -93,7 +95,7 @@ def _window_sums(rows: Sequence[Dict[str, Any]], window: int) -> Optional[Dict[s
         return None
     out = {}
     for name, chosen in (("first", ordered[:window]), ("last", ordered[-window:])):
-        out[name] = cm._sum_rows([r for day in chosen for r in day])
+        out[name] = cm._sum_rows([r for day in chosen for r in day], gapped)
     return out
 
 
