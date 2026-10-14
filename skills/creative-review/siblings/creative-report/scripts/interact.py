@@ -81,6 +81,7 @@ STEP_WORDS = {
     "click": "people see the ad but do not click",
     "post-click": "clicks do not turn into carts or purchases",
     "pays back": "the funnel reads normally but payback is weak",
+    "none (with an untested step)": "not known: a step could not be tested",
 }
 STEP_FIX = {
     "reach cost": "Rule out the audience and the auction before you change the ad.",
@@ -89,6 +90,7 @@ STEP_FIX = {
     "click": "Make the call to action or the offer stronger.",
     "post-click": "Check that the landing page and the offer match the ad, then the audience.",
     "pays back": "Check price, margin, offer and attribution before blaming the creative.",
+    "none (with an untested step)": "Check that the add-to-cart event is tracked on every page and through checkout, then grade again.",
 }
 NOTHING_WEAK = "Nothing in the funnel reads weak against this account."
 NO_FIX = "Not enough data to suggest a fix."
@@ -100,7 +102,10 @@ AD_FUNNEL = (("Impressions", "impressions"), ("3-second plays", "video_views_3s"
              ("Link clicks", "link_clicks"), ("Adds to cart", "add_to_carts"), ("Purchases", "conversions"))
 
 
-STEP_SLUG = {"reach cost": "reach-cost", "hook": "hook", "hold": "hold", "click": "click", "post-click": "post-click", "pays back": "pays-back"}
+# The grader counts an ad with nothing weak but an after-click step it could not test apart from "none" (creative-grader NONE_UNTESTED).
+UNTESTED_STEP = "none (with an untested step)"
+STEP_SLUG = {"reach cost": "reach-cost", "hook": "hook", "hold": "hold", "click": "click", "post-click": "post-click", "pays back": "pays-back",
+             UNTESTED_STEP: "untested"}
 UNSLUG = {slug: step for step, slug in STEP_SLUG.items()}
 WEAK_VALUES = list(STEP_SLUG.values()) + ["none", "undiagnosed"]
 ACRONYMS = {"ugc": "UGC", "bau": "BAU", "npr": "NPR", "cta": "CTA", "roas": "ROAS", "cpa": "CPA", "ctr": "CTR", "cpm": "CPM"}
@@ -299,12 +304,13 @@ def _record(key: str, base: Dict[str, Any], verdict: Optional[Dict[str, Any]], g
     cls = entry_class(verdict) if verdict else None
     spend = base.get("spend") if base else verdict.get("spend")
     stake = verdict.get("spend_at_stake")
-    step = (grade.get("diagnosis") or {}).get("step")
+    diagnosis = grade.get("diagnosis") or {}
+    step = UNTESTED_STEP if diagnosis.get("step") == "none" and diagnosis.get("untested") else diagnosis.get("step")
     fatigue = verdict.get("fatigue") or {}
     unknown_fatigue = not verdict or "fatiguing" not in verdict or fatigue.get("status") == "insufficient data"
     assumed = verdict.get("objective_assumed", grade.get("objective_assumed"))
     objective = None if assumed else (verdict.get("objective") or grade.get("objective"))
-    return {
+    record = {
         "id": key, "label": label_of(fields, name, key), "name": name,
         "verdict": PUBLIC_ID.get(cls, cls) if cls else None, "verdict_id": verdict.get("verdict_id"),
         "confidence": verdict.get("confidence"),
@@ -319,6 +325,9 @@ def _record(key: str, base: Dict[str, Any], verdict: Optional[Dict[str, Any]], g
         "stake": _money(stake if stake is not None else spend),
         "weak": STEP_SLUG.get(step, "none" if step == "none" else None),
     }
+    if step == UNTESTED_STEP:
+        record["untested_why"] = list(diagnosis.get("untested_why") or [])
+    return record
 
 
 def ad_records(ads: Sequence[Dict[str, Any]], verdict_entries: Optional[Sequence[Dict[str, Any]]],
@@ -550,7 +559,8 @@ def ad_funnel(base: Optional[Dict[str, Any]], fmt: Any = None) -> List[Dict[str,
 
 
 def weak_groups(records: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Ads by first weak funnel step, largest spend first; then 'nothing weak', then ads with no diagnosis. Every ad lands in one row."""
+    """Ads by first weak funnel step, largest spend first; then ads with a step that could not be tested, 'nothing weak', and ads with no
+    diagnosis. Every ad lands in one row."""
     total = sum(r.get("spend") or 0 for r in records)
     found: Dict[Optional[str], List[Dict[str, Any]]] = {}
     for rec in records:
@@ -559,9 +569,12 @@ def weak_groups(records: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
     def row(step: Optional[str]) -> Dict[str, Any]:
         members = found[step]
         spend = _money(sum(r.get("spend") or 0 for r in members))
+        words = STEP_WORDS.get(UNSLUG.get(step), "no weak step found" if step == "none" else "not diagnosed (missing data)")
+        why = "; ".join(dict.fromkeys(w for r in members for w in r.get("untested_why") or [])) if step == "untested" else ""
+        if why:
+            words = "not known: " + why
         return {"step": step, "ads": len(members), "spend": spend, "share": spend / total * 100 if total else None,
-                "words": STEP_WORDS.get(UNSLUG.get(step), "no weak step found" if step == "none" else "not diagnosed (missing data)"),
-                "fix": STEP_FIX.get(UNSLUG.get(step))}
+                "words": words, "fix": STEP_FIX.get(UNSLUG.get(step))}
 
-    actionable = sorted((s for s in found if s in UNSLUG), key=lambda s: -sum(r.get("spend") or 0 for r in found[s]))
-    return [row(s) for s in actionable + [s for s in ("none", None) if s in found]]
+    actionable = sorted((s for s in found if s in UNSLUG and s != "untested"), key=lambda s: -sum(r.get("spend") or 0 for r in found[s]))
+    return [row(s) for s in actionable + [s for s in ("untested", "none", None) if s in found]]

@@ -276,7 +276,9 @@ def verdict_rows(ctx: Ctx) -> List[Dict[str, Any]]:
                "age_days_note": None if age_days is not None else "n/a (no ad age in the data)",
                "fatiguing": fatiguing,
                "fatiguing_note": None if fatiguing is not None else "n/a (fatigue could not be read for this ad)", "next_step": interact.NEXT_STEP.get(cls) if cls else None,
-               "check": (entry.get("check") or interact.PAUSE_CHECK) if cls == "kill" else None}
+               "check": (entry.get("check") or interact.PAUSE_CHECK) if cls == "kill" else None,
+               "weak_step": rec.get("weak"),
+               "weak_step_note": None if rec.get("weak") else "n/a (no creative-grader diagnosis for this ad)"}
         for metric in TABLE_METRICS:
             value = _blank(ad.get(metric)) if ad else None
             row[metric] = _num(value)

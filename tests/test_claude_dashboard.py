@@ -398,11 +398,12 @@ class BundleTest(unittest.TestCase):
 
     def test_schema_flags_a_header_without_the_schema_version(self):
         b = self.mutate_rows("header", lambda rows: rows.pop())
-        self.assertFlags(b, "dataset header does not carry schema version 2")
+        self.assertFlags(b, "dataset header does not carry schema version %s" % dashboard.load_schema()["x-version"])
 
     def test_check_refuses_a_bundle_built_with_schema_version_one_and_says_to_rebuild(self):
         b = self.mutate_rows("header", lambda rows: next(r for r in rows if r["fact"] == "Schema version").update(value="1"))
-        self.assertFlags(b, "this bundle was built with schema version 1 and this report.py reads version 2: build the bundle again")
+        self.assertFlags(b, "this bundle was built with schema version 1 and this report.py reads version %s: build the bundle again"
+                         % dashboard.load_schema()["x-version"])
 
     # ---------- review fixes: the check's gaps ----------
 
@@ -1862,14 +1863,15 @@ class ParentHtmlTest(unittest.TestCase):
     @staticmethod
     def apply_later_changes(tree):
         """Give the parent the later deliberate changes: the verdict a user reads as "Refresh" (its id stays `iterate`), today's
-        metrics module (link clicks as the one click basis for purchase and add-to-cart rates), and the label and unit of the
-        cart-to-purchase rate that module grades."""
+        metrics module (link clicks as the one click basis for purchase and add-to-cart rates), the label and unit of the
+        cart-to-purchase rate that module grades, and the "untested" value the weak-step filter offers."""
         for path in (tree / "skills" / "creative-report" / "scripts").glob("*.py"):
             path.write_text(path.read_text(encoding="utf-8").replace("Iterate", "Refresh"), encoding="utf-8")
         interact = tree / "skills" / "creative-report" / "scripts" / "interact.py"
         interact.write_text(interact.read_text(encoding="utf-8").replace(
             '"add_to_cart_rate": "Add-to-cart rate",', '"add_to_cart_rate": "Add-to-cart rate", "cart_to_purchase_rate": "Cart-to-purchase rate",').replace(
-            '"add_to_cart_rate": "pct",', '"add_to_cart_rate": "pct", "cart_to_purchase_rate": "pct",'), encoding="utf-8")
+            '"add_to_cart_rate": "pct",', '"add_to_cart_rate": "pct", "cart_to_purchase_rate": "pct",').replace(
+            '["none", "undiagnosed"]', '["untested", "none", "undiagnosed"]'), encoding="utf-8")
         for path in tree.glob("**/creative_metrics.py"):
             path.write_text((ROOT / "shared" / "creative_metrics.py").read_text(encoding="utf-8"), encoding="utf-8")
 

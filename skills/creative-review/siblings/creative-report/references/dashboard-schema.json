@@ -3,7 +3,7 @@
   "$id": "creative-report/dashboard-schema.json",
   "title": "Creative report: Claude dashboard datasets",
   "description": "What report.py --claude-dashboard writes: one array of flat rows per dataset id. x-version is the schema version (the header dataset repeats it); x-key the column or columns that tell rows apart; x-unit currency (the report currency), percent (already times 100), ratio, count, days, date, per-row (the row's own unit column) or text; x-note the sibling column that says why the value is null, so a value is null exactly when its note is set. Metric columns use the metric ids in creative-context/references/metrics.md.",
-  "x-version": 2,
+  "x-version": 3,
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -713,6 +713,8 @@
           "fatiguing_note",
           "next_step",
           "check",
+          "weak_step",
+          "weak_step_note",
           "roas",
           "roas_note",
           "cpa",
@@ -880,6 +882,36 @@
               "null"
             ],
             "x-unit": "text"
+          },
+          "weak_step": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "reach-cost",
+              "hook",
+              "hold",
+              "click",
+              "post-click",
+              "pays-back",
+              "untested",
+              "none",
+              "undiagnosed",
+              null
+            ],
+            "x-unit": "text",
+            "x-note": "weak_step_note",
+            "description": "The ad's first weak funnel step as the report's filter names it; untested when nothing is weak but an after-click step could not be tested; none when nothing is weak."
+          },
+          "weak_step_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^n/a \\(.+\\)$",
+            "x-unit": "text",
+            "description": "Why the paired column is null; null when it has a value."
           },
           "roas": {
             "type": [

@@ -89,10 +89,10 @@ def diagnose(bands: Dict[str, str], notes: Sequence[str] = (),
     untested = ["%s could not be tested (%s)" % (m.replace("_", " "), bands[m][len(prefix):-1]) for m in unknown]
     if not broken:
         if unknown:
-            return {"step": "none", "metrics": [], "untested": unknown, "also_weak": [], "skipped": skipped,
+            return {"step": "none", "metrics": [], "untested": unknown, "untested_why": untested, "also_weak": [], "skipped": skipped,
                     "summary": "no broken step found; %s could not be tested" % ", ".join(unknown),
                     "action": "Nothing graded reads weak, but %s, so the funnel is not known to read normally." % "; ".join(untested)}
-        return {"step": "none", "metrics": [], "untested": [], "summary": "no broken step",
+        return {"step": "none", "metrics": [], "untested": [], "untested_why": [], "summary": "no broken step",
                 "action": "Nothing in the funnel reads weak against this account.", "also_weak": [], "skipped": skipped}
     step, metrics = broken[0]
     also_weak = [m for _, later in broken[1:] for m in later]
@@ -101,7 +101,7 @@ def diagnose(bands: Dict[str, str], notes: Sequence[str] = (),
     if step == "pays back" and untested:
         action = ("Payback is weak, and %s, so the funnel is not known to read normally: check that step, then price, margin, "
                   "offer and attribution before blaming the creative." % "; ".join(untested))
-    return {"step": step, "metrics": metrics, "also_weak": also_weak, "untested": unknown,
+    return {"step": step, "metrics": metrics, "also_weak": also_weak, "untested": unknown, "untested_why": untested,
             "summary": "%s (%s bottom quartile)" % (step, ", ".join(metrics)),
             "action": action, "skipped": skipped}
 

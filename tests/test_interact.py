@@ -994,7 +994,7 @@ class ImprovementTest(unittest.TestCase):
             self.assertTrue(text["has_data"])
 
     def test_the_templates_are_plain_and_carry_no_numbers(self):
-        self.assertEqual(set(interact.STEP_FIX), {"hook", "hold", "click", "post-click", "reach cost", "pays back"})
+        self.assertEqual(set(interact.STEP_FIX), {"hook", "hold", "click", "post-click", "reach cost", "pays back", interact.UNTESTED_STEP})
         for step, line in list(interact.STEP_FIX.items()) + list(interact.STEP_WORDS.items()):
             self.assertNotRegex(line, r"\d", step)
 

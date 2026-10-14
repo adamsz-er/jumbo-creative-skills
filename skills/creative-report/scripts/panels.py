@@ -1166,7 +1166,7 @@ def ways_to_improve(ctx: Ctx) -> Tuple[str, str]:
                            "Run the creative-grader skill and add its grades when you rebuild this report.")
     groups = interact.weak_groups(ctx.records)
     total = len(ctx.records)
-    diagnosed = sum(g["ads"] for g in groups if g["step"] not in (None, "none"))
+    diagnosed = sum(g["ads"] for g in groups if g["step"] not in (None, "none", "untested"))
     body = []
     for g in groups:
         words = g["words"] if g["step"] is None else g["words"][:1].upper() + g["words"][1:]
