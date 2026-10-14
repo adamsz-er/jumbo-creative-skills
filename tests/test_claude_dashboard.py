@@ -1847,7 +1847,8 @@ class ParentHtmlTest(unittest.TestCase):
     def allowed(html, path):
         """The parent's HTML with each deliberate sentence change applied: the head's ad count names the ads with spend it is out of, and the
         click step says people see the ad (an image ad is not watched), the purchase-value coverage line and each field's coverage note name the ads with spend they count,
-        and an age without a creation date is the days the ad delivered."""
+        an age without a creation date is the days the ad delivered, and a post-click row whose ads are weak only after the cart (as on
+        this fixture) points at checkout, with each post-click record saying so."""
         total = len(panels.pareto_cut(panels.Ctx(rows=cm.load_rows(str(path)), currency="USD"))["ranked"])
         html = re.sub(r"Purchase value was recorded on (\d+) of (\d+) ads;", r"Purchase value was recorded on \1 of the \2 ads with spend;", html)
         html = re.sub(r"recorded on (\d+) of (\d+) ads; the rest had none", lambda m: "recorded on %s of the %s ads with spend; the rest had none" % (m.group(1), total), html)
@@ -1857,6 +1858,10 @@ class ParentHtmlTest(unittest.TestCase):
         html = html.replace("Age is counted to the last day of the data, from each ad's first day of delivery in this window, so an ad that "
                             "started before the window reads younger than it is", "Age is the days each ad delivered in this window, so an ad "
                             "that started before the window reads younger than it is")
+        html = html.replace('"weak":"post-click"}', '"weak":"post-click","cart_only":true}').replace(
+            "<td>Clicks do not turn into carts or purchases</td>", "<td>People add to cart but do not buy</td>").replace(
+            "<td>Check that the landing page and the offer match the ad, then the audience.</td><td><a href=\"#panel-all-ads\" data-weak=\"post-click\">",
+            "<td>Check checkout, price and shipping costs first.</td><td><a href=\"#panel-all-ads\" data-weak=\"post-click\">")
         return html.replace("people watch but do not click", "people see the ad but do not click").replace(
             "People watch but do not click", "People see the ad but do not click")
 

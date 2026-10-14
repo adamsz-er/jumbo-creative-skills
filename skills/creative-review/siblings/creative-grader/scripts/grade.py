@@ -42,8 +42,7 @@ ACTIONS = {
     "click": "People watch but few click: the call to action or the offer is weak.",
     "post-click": "Clicks arrive but do not convert: likely the landing page or the offer, not the creative. "
                   "Check the site and whether the page matches the message; also rule out an audience mismatch.",
-    "post-click cart": "People add to cart but do not buy: check checkout, price and shipping costs first, not the landing "
-                       "page or the creative.",
+    "post-click cart": "%s: %s, not the landing page or the creative." % (cm.CART_WORDS.capitalize(), cm.CART_CHECK),
     "pays back": "The funnel reads normally but payback is weak: check price, margin, offer and attribution "
                  "before blaming the creative.",
 }

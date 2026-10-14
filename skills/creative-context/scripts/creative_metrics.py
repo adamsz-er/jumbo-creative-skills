@@ -1808,6 +1808,8 @@ CONTEXT_STEPS = ("cvr",)
 AFTER_CLICK_STEPS = ("add_to_cart_rate", "cart_to_purchase_rate")
 # Steps after the cart: weak ones point at checkout, price and shipping rather than the landing page.
 CART_STEPS = ("cart_to_checkout_rate", "cart_to_purchase_rate")
+CART_WORDS = "people add to cart but do not buy"
+CART_CHECK = "check checkout, price and shipping costs first"
 CART_CALLS = {
     "site": "the ad still earns attention and clicks, and people add to cart, but a step after the cart is weak or falling: "
             "check checkout, price and shipping costs first, not the landing page",

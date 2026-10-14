@@ -327,6 +327,8 @@ def _record(key: str, base: Dict[str, Any], verdict: Optional[Dict[str, Any]], g
     }
     if step == UNTESTED_STEP:
         record["untested_why"] = list(diagnosis.get("untested_why") or [])
+    if step == "post-click":
+        record["cart_only"] = all(m in cm.CART_STEPS for m in diagnosis.get("metrics") or [])
     return record
 
 
@@ -560,7 +562,7 @@ def ad_funnel(base: Optional[Dict[str, Any]], fmt: Any = None) -> List[Dict[str,
 
 def weak_groups(records: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Ads by first weak funnel step, largest spend first; then ads with a step that could not be tested, 'nothing weak', and ads with no
-    diagnosis. Every ad lands in one row."""
+    diagnosis. Every ad lands in one row. A post-click row whose ads are all weak only after the cart points at checkout, as the grader does."""
     total = sum(r.get("spend") or 0 for r in records)
     found: Dict[Optional[str], List[Dict[str, Any]]] = {}
     for rec in records:
@@ -571,10 +573,16 @@ def weak_groups(records: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
         spend = _money(sum(r.get("spend") or 0 for r in members))
         words = STEP_WORDS.get(UNSLUG.get(step), "no weak step found" if step == "none" else "not diagnosed (missing data)")
         why = "; ".join(dict.fromkeys(w for r in members for w in r.get("untested_why") or [])) if step == "untested" else ""
+        fix = STEP_FIX.get(UNSLUG.get(step))
         if why:
             words = "not known: " + why
+        cart = [bool(r.get("cart_only")) for r in members] if step == "post-click" else []
+        if cart and all(cart):
+            words, fix = cm.CART_WORDS, cm.CART_CHECK.capitalize() + "."
+        elif any(cart):
+            fix += " For the ads weak only after the cart, %s." % cm.CART_CHECK
         return {"step": step, "ads": len(members), "spend": spend, "share": spend / total * 100 if total else None,
-                "words": words, "fix": STEP_FIX.get(UNSLUG.get(step))}
+                "words": words, "fix": fix}
 
     actionable = sorted((s for s in found if s in UNSLUG and s != "untested"), key=lambda s: -sum(r.get("spend") or 0 for r in found[s]))
     return [row(s) for s in actionable + [s for s in ("untested", "none", None) if s in found]]
