@@ -15,7 +15,7 @@ A sale is several jobs in a row, and each needs its own creative. This skill pla
 
 1. Read `creative-profile.md` (offers, calendar, margin, claims that need approval). If missing, ask in one round: brand, product, audience, the sale's dates and offer, tone.
 2. Ask **why** this sale: clear stock, acquire new customers, reward existing ones, hit a cash target, match a market moment. The reason picks the mechanic.
-3. Settle the market before applying any market's rules: the profile's "Markets or regions" line first, then a market column in the data, then ask. The currency is a hint, not an answer ("Your data is in USD: are you selling in the US?"). Until the market is known, give the rules as market-neutral principles and name no regulator. Australia and the US have sources and a calendar in the references; for any other market, tell the user to check their own regulator's rules on sale pricing and urgency before anything runs.
+3. Settle the market before applying any market's rules: the profile's "Markets or regions" line first, then a market column in the data, then ask. The currency is a hint, not an answer ("Your data is in USD: are you selling in the US?"). Never settle or hint at the market from the signed-in account's email, its domain or any other session detail: those describe whoever is running Claude, not the brand. Until the market is known, give the rules as market-neutral principles and name no regulator. Australia and the US have sources and a calendar in the references; for any other market, tell the user to check their own regulator's rules on sale pricing and urgency before anything runs.
 4. Never invent the offer, the discount, the dates or a "was" price. They come from the user.
 
 ## Plan the sale

@@ -26,6 +26,10 @@ class SalePlannerMarketTest(unittest.TestCase):
         self.assertIn("name no regulator", step)
         self.assertNotIn("**My market is not Australia.**", text)
 
+    def test_the_market_never_comes_from_the_signed_in_account(self):
+        step = re.search(r"^3\. (.+)$", read("sale-planner", "SKILL.md").split("## Before you start")[1], re.M).group(1)
+        self.assertIn("signed-in account's email", step)
+
     def test_consumer_law_holds_us_and_australian_sources(self):
         text = read("sale-planner", "references", "consumer-law.md")
         intro = text.split("## ")[0]
@@ -132,6 +136,14 @@ class TranscriptClaimsTest(unittest.TestCase):
         self.assertIn("`[creator's own experience]`", text)
         self.assertIn("invented testimonial", text)
         self.assertNotIn("first-person experience (\"my old jacket let the rain in\") is a new claim", text)
+
+
+class FatiguePlannerLateFlagTest(unittest.TestCase):
+    """The answer marks as many calendar rows late as the script counts."""
+
+    def test_every_shown_row_keeps_the_scripts_late_flag(self):
+        text = read("fatigue-planner", "SKILL.md").split("## Present the result")[1]
+        self.assertIn("Copy the script's late flag onto every calendar row you show", text)
 
 
 if __name__ == "__main__":
