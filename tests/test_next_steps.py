@@ -22,6 +22,13 @@ def skills(verdicts=None, mix=None):
     return [s["skill"] for s in next_steps.next_steps(verdicts, mix)]
 
 
+class StandaloneTest(unittest.TestCase):
+    def test_the_script_imports_alone_under_isolated_python_from_another_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            done = subprocess.run([sys.executable, "-I", str(SCRIPTS / "next_steps.py")], cwd=tmp, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+
 class RuleTest(unittest.TestCase):
     def test_every_rule_names_a_real_skill(self):
         for skill, _ in tuple(next_steps.RULES) + tuple(next_steps.FILL):
