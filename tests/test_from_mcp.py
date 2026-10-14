@@ -81,14 +81,14 @@ class LoaderMappingTest(unittest.TestCase):
 
     def test_age_comes_from_created_time(self):
         ad = next(a for a in cm.aggregate_by_ad(self.rows) if a["ad_id"] == VIDEO_AD)
-        self.assertEqual(ad["age_days"], (dt.date(2026, 3, 3) - dt.date(2026, 1, 15)).days)
+        self.assertEqual(ad["age_days"], (dt.date(2026, 3, 3) - dt.date(2026, 1, 15)).days + 1)
         self.assertEqual(ad["age_basis"], "created_time")
 
     def test_age_falls_back_to_first_delivery_and_says_so(self):
         stripped = [{k: v for k, v in r.items() if k != "created_time"} for r in self.rows]
         ad = next(a for a in cm.aggregate_by_ad(stripped) if a["ad_id"] == VIDEO_AD)
-        self.assertEqual(ad["age_days"], 2)
-        self.assertTrue(ad["age_basis"].startswith("first delivery in window"))
+        self.assertEqual(ad["age_days"], 3)
+        self.assertTrue(ad["age_basis"].startswith("days with delivery in the window"))
         self.assertIn("understated", ad["age_basis"])
 
     def test_id_and_name_are_not_remapped_on_a_non_ad_row(self):
@@ -123,18 +123,18 @@ class ReviewFixesTest(unittest.TestCase):
         rows = cm.load_rows([{"ad_name": "a", "date_start": "2026-03-01", "created_time": "2026-03-05T00:00:00+0000",
                               "impressions": 100}])
         ad = cm.aggregate_by_ad(rows)[0]
-        self.assertEqual(ad["age_days"], 0)
+        self.assertEqual((ad["age_days"], ad["age_basis"]), (1, cm.AGE_FROM_DELIVERY))
         later = cm.load_rows([{"ad_name": "a", "date_start": "2026-03-01", "created_time": "2026-02-25T00:00:00+0000",
                                "impressions": 100}, {"ad_name": "a", "date_start": "2026-03-04", "impressions": 100}])
         ad = cm.aggregate_by_ad(later)[0]
-        self.assertEqual((ad["age_days"], ad["age_basis"]), (7, "created_time"))
+        self.assertEqual((ad["age_days"], ad["age_basis"]), (8, "created_time"))
 
     def test_a_created_time_after_first_delivery_falls_back_to_first_delivery(self):
         rows = cm.load_rows([{"ad_name": "a", "date_start": "2026-03-01", "created_time": "2026-03-02T00:00:00+0000",
                               "impressions": 100}, {"ad_name": "a", "date_start": "2026-03-05", "impressions": 100}])
         ad = cm.aggregate_by_ad(rows)[0]
-        self.assertEqual(ad["age_days"], 4)
-        self.assertTrue(ad["age_basis"].startswith("first delivery"))
+        self.assertEqual(ad["age_days"], 2)
+        self.assertEqual(ad["age_basis"], cm.AGE_FROM_DELIVERY)
 
 
 class FromMcpTest(unittest.TestCase):
@@ -168,6 +168,18 @@ class FromMcpTest(unittest.TestCase):
         run_main([first, second, "-o", str(self.out)])
         rows = [r for r in cm.load_rows(str(self.out)) if r["ad_id"] == RAW[0]["id"] and r["date"] == RAW[0]["date_start"]]
         self.assertEqual([r["conversions"] for r in rows], [999.0])
+
+    def test_a_blank_link_click_count_stays_blank_in_the_csv_so_the_disclosure_survives_a_reload(self):
+        raw = [dict(r) for r in RAW]
+        del raw[0]["link_click"]
+        merged = from_mcp.merge(raw)
+        from_mcp.write_csv(merged, str(self.out))
+        reloaded = cm.load_rows(str(self.out))
+        line = "1 ad-day had a blank link-click cell, counted as 0 (exports leave zeros blank)."
+        self.assertIn(line, cm.click_basis_line(cm.aggregate_by_ad(merged)))
+        self.assertIn(line, cm.click_basis_line(cm.aggregate_by_ad(reloaded)))
+        before = {a["ad_id"]: a["ctr"] for a in cm.aggregate_by_ad(merged)}
+        self.assertEqual({a["ad_id"]: a["ctr"] for a in cm.aggregate_by_ad(reloaded)}, before)
 
     def test_csv_is_readable_by_the_analysis_scripts(self):
         run_main([str(FIXTURE), "-o", str(self.out)])

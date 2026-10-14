@@ -25,14 +25,22 @@ NOT_STATED = "not stated"
 LISTED = 8  # most values listed per field; arbitrary display cap
 
 
-def _tally(values: Sequence[Any]) -> str:
+def _tally(values: Sequence[Any], noun: str = "") -> str:
     counts = Counter(str(v) for v in values if v not in (None, "", "unknown"))
     if not counts:
         return NOT_STATED
     shown = ", ".join("%s (%d)" % kv for kv in counts.most_common(LISTED))
     if len(counts) > LISTED:
-        return "%d distinct, the most used: %s" % (len(counts), shown)
+        return "%d distinct%s, the most used: %s" % (len(counts), " " + noun if noun else "", shown)
     return shown
+
+
+def _concepts(values: Sequence[Any]) -> str:
+    """Concept names as written, saying so: creative-mix counts families, so its concept count is smaller."""
+    tally = _tally(values, "concept names")
+    if tally == NOT_STATED:
+        return tally
+    return tally + " (each variant name counted; creative-mix groups variant names such as x and x-two into one family)"
 
 
 def account_name(rows: Sequence[Dict[str, Any]]) -> Optional[str]:
@@ -87,7 +95,7 @@ def draft(rows: Sequence[Dict[str, Any]], names: Sequence[str], name: Optional[s
         "- Markets or regions: %s" % _tally([a.get("market") for a in ads]),
         "- Formats in use: %s" % _tally([a.get("format") for a in ads]),
         "- Ad types in use: %s" % _tally([a.get("ad_type") for a in ads]),
-        "- Concepts in use: %s" % _tally([a.get("concept") for a in ads]),
+        "- Concepts in use: %s" % _concepts([a.get("concept") for a in ads]),
         "",
         "## Data",
         "- Mode: %s" % mode,

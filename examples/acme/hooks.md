@@ -32,7 +32,7 @@ Check the current cut-off for each placement in your placement preview; each ope
 
 ## Iteration set: the fatiguing ad
 
-**The ad:** `durability-test | ugc-video | creator-01 | bau | trail-boot | lofi`. The verdict is "iterate: refresh the hook or creator, keep the concept" (ctr and hook rate down, frequency up, payback still not bottom quartile). The grade names the hook as the first broken step. Original opening: not in the export; take it from the ad itself. Each variant below changes exactly one thing.
+**The ad:** `durability-test | ugc-video | creator-01 | bau | trail-boot | lofi`. The verdict is "Refresh: a new hook or creator, keep the concept" (ctr and hook rate down, frequency up, payback still not bottom quartile). The grade names the hook as the first broken step. Original opening: not in the export; take it from the ad itself. Each variant below changes exactly one thing.
 
 | Variant | Kept | What changed | What it tests |
 |---|---|---|---|

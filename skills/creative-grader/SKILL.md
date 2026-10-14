@@ -36,17 +36,17 @@ python3 -I scripts/grade.py ads.csv --profile creative-profile.md --where market
 
 ## What the script does
 
-- Grades hook rate, hold rate, CTR, CPM, CVR, add-to-cart rate, CPA and ROAS (plus CPC, cost per lead and engagement rate where the data has them) per ad as top quartile, middle or bottom quartile within the ad's group and campaign objective. The default group is format then ad type; a group with fewer than 5 comparable ads widens to format, then to the whole objective, and the output names the group each ad was graded in. Groups under twice that minimum are flagged as small: a grade there is an early read. Costs are inverted: a low CPM is top quartile.
+- Grades hook rate, hold rate, CTR, CPM, CVR, add-to-cart rate, cart-to-purchase rate, CPA and ROAS (plus CPC, cost per lead and engagement rate where the data has them) per ad as top quartile, middle or bottom quartile within the ad's group and campaign objective. The default group is format then ad type; a group with fewer than 5 comparable ads widens to format, then to the whole objective, and the output names the group each ad was graded in. Groups under twice that minimum are flagged as small: a grade there is an early read. Costs are inverted: a low CPM is top quartile.
 - Reads payback by objective: sales on CPA and ROAS, traffic on CPC and CTR, awareness on CPM and hook rate, leads on cost per lead, engagement on engagement rate and CPM. An ad is never judged on a measure its objective does not use. With no objective column every ad is graded as sales and the output says so.
-- Reads the funnel in order and stops at the first bottom-quartile step: reach cost, hook, hold, click, post-click, payback. Post-click is only read while CTR is healthy, because a weak CTR is already the broken step. The action for each step is in `references/diagnosis-patterns.md`.
+- Reads the funnel in order and stops at the first bottom-quartile step: reach cost, hook, hold, click, post-click, payback. Post-click is only read while CTR is healthy, because a weak CTR is already the broken step. Post-click is add-to-cart rate or cart-to-purchase rate in the bottom quartile AND significantly below the ad's group, the same rule funnel-diagnosis uses, so the two skills agree; a bottom-quartile rate within the group's noise is shown but never named as the broken step. CVR is shown but does not decide post-click. When only cart-to-purchase is weak, the action points at checkout, price and shipping, not the landing page. The action for each step is in `references/diagnosis-patterns.md`.
 - Ads under the impression floor are "not graded (low volume)". Missing video fields show as `n/a (missing <field>)`, the diagnosis skips that step and lists what it skipped. A skipped step is never read as healthy.
 
 ## Present the result
 
-1. Lead with the diagnosis counts and the three ads that most need attention, each with its step and action.
+1. Lead with the diagnosis counts and the three ads that most need attention, each with its step and action. Quote every count (ads per format, per group, per diagnosis) from the script's output or `--json`; never add up or count a list by hand.
 2. Then the table.
-3. Say what could not be graded and why.
-4. Frame post-click and reach-cost findings as "check the site / the auction first", not "the creative failed". The creative owns hook, hold and click.
+3. Say what could not be graded and why, quoting the script's "Steps skipped" lines: one line per step with its count and ads. Never count n/a rows in the table yourself.
+4. Frame post-click and reach-cost findings as "check the site / the auction first", not "the creative failed". A post-click read on cart-to-purchase alone is "check checkout, price and shipping", never the landing page. The creative owns hook, hold and click.
 
 ## Guardrails
 

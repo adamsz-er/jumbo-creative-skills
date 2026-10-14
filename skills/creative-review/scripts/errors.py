@@ -30,8 +30,8 @@ TABLE: Dict[str, Tuple[int, str, str]] = {
     "E-MIXED-CURRENCY": (20, "The pull mixes currencies: {units}.",
                         "Pull each currency separately (one ad account per pull), then run the pull and the review on each "
                         "file on its own."),
-    "E-SKILL": (15, "The skill '{skill}' is not installed next to creative-review, and the review needs it.",
-                "Install the whole package: " + INSTALL + "."),
+    "E-SKILL": (15, "The copy of the '{skill}' skill bundled with creative-review is missing, and the review needs it.",
+                "Reinstall creative-review: " + INSTALL + "; or upload creative-review.zip again."),
     "E-PROFILE": (16, "The profile {path} could not be read: {reason}.",
                   "Fix the line named above in {path}, or pass a different --profile."),
     "E-TARGET": (17, "{detail}",

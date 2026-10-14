@@ -110,7 +110,7 @@ Only from the user and the data; claims needing approval are marked "needs sign-
 
 ### How do I make a one-change variant of a winning ad?
 
-Ask hook-writer for variants, or creative-brief for a one-change brief on an Iterate ad.
+Ask hook-writer for variants, or creative-brief for a one-change brief on a Refresh ad.
 
 ## The report
 

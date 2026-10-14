@@ -398,11 +398,12 @@ class BundleTest(unittest.TestCase):
 
     def test_schema_flags_a_header_without_the_schema_version(self):
         b = self.mutate_rows("header", lambda rows: rows.pop())
-        self.assertFlags(b, "dataset header does not carry schema version 2")
+        self.assertFlags(b, "dataset header does not carry schema version %s" % dashboard.load_schema()["x-version"])
 
     def test_check_refuses_a_bundle_built_with_schema_version_one_and_says_to_rebuild(self):
         b = self.mutate_rows("header", lambda rows: next(r for r in rows if r["fact"] == "Schema version").update(value="1"))
-        self.assertFlags(b, "this bundle was built with schema version 1 and this report.py reads version 2: build the bundle again")
+        self.assertFlags(b, "this bundle was built with schema version 1 and this report.py reads version %s: build the bundle again"
+                         % dashboard.load_schema()["x-version"])
 
     # ---------- review fixes: the check's gaps ----------
 
@@ -1140,6 +1141,16 @@ class NewDatasetTest(unittest.TestCase):
         _, ctx = report.build_report(rows=rows, verdicts=self.verdicts, currency="USD", generated="2026-01-02")
         return dashboard.build_datasets(ctx)[0]
 
+    def test_the_concepts_left_out_of_the_gaps_are_named_in_the_caveats_with_or_without_gaps(self):
+        mix = run_json("creative-mix", "mix.py")
+        self.assertTrue(mix["gaps_left_out"])
+        for gaps in (mix["gaps"], []):
+            _, ctx = report.build_report(rows=self.rows, mix=dict(mix, gaps=gaps), currency="USD", generated="2026-01-02")
+            caveats = [r["text"] for r in dashboard.build_datasets(ctx)[0]["notes"] if r["section"] == "caveat"]
+            line = next((t for t in caveats if t.startswith("Left out as your weakest concepts")), None)
+            self.assertIsNotNone(line, caveats)
+            self.assertIn("Before after (ROAS 2.72x)", line)
+
     def test_unvalued_ad_days_over_the_method_setting_stop_the_running_value_from_the_first_with_their_share(self):
         rows = [dict(r) for r in self.rows]
         days = sorted({r["date"] for r in rows})
@@ -1165,7 +1176,7 @@ class NewDatasetTest(unittest.TestCase):
         rows = [{"date": "2026-03-01", "ad_id": "1", "spend": 100.0, "impressions": 1000.0, "conversions": 2.0, "conversion_value": 300.0},
                 {"date": "2026-03-02", "ad_id": "1", "spend": 100.0, "impressions": 1000.0, "conversions": 0.0, "conversion_value": 0.0},
                 {"date": "2026-03-04", "ad_id": "1", "spend": 100.0, "impressions": 1000.0, "conversions": 1.0, "conversion_value": 90.0}]
-        daily = {(r["day"], r["metric"]): r for r in dashboard.daily_rows(type("Ctx", (), {"rows": rows, "currency": "USD"})())}
+        daily = {(r["day"], r["metric"]): r for r in dashboard.daily_rows(type("Ctx", (), {"rows": rows, "currency": "USD", "gapped": panels.cm.gap_ads(rows)})())}
         self.assertIsNone(daily[("2026-03-02", "cpa")]["value"])
         self.assertEqual(daily[("2026-03-02", "cpa")]["value_note"], "n/a (zero purchases)")
         self.assertEqual(daily[("2026-03-03", "cpa")]["value_note"], "n/a (no data this day)")
@@ -1835,13 +1846,45 @@ class ParentHtmlTest(unittest.TestCase):
     @staticmethod
     def allowed(html, path):
         """The parent's HTML with each deliberate sentence change applied: the head's ad count names the ads with spend it is out of, and the
-        click step says people see the ad (an image ad is not watched), and the purchase-value coverage line and each field's coverage note name the ads with spend they count."""
+        click step says people see the ad (an image ad is not watched), the purchase-value coverage line and each field's coverage note name the ads with spend they count,
+        an age without a creation date is the days the ad delivered, and a post-click row whose ads are weak only after the cart (as on
+        this fixture) points at checkout, with each post-click record saying so."""
         total = len(panels.pareto_cut(panels.Ctx(rows=cm.load_rows(str(path)), currency="USD"))["ranked"])
         html = re.sub(r"Purchase value was recorded on (\d+) of (\d+) ads;", r"Purchase value was recorded on \1 of the \2 ads with spend;", html)
         html = re.sub(r"recorded on (\d+) of (\d+) ads; the rest had none", lambda m: "recorded on %s of the %s ads with spend; the rest had none" % (m.group(1), total), html)
         html = re.sub(r"(\d+) ads \((\d+)% of ads\) drive", lambda m: "%s ads (%s%% of the %s ads with spend) drive" % (m.group(1), m.group(2), total), html)
+        html = re.sub(r"(\d+) days, counted from days with delivery in the window - older ads may be understated",
+                      lambda m: "%s day%s with delivery in this window (it may be older)" % (m.group(1), "" if m.group(1) == "1" else "s"), html)
+        html = html.replace("Age is counted to the last day of the data, from each ad's first day of delivery in this window, so an ad that "
+                            "started before the window reads younger than it is", "Age is the days each ad delivered in this window, so an ad "
+                            "that started before the window reads younger than it is")
+        html = html.replace('"weak":"post-click"}', '"weak":"post-click","cart_only":true}').replace(
+            "<td>Clicks do not turn into carts or purchases</td>", "<td>People add to cart but do not buy</td>").replace(
+            "<td>Check that the landing page and the offer match the ad, then the audience.</td><td><a href=\"#panel-all-ads\" data-weak=\"post-click\">",
+            "<td>Check checkout, price and shipping costs first.</td><td><a href=\"#panel-all-ads\" data-weak=\"post-click\">")
         return html.replace("people watch but do not click", "people see the ad but do not click").replace(
             "People watch but do not click", "People see the ad but do not click")
+
+    @staticmethod
+    def apply_later_changes(tree):
+        """Give the parent the later deliberate changes: the verdict a user reads as "Refresh" (its id stays `iterate`), today's
+        metrics module (link clicks as the one click basis for purchase and add-to-cart rates), the label and unit of the
+        cart-to-purchase rate that module grades, and the "untested" value the weak-step filter offers."""
+        for path in (tree / "skills" / "creative-report" / "scripts").glob("*.py"):
+            path.write_text(path.read_text(encoding="utf-8").replace("Iterate", "Refresh"), encoding="utf-8")
+        interact = tree / "skills" / "creative-report" / "scripts" / "interact.py"
+        interact.write_text(interact.read_text(encoding="utf-8").replace(
+            '"add_to_cart_rate": "Add-to-cart rate",', '"add_to_cart_rate": "Add-to-cart rate", "cart_to_purchase_rate": "Cart-to-purchase rate",').replace(
+            '"add_to_cart_rate": "pct",', '"add_to_cart_rate": "pct", "cart_to_purchase_rate": "pct",').replace(
+            '["none", "undiagnosed"]', '["untested", "none", "undiagnosed"]'), encoding="utf-8")
+        for path in tree.glob("**/creative_metrics.py"):
+            path.write_text((ROOT / "shared" / "creative_metrics.py").read_text(encoding="utf-8"), encoding="utf-8")
+
+    @staticmethod
+    def without_new_lines(html):
+        """The report now states its click basis in the method notes and names the concepts left out of the gaps; the parent did neither."""
+        html = re.sub(r'<p class="muted">Left out as your weakest concepts [^<]*</p>', "", html)
+        return re.sub(r"(Completeness: [^\n<]*)\nClick-based rates \(CTR, CPC, purchase and add-to-cart rates\)[^\n<]*", r"\1", html)
 
     SNIPPET = ("import sys, json; sys.path.insert(0, sys.argv[1]); import report, creative_metrics as cm; "
                "grade, verdicts, mix = (json.load(open(p)) for p in sys.argv[3:6]); "
@@ -1855,6 +1898,7 @@ class ParentHtmlTest(unittest.TestCase):
             archive = subprocess.run(["git", "archive", PARENT, "skills/creative-report", "skills/creative-context", "shared"], cwd=ROOT, capture_output=True)
             self.assertEqual(archive.returncode, 0, archive.stderr)
             subprocess.run(["tar", "-x", "-C", tmp], input=archive.stdout, check=True)
+            ParentHtmlTest.apply_later_changes(Path(tmp))
             inputs = []
             for name, (skill, script) in (("grade", ("creative-grader", "grade.py")), ("verdicts", ("keep-or-kill", "verdicts.py")),
                                           ("mix", ("creative-mix", "mix.py"))):
@@ -1869,7 +1913,7 @@ class ParentHtmlTest(unittest.TestCase):
                 made[label] = done.stdout
             self.assertGreater(len(made["parent"]), 10000)
             self.assertNotEqual(made["parent"], made["now"])
-            self.assertEqual(self.allowed(made["parent"], FIXTURE), made["now"])
+            self.assertEqual(self.allowed(made["parent"], FIXTURE), self.without_new_lines(made["now"]))
 
     def test_blank_purchase_counts_change_only_the_daily_series_and_each_day_cpa_carries_all_its_spend(self):
         """The one deliberate change from the parent: a day's rate is over all its rows, so a row with spend and a blank purchase count keeps
@@ -1880,6 +1924,7 @@ class ParentHtmlTest(unittest.TestCase):
             archive = subprocess.run(["git", "archive", PARENT, "skills/creative-report", "skills/creative-context", "shared"], cwd=ROOT, capture_output=True)
             self.assertEqual(archive.returncode, 0, archive.stderr)
             subprocess.run(["tar", "-x", "-C", tmp], input=archive.stdout, check=True)
+            ParentHtmlTest.apply_later_changes(Path(tmp))
             with open(FIXTURE, newline="") as handle:
                 reader = csv.DictReader(handle)
                 fields, rows = reader.fieldnames, list(reader)
@@ -1902,7 +1947,7 @@ class ParentHtmlTest(unittest.TestCase):
                 done = subprocess.run([sys.executable, "-I", "-c", self.SNIPPET, str(scripts), str(blanked)] + inputs + [str(PROFILE)],
                                       capture_output=True, text=True)
                 self.assertEqual(done.returncode, 0, done.stderr)
-                made[label] = done.stdout if label == "now" else self.allowed(done.stdout, blanked)
+                made[label] = self.without_new_lines(done.stdout) if label == "now" else self.allowed(done.stdout, blanked)
             panel = re.compile(r'<section class="card panel" id="(panel-[\w-]+)"')
             parts = {label: dict(zip(panel.findall(html), panel.split(html)[2::2])) for label, html in made.items()}
             self.assertEqual(sorted(parts["parent"]), sorted(parts["now"]))

@@ -42,6 +42,10 @@ Accounts often use their own order. `parse_name` reads any of these without bein
 | STG, STAGE, FUNNEL | `funnel_stage` |
 | TONE | `tone` |
 | LD, DATE, LAUNCH | `launch_date` |
+| PER, PERSONA | `persona` |
+| HK, HOOK | `hook` |
+| OFFER, OFR | `offer` |
+| VER, VERSION | `version` |
 
 A key that is not in this table needs no map: it is read from the values it takes across all names. If most are format words it is `format`; ad-type words or synonyms, `ad_type`; market codes, `market`; dates, `launch_date`. Otherwise it keeps its own lowercase name as a field, with one exception: when nothing else is the concept and exactly one unmapped key holds free text (more than one distinct value), that key is read as the concept and detection says so. With two or more such keys none is, detection names them, and you ask the user ONE question about which is the concept. A key counts only when more than half of all names carry it, and a key whose values are mostly numbers is never read as the concept. Detection reports each inference with its computed share and the key's coverage ("key X read as format because 92% of its values are format words; the key is in 97% of names"). Override or add keys with `--key-map "PX=concept"` on `detect_naming.py`, `grade.py`, `verdicts.py`, `mix.py` and `report.py`; the map always wins.
 

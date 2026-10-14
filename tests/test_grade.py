@@ -112,9 +112,13 @@ class BottomHookAndCtrTest(unittest.TestCase):
         self.assertEqual(grade.diagnose(bands)["step"], "click")
 
     def test_post_click_needs_a_healthy_ctr(self):
-        diagnosis = grade.diagnose({"ctr": MID, "cvr": BOTTOM})
+        diagnosis = grade.diagnose({"ctr": MID, "add_to_cart_rate": BOTTOM})
         self.assertEqual(diagnosis["step"], "post-click")
         self.assertIn("not the creative", diagnosis["action"])
+        self.assertEqual(grade.diagnose({"ctr": BOTTOM, "add_to_cart_rate": BOTTOM})["step"], "click")
+
+    def test_cvr_is_shown_but_never_decides_post_click(self):
+        self.assertEqual(grade.diagnose({"ctr": MID, "cvr": BOTTOM})["step"], "none")
 
     def test_payback_is_last_and_nothing_broken_says_so(self):
         self.assertEqual(grade.diagnose({"ctr": MID, "roas": BOTTOM})["step"], "pays back")
@@ -153,7 +157,49 @@ class FixtureTest(unittest.TestCase):
         self.assertIn("2026-03-01", header)
         self.assertIn("2026-03-30", header)
         self.assertIn("Purchases", header)
-        self.assertIn("link_clicks", header)
+        self.assertIn("Click-based rates (CTR, CPC, purchase and add-to-cart rates) use link clicks.", header)
+
+    def test_basis_names_all_clicks_when_link_clicks_are_missing(self):
+        rows = []
+        for i in range(1, 9):
+            row = day_row("ad%d" % i, "static", 10000, link_clicks=None)
+            del row["Link clicks"]
+            row["Clicks (all)"] = 60.0 * i
+            rows.append(row)
+        rows = cm.load_rows(rows)
+        results = grade.grade_ads(rows)
+        header = grade.basis_header(rows, results)
+        self.assertIn("use all clicks, because the data has no link clicks", header)
+        self.assertNotIn("use link clicks", header)
+
+
+class SkippedCountTest(unittest.TestCase):
+    """Each skipped step is printed once with its own count, so an answer quotes it rather than counting n/a rows."""
+
+    def test_each_skipped_step_has_one_line_with_its_count(self):
+        rows = cm.load_rows(str(FIXTURE))
+        text = grade.render(rows, grade.grade_ads(rows))
+        hook = [l for l in text.splitlines() if l.startswith("  hook_rate not graded")]
+        self.assertEqual(len(hook), 1, hook)
+        self.assertTrue(hook[0].startswith("  hook_rate not graded (missing video_views_3s) on 14 ads: "), hook[0])
+        self.assertEqual(len(hook[0].split(": ", 1)[1].split(", ")), 14)
+        self.assertIn("  hold_rate not graded (missing video_thruplay) on 15 ads: ", text)
+        self.assertIn("  cpa not graded (zero conversions) on 1 ad: 120000000017", text)
+
+    def test_one_step_skipped_for_two_reasons_is_one_line_with_both_counts(self):
+        raw = []
+        for ad in range(8):
+            for day in range(3):
+                row = {"Day": "2026-04-%02d" % (day + 1), "Ad name": "ad-%d | static | house | bau" % ad, "Ad ID": "9000%d" % ad,
+                       "Amount spent (USD)": 100 + ad, "Impressions": 20000, "Link clicks": 300 + ad, "Purchases": 10 + ad}
+                if ad < 3:
+                    row["3-second video plays"] = 5000 + 100 * ad
+                raw.append(row)
+        rows = cm.load_rows(raw)
+        lines = [l for l in grade.render(rows, grade.grade_ads(rows)).splitlines() if l.startswith("  hook_rate not graded")]
+        self.assertEqual(len(lines), 1, lines)
+        self.assertTrue(lines[0].startswith("  hook_rate not graded on 8 ads: 3 too little comparison data: 3 comparable ads, need 5, "
+                                            "5 missing video_views_3s: "), lines[0])
 
 
 class ObjectiveAndGroupingTest(unittest.TestCase):
@@ -228,6 +274,15 @@ class ObjectiveAndGroupingTest(unittest.TestCase):
         self.assertIsNone(partial["engagement_rate"])
         self.assertIn("missing saves and comments", cm.format_value(partial, "engagement_rate"))
         self.assertIsNone(partial["cost_per_lead"])
+
+
+
+class ClickBasisHeaderTest(unittest.TestCase):
+    def test_the_header_is_one_basis_never_both(self):
+        rows = cm.load_rows(str(FIXTURE))
+        header = grade.basis_header(rows, grade.grade_ads(rows))
+        self.assertIn(cm.click_basis_line(cm.aggregate_by_ad(rows)), header)
+        self.assertNotIn(" and link clicks", header)
 
 
 if __name__ == "__main__":

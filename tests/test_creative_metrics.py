@@ -32,8 +32,8 @@ class ComputeMetricsTest(unittest.TestCase):
         self.assertAlmostEqual(m["cpc"], 200.0 / 150.0)  # same click type as ctr: link clicks
         self.assertAlmostEqual(m["cpa"], 20.0)
         self.assertAlmostEqual(m["roas"], 4.0)
-        self.assertAlmostEqual(m["cvr"], 4.0)
-        self.assertAlmostEqual(m["add_to_cart_rate"], 10.0)
+        self.assertAlmostEqual(m["cvr"], 1000.0 / 150.0)  # after-click rates count link clicks, as ctr does
+        self.assertAlmostEqual(m["add_to_cart_rate"], 2500.0 / 150.0)
         self.assertAlmostEqual(m["cost_per_add_to_cart"], 8.0)
         self.assertAlmostEqual(m["frequency"], 1.25)
         self.assertAlmostEqual(m["mer"], 5.0)
@@ -44,6 +44,19 @@ class ComputeMetricsTest(unittest.TestCase):
         self.assertAlmostEqual(cm.compute_metrics(no_link)["ctr"], 2.5)
         self.assertEqual(cm.metric_basis(no_link, "ctr")["numerator"], "clicks")
         self.assertEqual(cm.metric_basis(self.ROW, "ctr")["numerator"], "link_clicks")
+
+    def test_after_click_rates_use_link_clicks_and_fall_back_to_all_clicks(self):
+        # All clicks include likes, profile taps and "see more", none of which reach the site.
+        for metric in ("cvr", "add_to_cart_rate"):
+            self.assertEqual(cm.metric_basis(self.ROW, metric)["denominator"], "link_clicks", metric)
+            no_link = dict(self.ROW, link_clicks=None)
+            self.assertEqual(cm.metric_basis(no_link, metric)["denominator"], "clicks", metric)
+        self.assertAlmostEqual(cm.compute_metrics(dict(self.ROW, link_clicks=None))["cvr"], 4.0)
+
+    def test_metrics_md_states_the_link_click_denominator(self):
+        text = (ROOT / "skills" / "creative-context" / "references" / "metrics.md").read_text(encoding="utf-8")
+        self.assertIn("| `cvr` | conversions / link_clicks * 100 |", text)
+        self.assertIn("| `add_to_cart_rate` | add_to_carts / link_clicks * 100 |", text)
 
     def test_thumb_stop_rate_is_an_alias_not_a_second_metric(self):
         self.assertNotIn("thumb_stop_rate", cm.compute_metrics(self.ROW))
@@ -165,10 +178,18 @@ class AggregateTest(unittest.TestCase):
         self.assertEqual((one["first_date"], one["last_date"]), ("2026-03-01", "2026-03-04"))
         self.assertEqual(one["active_days"], 2)
 
-    def test_age_is_measured_to_latest_date_in_data(self):
+    def test_an_ad_live_27_to_30_march_is_4_days_old_with_or_without_a_creation_date(self):
+        rows = [{"ad_id": "x", "ad_name": "x", "date": "2026-03-%02d" % d, "impressions": 100, "spend": 1.0} for d in (27, 28, 29, 30)]
+        with_created = [dict(r, created_time="2026-03-27T09:00:00+0000") for r in rows]
+        for data, basis in ((rows, cm.AGE_FROM_DELIVERY), (with_created, cm.AGE_FROM_CREATED)):
+            ad = cm.aggregate_by_ad(cm.load_rows(data))[0]
+            self.assertEqual((ad["age_days"], ad["age_basis"]), (4, basis))
+
+    def test_age_without_a_creation_date_is_the_days_the_ad_delivered(self):
         ads = {a["ad_id"]: a for a in cm.aggregate_by_ad(self.rows())}
-        self.assertEqual(ads["1"]["age_days"], 9)
-        self.assertEqual(ads["2"]["age_days"], 0)
+        self.assertEqual((ads["1"]["first_date"], ads["1"]["last_date"], ads["1"]["age_days"]), ("2026-03-01", "2026-03-04", 2))
+        self.assertEqual(ads["2"]["age_days"], 1)
+        self.assertEqual(ads["1"]["age_basis"], cm.AGE_FROM_DELIVERY)
 
     def test_field_with_no_values_stays_none(self):
         ads = {a["ad_id"]: a for a in cm.aggregate_by_ad(self.rows())}
@@ -301,7 +322,7 @@ class FixtureAndCliTest(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         out = done.stdout
         self.assertIn("n/a (missing video_thruplay)", out)
-        self.assertIn("young(3d)", out)
+        self.assertIn("young(4d)", out)
         fatigue_line = next(l for l in out.splitlines() if l.startswith(make_fixture.SPECIAL["fatiguing"]))
         self.assertIn("-5", fatigue_line)
 
@@ -337,6 +358,122 @@ class ConnectorFieldsTest(unittest.TestCase):
             path = Path(tmp) / "r.json"
             path.write_text('{"rows": [{"ad_name": "a", "spend": 4}]}')
             self.assertEqual(cm.load_rows(str(path))[0]["spend"], 4.0)
+
+
+
+class ClickBasisTest(unittest.TestCase):
+    """One click basis per dataset. Ads Manager leaves a zero link-click cell blank, so a file that never writes an explicit 0
+    counts its blanks as 0 and says so; a file that does write zeros has genuinely unknown blanks, and an ad with one on a day
+    with clicks reads n/a rather than a rate over part of its days. All clicks only when the file has no link clicks at all."""
+
+    STAFF = "120000000021"
+
+    @staticmethod
+    def fixture(edit):
+        rows = list(csv.DictReader(open(FIXTURE, newline="", encoding="utf-8")))
+        for n, row in enumerate(rows):
+            edit(row, n)
+        return cm.load_rows(rows)
+
+    def ads(self, edit):
+        return {a["ad_id"]: a for a in cm.aggregate_by_ad(self.fixture(edit))}
+
+    @staticmethod
+    def export(link_cells):
+        """A small synthetic export shaped like Ads Manager's: one ad, one row per day, link clicks as written."""
+        return cm.load_rows([{"Day": "2026-03-%02d" % (i + 1), "Ad name": "trail | static | house | bau | p | t | 2026-03-01",
+                              "Ad ID": "a1", "Amount spent (USD)": 50, "Impressions": 4000, "Link clicks": cell,
+                              "Clicks (all)": 30, "Adds to cart": 3, "Purchases": 1, "Purchases conversion value": 80}
+                             for i, cell in enumerate(link_cells)])
+
+    def test_a_file_that_never_writes_zero_counts_blanks_as_zero_and_says_so(self):
+        ad = cm.aggregate_by_ad(self.export(["20", "", "40"]))[0]
+        self.assertEqual(ad["link_clicks"], 60.0)
+        self.assertAlmostEqual(ad["cvr"], 3 / 60 * 100)
+        self.assertIn("1 ad-day had a blank link-click cell, counted as 0 (exports leave zeros blank).", cm.click_basis_line([ad]))
+
+    def test_a_file_that_writes_zeros_reads_a_blank_on_a_click_day_as_unknown(self):
+        ad = cm.aggregate_by_ad(self.export(["20", "", "0", "40"]))[0]
+        self.assertIsNone(ad["cvr"])
+        self.assertEqual(cm.format_value(ad, "cvr"), "n/a (link clicks missing on 1 day with clicks)")
+        self.assertNotIn("counted as 0", cm.click_basis_line([ad]))
+        self.assertIn("n/a for 1 ad", cm.click_basis_line([ad]))
+
+    def test_staff_picks_blank_on_some_days_counts_zero_unless_the_file_writes_zeros(self):
+        blank_some = lambda r, n: r.update({"Link clicks": ""}) if r["Ad ID"] == self.STAFF and n % 2 == 0 else None
+        counted = self.ads(blank_some)[self.STAFF]
+        self.assertIsNotNone(counted["cvr"])
+        self.assertGreater(counted["link_click_blanks"], 0)
+
+        def blank_and_one_zero(r, n):
+            blank_some(r, n)
+            if n == 1:
+                r["Link clicks"] = "0"
+        self.assertIsNone(self.ads(blank_and_one_zero)[self.STAFF]["cvr"])
+
+    def test_one_ad_with_every_link_cell_blank_reads_zero_link_clicks_and_its_peers_are_unchanged(self):
+        clean = self.ads(lambda r, n: None)
+        blanked = self.ads(lambda r, n: r.update({"Link clicks": ""}) if r["Ad ID"] == self.STAFF else None)
+        self.assertEqual(blanked[self.STAFF]["link_clicks"], 0.0)
+        self.assertEqual(cm.format_value(blanked[self.STAFF], "cvr"), "n/a (zero link_clicks)")
+        for key, ad in clean.items():
+            if key != self.STAFF:
+                self.assertEqual(ad["add_to_cart_rate"], blanked[key]["add_to_cart_rate"], key)
+        self.assertIn("counted as 0 (exports leave zeros blank)", cm.click_basis_line(list(blanked.values())))
+
+    def gap_rows(self):
+        """Staff picks blank on one day with clicks, in a file that writes an explicit 0 somewhere."""
+        def edit(r, n):
+            if r["Ad ID"] == self.STAFF and n == min(i for i, x in enumerate(self.raw) if x["Ad ID"] == self.STAFF and float(x["Clicks (all)"] or 0) > 0):
+                r["Link clicks"] = ""
+            elif n == 0 and r["Ad ID"] != self.STAFF:
+                r.update({"Link clicks": "0", "Clicks (all)": "0", "Adds to cart": "0", "Purchases": "0"})
+        self.raw = list(csv.DictReader(open(FIXTURE, newline="", encoding="utf-8")))
+        return self.fixture(edit)
+
+    def test_one_gap_ad_is_left_out_of_a_totals_click_rates_only_and_named(self):
+        rows = self.gap_rows()
+        ads = {a["ad_id"]: a for a in cm.aggregate_by_ad(rows)}
+        self.assertIsNone(ads[self.STAFF]["add_to_cart_rate"])
+        whole = cm.compute_metrics(cm._sum_rows(rows))
+        others = cm.compute_metrics(cm._sum_rows([r for r in rows if str(r["ad_id"]) != self.STAFF]))
+        everyone = cm._sum_rows(rows)
+        for metric in ("ctr", "cpc", "cvr", "add_to_cart_rate"):
+            self.assertIsNotNone(whole[metric], metric)
+            self.assertAlmostEqual(whole[metric], others[metric], msg=metric)
+        self.assertAlmostEqual(whole["roas"], everyone["conversion_value"] / everyone["spend"])
+        self.assertEqual(cm.rate_counts(cm._sum_rows(rows), "cvr"), cm.rate_counts(cm._sum_rows([r for r in rows if str(r["ad_id"]) != self.STAFF]), "cvr"))
+        line = cm.click_basis_line(list(ads.values()))
+        self.assertIn("left out of the click rates of every total", line)
+        self.assertIn(self.STAFF, line)
+
+    def test_a_total_of_only_gap_ads_stays_n_a_with_its_reason(self):
+        rows = [r for r in self.gap_rows() if str(r["ad_id"]) == self.STAFF]
+        total = cm._sum_rows(rows)
+        self.assertEqual(cm.format_value(total, "cvr"), "n/a (link clicks missing on 1 day with clicks)")
+
+    def test_no_link_clicks_anywhere_falls_back_to_all_clicks_for_every_ad_and_says_so(self):
+        ads = list(self.ads(lambda r, n: r.update({"Link clicks": ""})).values())
+        self.assertTrue(all(cm.metric_basis(a, "cvr")["denominator"] == "clicks" for a in ads))
+        self.assertIn("all clicks, because the data has no link clicks", cm.click_basis_line(ads))
+
+    def test_a_blank_link_click_cell_on_a_day_with_no_clicks_counts_as_zero(self):
+        ad = cm.aggregate_by_ad(cm.load_rows([dict(r, **{"Clicks (all)": 0}) if i == 1 else r for i, r in enumerate(
+            {"Day": "2026-03-0%d" % (i + 1), "Ad ID": "a1", "Ad name": "x | static | h | bau | p | t | 2026-03-01", "Impressions": 4000,
+             "Link clicks": c, "Clicks (all)": 30, "Purchases": 1} for i, c in enumerate(["20", "", "0"]))]))[0]
+        self.assertAlmostEqual(ad["cvr"], 3 / 20 * 100)
+
+    def test_the_basis_line_names_the_ads_left_n_a(self):
+        def edit(r, n):
+            if r["Ad ID"] == self.STAFF:
+                r["Link clicks"] = ""
+            if n == 0:
+                r["Link clicks"] = "0"
+        ads = list(self.ads(edit).values())
+        line = cm.click_basis_line(ads)
+        self.assertIn("use link clicks", line)
+        self.assertIn(self.STAFF, line)
+        self.assertNotIn("all clicks, because", line)
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ Read the funnel in order and name the **first** step in the bottom quartile of t
 | Hook | `hook_rate` bottom quartile, the rest normal | The opening does not stop the scroll. | Change the first 3 seconds: a new opening shot, a stronger first line, a different face or sound. Keep the body. |
 | Hold | `hold_rate` bottom quartile, hook not bottom | People stop, then leave: the promise is not sustained. | Tighten the body: cut dead time, deliver the promise sooner, put proof earlier. |
 | Click | `ctr` bottom quartile, hook and hold not bottom | People watch but do not act: weak call to action or offer. | Make the offer and the next step explicit; test a clearer end card or caption. |
-| Post-click | `cvr` or `add_to_cart_rate` bottom quartile while CTR is not bottom | Clicks arrive and then stall: likely the landing page, the offer or the audience, not the creative. | Check the site and whether the page matches the ad's message. Rule out an audience mismatch. |
+| Post-click | `add_to_cart_rate` or `cart_to_purchase_rate` bottom quartile and significantly below the ad's group, while CTR is not bottom | Clicks arrive and then stall: likely the landing page, the offer or the audience, not the creative. With a normal add-to-cart rate and a weak cart-to-purchase rate, people want the product but do not finish buying. | Check the site and whether the page matches the ad's message. Rule out an audience mismatch. When only cart-to-purchase is weak, check checkout, price and shipping costs first, not the landing page. |
 | Pays back | `cpa` or `roas` bottom quartile while the steps above read normally | The funnel works but the economics do not. | Check price, margin, attribution setting and tracking before blaming the creative. |
 
 ## Reading notes

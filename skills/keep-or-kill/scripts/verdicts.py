@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A pause / check / iterate / scale / keep verdict per ad, with confidence, a plain-English sentence and fatigue trend.
+"""A pause / check / refresh / scale / keep verdict per ad, with confidence, a plain-English sentence and fatigue trend.
 
 Usage: python3 verdicts.py ads.csv [--young-days 5] [--window 6] [--min-change 8] [--top-n 3] [--group-by format,ad_type]
            [--key-map PX=concept] [--target cpa=40,roas=3] [--where market=US] [--profile creative-profile.md] [--json]
@@ -37,16 +37,17 @@ LABELS = {
     "check_top_seller": "Check before cutting",
     "check_immature": "Check before cutting",
     "check_feeds": "Check before cutting",
+    "check_site": "Check before cutting",
     "check_no_target": "Check before cutting",
     "check_meets_target": "Check before cutting",
-    "iterate": "Iterate: refresh the hook or creator, keep the concept",
+    "iterate": "Refresh: a new hook or creator, keep the concept",
     "pause_fatigued": "Pause: fatigued",
     "pause_never_worked": "Pause: never worked",
     "cant_judge": "Can't judge",
     "too_early": "Too early (learning)",
 }
 # summary group -> name, in display order
-GROUPS = (("scale", "Scale"), ("keep", "Keep"), ("check", "Check before cutting"), ("iterate", "Iterate"),
+GROUPS = (("scale", "Scale"), ("keep", "Keep"), ("check", "Check before cutting"), ("iterate", "Refresh"),
           ("pause", "Pause"), ("cant_judge", "Can't judge"), ("too_early", "Too early"))
 GROUP_NAME = dict(GROUPS)
 ACT_ON = ("pause", "check", "iterate", "scale")
@@ -221,6 +222,10 @@ def _sentence(vid: str, ad: Dict[str, Any], ctx: Dict[str, Any]) -> str:
     elif vid == "check_meets_target":
         text = ("Check before cutting: it is weaker than most of your %s ads, but it still meets your %s target."
                 % (pool_word, " and ".join(ctx["met"])))
+    elif vid == "check_site":
+        text = ("Check before cutting: the ad still earns attention and clicks, but %s on the site. "
+                "Check %s before pausing the ad." % (ctx["site"], "checkout, price and shipping costs" if ctx["after_cart"]
+                                                     else "the landing page and checkout"))
     elif vid == "check_feeds":
         text = ("Check before cutting: it catches attention (%s) but pays back weakly. "
                 "See whether it feeds your other ads first." % " and ".join(ctx["strong"]))
@@ -249,6 +254,15 @@ def _confidence(vid: str, entry: Dict[str, Any], pb: Optional[Dict[str, Any]], w
     if problems:
         return EARLY_READ, "; ".join(problems)
     return CONFIDENT, "enough comparable ads and delivery days, and the payback measures agree"
+
+
+def _age(ad: Dict[str, Any]) -> Tuple[Optional[int], str]:
+    """(age, its words): aggregate_by_ad's age_days, days since creation when the data has a creation date, else the
+    days the ad delivered (an ad live 27 to 30 March delivered on 4 days)."""
+    days = ad.get("age_days")
+    if ad.get("age_basis") == cm.AGE_FROM_CREATED:
+        return days, "was created %d day%s ago" % (days, "" if days == 1 else "s")
+    return days, "has delivered on %s day%s" % ("no" if days is None else days, "" if days == 1 else "s")
 
 
 def _objective_of(ad: Dict[str, Any]) -> str:
@@ -282,7 +296,7 @@ def judge_ads(rows: Sequence[Dict[str, Any]], young_days: int = 5, window: int =
     results = []
     for ad in ads:
         key = _key(ad)
-        age = ad["age_days"]
+        age, age_words = _age(ad)
         info = cm.payback_metrics(ad.get("objective"))
         objective, metrics = info["objective"], info["metrics"]
         low_volume = (ad.get("impressions") or 0) < min_impressions
@@ -290,17 +304,17 @@ def judge_ads(rows: Sequence[Dict[str, Any]], young_days: int = 5, window: int =
         entry: Dict[str, Any] = {
             "ad": key, "ad_id": ad.get("ad_id"), "ad_name": ad.get("ad_name"),
             "format": ad.get("format"), "spend": ad.get("spend"), "spend_at_stake": ad.get("spend"),
-            "age_days": age, "age_basis": ad.get("age_basis"),
+            "age_days": ad["age_days"], "age_basis": ad.get("age_basis"),
             "active_days": ad.get("active_days"), "learning": learning, "check": None,
             "objective": objective, "objective_assumed": info["assumed"],
             "payback_basis": info["what"] + (" (%s)" % info["note"] if info["note"] else ""),
         }
         ctx: Dict[str, Any] = {"currency": currency, "objective": objective, "payback": None}
         if learning:
-            why = ("under %d impressions" % min_impressions) if low_volume else \
-                  "%d days old, under the %d-day learning window" % (age, young_days)
+            why = ("has under %d impressions" % min_impressions) if low_volume else \
+                  "%s, under the %d-day learning window" % (age_words, young_days)
             vid = "too_early"
-            ctx["why"] = ("it has " if low_volume else "it is ") + why
+            ctx["why"] = "it " + why
             entry.update(verdict_id=vid, verdict=LABELS[vid], fatiguing=False, fatigue=None, payback=None,
                          group=None, group_size=None, thin=False,
                          reasons=["learning: " + why, "no other verdict until it has delivered longer"])
@@ -405,6 +419,30 @@ def judge_ads(rows: Sequence[Dict[str, Any]], young_days: int = 5, window: int =
                         _against_target(m, ad.get(m), relevant[m], currency) for m in met))
                 else:
                     vid = pause
+                    funnel = cm.funnel_read(rows, ad, pool, group_by, window, min_change, min_impressions)
+                    entry["funnel"] = {k: funnel[k] for k in ("call", "reason", "weak_steps", "missing_site_steps")}
+                    weak = [st for st in funnel["steps"] if st["weak"] and st["side"] == "site"]
+                    site_steps = "; ".join("%s is %s" % (st["metric"].replace("_", " "), st["why"]) for st in weak)
+                    ctx["after_cart"] = bool(weak) and all(st["metric"] in cm.CART_STEPS for st in weak)
+                    fix = "checkout, price and shipping" if ctx["after_cart"] else "the page"
+                    if funnel["call"] == "site" and pause == "pause_never_worked":
+                        vid = "check_site"
+                        ctx["site"] = site_steps
+                        reasons.append("would be paused, but its funnel points at the site: %s (%s)" % (
+                            funnel["reason"], ctx["site"]))
+                        reasons.append("no step the ad controls (hook rate, hold rate, ctr) is weak or falling")
+                    elif weak and pause == "pause_fatigued":
+                        ctx["site"] = site_steps
+                        reasons.append("its click-through rate is fading, so the pause stands; a site step is weak "
+                                       "too (%s): fix %s before its replacement goes live" % (site_steps, fix))
+                    elif weak and funnel["call"] == "both":
+                        ctx["site"] = site_steps
+                        reasons.append("both the ad's own steps and a site step are weak (%s), so the pause "
+                                       "stands: fix %s before its replacement goes live" % (site_steps, fix))
+                    elif weak:
+                        ctx["site"] = site_steps
+                        reasons.append("a site step is weak too (%s), but the ad's own steps could not be judged, so "
+                                       "the pause stands: check %s as well" % (site_steps, fix))
                     reasons.append("payback is bottom quartile on every measure, in its group and account-wide within "
                                    "its objective" + (", and was bottom in the first %d delivery days too" % window
                                                       if pause == "pause_never_worked" else ", and it is fatiguing"))
@@ -451,7 +489,7 @@ def _stake(entry: Dict[str, Any]) -> float:
 
 
 def do_first(results: Sequence[Dict[str, Any]], limit: int = DO_FIRST) -> List[Dict[str, Any]]:
-    """The ads to act on first: largest spend at stake across pause, check, iterate and scale. Never can't-judge."""
+    """The ads to act on first: largest spend at stake across pause, check, refresh and scale. Never can't-judge."""
     pool = [e for e in results if group_of(e["verdict_id"]) in ACT_ON]
     return [{k: e[k] for k in ("ad", "ad_name", "verdict", "verdict_id", "spend_at_stake", "confidence", "sentence")}
             for e in sorted(pool, key=lambda e: -_stake(e))[:limit]]
@@ -539,7 +577,7 @@ def render(results: Sequence[Dict[str, Any]], args: argparse.Namespace, rows: Se
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Pause, check, iterate, scale or keep: a verdict per ad.")
+    parser = argparse.ArgumentParser(description="Pause, check, refresh, scale or keep: a verdict per ad.")
     parser.add_argument("path", help="Ads Manager CSV with daily rows, or a .json file of rows")
     parser.add_argument("--young-days", type=int, default=5,
                         help="ads younger than this are still learning (arbitrary default)")

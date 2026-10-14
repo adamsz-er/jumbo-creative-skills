@@ -124,5 +124,78 @@ class ProvenSpendTest(unittest.TestCase):
         self.assertIn("--min-proven-spend", mix.render(result))
 
 
+class WeakConceptGapTest(unittest.TestCase):
+    """A gap ports a concept into a format: the account's weakest concepts never lead one."""
+
+    def setUp(self):
+        self.result = mix.analyse_mix(cm.load_rows(str(FIXTURE)))
+
+    def bau_roas(self):
+        rows = cm.load_rows(str(FIXTURE))
+        ads = [a for a in cm.aggregate_by_ad(rows) if a.get("ad_type") == "bau"]
+        family = {c: f for c, f in mix.concept_families([a["concept"] for a in ads]).items()}
+        pooled = {}
+        for name in set(family.values()):
+            members = [a for a in ads if family[a["concept"]] == name]
+            pooled[name] = sum(a["conversion_value"] for a in members) / sum(a["spend"] for a in members)
+        return pooled
+
+    def test_bottom_quartile_concepts_are_left_out_of_the_gaps_and_listed(self):
+        left_out = {g["concept"] for g in self.result["gaps_left_out"]}
+        self.assertIn("before-after", left_out)
+        self.assertFalse(left_out & {g["concept"] for g in self.result["gaps"]})
+        roas = self.bau_roas()
+        import statistics
+        p25 = statistics.quantiles(list(roas.values()), n=4, method="inclusive")[0]
+        with_cell = {g["concept"] for g in self.result["gaps"]} | left_out
+        self.assertEqual(left_out, {c for c, v in roas.items() if v < p25} & with_cell)
+        text = mix.render(self.result)
+        self.assertIn("Left out of the gaps", text)
+        self.assertIn("before-after", text.split("Left out of the gaps")[1].splitlines()[0])
+
+    def test_equal_gaps_are_ordered_by_the_concepts_own_return_not_by_name(self):
+        gaps = self.result["gaps"]
+        self.assertNotEqual("before-after", gaps[0]["concept"])
+        for a, b in zip(gaps, gaps[1:]):
+            if (a["strength"], a["ads"]) == (b["strength"], b["ads"]):
+                self.assertGreaterEqual(a["concept_roas"] if a["concept_roas"] is not None else -1,
+                                        b["concept_roas"] if b["concept_roas"] is not None else -1, (a, b))
+
+
+
+class GapEdgeTest(unittest.TestCase):
+    def rows(self, returns):
+        out = []
+        for i, value in enumerate(returns):
+            fmt = "static" if i % 2 else "carousel"
+            out.append(dict(row("c%02d | %s | house | bau | p | polished | 2026-03-01" % (i, fmt), spend=100.0),
+                            **{"Purchases conversion value": value}))
+        return cm.load_rows(out)
+
+    def test_tied_returns_leave_no_concept_out(self):
+        result = mix.analyse_mix(self.rows([300] * 9), min_proven_spend=1.0)
+        self.assertEqual([], result["gaps_left_out"])
+
+    def test_a_gap_without_a_regular_price_return_says_so(self):
+        names = []
+        for i, fmt in enumerate(("f1", "f2", "f3", "f4", "f5")):
+            for j in range(2):
+                names.append(("c%d%d | %s | house | bau | p | polished | 2026-03-01" % (i, j, fmt), 200 + 100 * i + 10 * j))
+        names.append(("launchy | f1 | house | launch | p | polished | 2026-03-01", 300))
+        rows = cm.load_rows([dict(row(n, spend=100.0), **{"Purchases conversion value": v}) for n, v in names])
+        result = mix.analyse_mix(rows, min_proven_spend=1.0)
+        unknown = [g for g in result["gaps"] if g["concept"] == "launchy"]
+        self.assertTrue(unknown, result["gaps"])
+        self.assertIsNone(unknown[0]["concept_roas"])
+        judged = [n for n, g in enumerate(result["gaps"]) if g["concept_roas"] is not None]
+        unjudged = [n for n, g in enumerate(result["gaps"]) if g["concept_roas"] is None]
+        self.assertTrue(judged and unjudged)
+        self.assertLess(max(judged), min(unjudged))
+        self.assertTrue(any(g["strength"] < max(j["strength"] for j in result["gaps"]) for g in result["gaps"] if g["concept_roas"] is not None))
+        # render just the unjudged gap to read its line
+        line = next(l for l in mix.render(dict(result, gaps=unknown)).splitlines() if l.strip().startswith("launchy in"))
+        self.assertIn("no regular-price return to judge yet", line)
+
+
 if __name__ == "__main__":
     unittest.main()

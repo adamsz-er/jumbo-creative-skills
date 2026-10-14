@@ -22,8 +22,8 @@ Skills that teach your AI agent to analyse and make Meta (Facebook and Instagram
 
 ## What you get
 
-- **Analyse your ads.** One sentence ("review my Meta ads") pulls your data, grades every ad, says which to keep, fix or pause, and maps what your creative mix is missing.
-- **Make new creative.** Concepts, hooks, personas and production briefs built from what your own ads show, with a script breakdown and a colour read when you bring a script or images.
+- **Analyse your ads.** One sentence ("review my Meta ads") pulls your data, grades every ad, says which to keep, fix or pause, maps what your creative mix is missing, and names the two or three skills to run next. Then follow the money, plan refreshes before ads wear out, and tell a creative problem from a website problem.
+- **Make new creative.** Concepts, hooks, personas, copy tests and production briefs built from what your own ads show (every idea names the ads it came from), a brand profile seeded from public research, a scan of rivals' public ads, ad names to a schema, and sale plans with the offer rules built in.
 - **Share the result.** A single HTML dashboard that opens in any browser, prints to PDF and shows what changed since your last review.
 
 ## Install
@@ -65,10 +65,10 @@ Add `--skill <name>` to pick one skill, and `-a <agent>` to target one agent.
 <details>
 <summary>Claude desktop and claude.ai</summary>
 
-1. Download `<skill>.zip` from the [latest Release](https://github.com/adamsz-er/jumbo-creative-skills/releases/latest).
-2. Go to Customize > Skills > Upload and choose the zip. This needs code execution enabled.
+1. Download the zip of each skill you want from the [latest Release](https://github.com/adamsz-er/jumbo-creative-skills/releases/latest), named after the skill: start with `creative-review.zip`, the front door. Each zip holds one skill folder with its `SKILL.md`, the layout [Anthropic's guide](https://support.claude.com/en/articles/12512198-how-to-create-custom-skills) asks for.
+2. Go to Customize > Skills, click +, then Create skill > Upload a skill, and choose the zip. Repeat for each skill. This needs code execution turned on (Settings > Capabilities).
 
-Releases appear once the first version is tagged. Until then, build the zips yourself (they land in `dist/`):
+Or build the zips yourself (they land in `dist/`):
 
 ```bash
 python3 tools/build_zips.py
@@ -76,7 +76,13 @@ python3 tools/build_zips.py
 
 </details>
 
-`jumbo-creative-skills-all.zip` on the Release holds every skill in one file. Installing a single skill works too: each one carries its own copy of the shared code and its own FAQ pointer.
+`jumbo-creative-skills-all.zip` on the Release holds all nineteen skill folders in one file, for unpacking into an agent's skills folder. Claude's upload steps describe one skill folder per zip, so upload the single-skill zips there.
+
+Any one skill works installed on its own: each carries its own copy of the shared code, and `creative-review` carries the four skills it runs (grader, keep-or-kill, mix and report). A few skills use another skill's output when you have it, so add these alongside:
+
+- `spend-analysis`: add `keep-or-kill`, whose verdicts drive the budget moves.
+- `creative-report`: add `keep-or-kill`, `creative-grader` and `creative-mix` to fill the verdicts, grading basis and mix.
+- `competitor-scan`: add `creative-ideation` (or `creative-brief`) to compare rivals with your own winners.
 
 ## Quick start
 
@@ -114,12 +120,19 @@ flowchart TD
     grader["creative-grader"]
     kok["keep-or-kill"]
     mix["creative-mix"]
+    spend["spend-analysis"]
+    fatigue["fatigue-planner"]
+    funnel["funnel-diagnosis"]
   end
   subgraph make["Make"]
     ideation["creative-ideation"]
     hooks["hook-writer"]
     persona["persona-builder"]
+    copy["copy-tests"]
     brief["creative-brief"]
+    namer["ad-namer"]
+    rivals["competitor-scan"]
+    sale["sale-planner"]
     transcript["ad-transcript"]
     colour["colour-grade"]
   end
@@ -145,7 +158,19 @@ More depth in [docs/how-it-works.md](docs/how-it-works.md).
 
 ## Which skill do I use?
 
-Start with `creative-review`. It runs the analysis and the report in one go.
+Start with `creative-review`. It runs the analysis and the report in one go, and ends by naming the two or three skills its findings point to.
+
+**I want to...**
+
+- **know how my ads are doing:** `creative-review`, then `keep-or-kill` for the calls and `creative-grader` for the first broken step.
+- **know where my money goes and what to move:** `spend-analysis`.
+- **know which ads are wearing out and when to refresh:** `fatigue-planner`.
+- **know whether a drop is the ad or my website:** `funnel-diagnosis`.
+- **know what to make next:** `creative-mix` for the gaps, `competitor-scan` for what rivals run, then `creative-ideation`.
+- **write the ad:** `persona-builder` for who, `hook-writer` for the opening, `copy-tests` for the rest of the copy and the test, `creative-brief` for the producer.
+- **plan a sale:** `sale-planner`.
+- **tidy my ad names:** `ad-namer`.
+- **set up the brand:** `creative-context` (it can research the brand from its public site and reviews).
 
 | Your goal | Skill | Example prompt |
 |---|---|---|
@@ -154,9 +179,16 @@ Start with `creative-review`. It runs the analysis and the report in one go.
 | Find the weak ads and the first step that breaks | `creative-grader` | "Grade my ads and tell me what to fix first." |
 | Decide what to pause, fix or scale | `keep-or-kill` | "Which ads should I pause, refresh or scale this week?" |
 | See what creative is missing | `creative-mix` | "What creative am I missing, and am I leaning too hard on one thing?" |
+| See where the money goes and what to move | `spend-analysis` | "Where is my budget going, and what should I move?" |
+| Plan refreshes before ads wear out | `fatigue-planner` | "Which ads are wearing out? Plan refreshes at two new ads a week." |
+| Tell a creative problem from a site problem | `funnel-diagnosis` | "Sales dropped but clicks held. Is it the ad or the website?" |
+| See what competitors run | `competitor-scan` | "What angles are my competitors running, and where is the open ground?" |
 | Get new ad ideas | `creative-ideation` | "Give me nine ad concepts that fill the gaps in my mix." |
 | Write hooks | `hook-writer` | "Write hooks for my rain shell, and variants of the ad that is fatiguing." |
-| Know who you are talking to | `persona-builder` | "Who am I really talking to? Build me personas for this brand." |
+| Know who you are talking to | `persona-builder` | "Who is responding to my ads? Build me personas from the results." |
+| Write copy variants and size the test | `copy-tests` | "Write three headline variants and tell me if my account can power the test." |
+| Name ads, or tidy existing names | `ad-namer` | "Give me a rename plan so every ad carries its funnel stage." |
+| Plan a sale or choose an offer | `sale-planner` | "Plan our Black Friday sale, and did last month's sale make money?" |
 | Brief a creator or editor | `creative-brief` | "Write a production brief for the boot test with a new opening." |
 | Tighten a video script | `ad-transcript` | "Break this script into beats and tighten it." |
 | Read the colour of your ads | `colour-grade` | "What does the palette of these ads say, and do they all look alike?" |
@@ -164,10 +196,11 @@ Start with `creative-review`. It runs the analysis and the report in one go.
 
 ## A typical workflow
 
-1. **`creative-review`**: draft the brand profile from your data (you correct it once), then grade, keep or kill, mix and report in one run. On repeat runs the dashboard opens with "What changed since last time".
-2. **`creative-ideation`**: turn the gaps in the mix into concepts.
-3. **`hook-writer`**: write hooks for the concepts you like, and one-change variants of a winner.
-4. **`creative-brief`**: turn a concept and its hook into a production brief with the evidence behind it.
+1. **`creative-review`**: draft the brand profile from your data (you correct it once), then grade, keep or kill, mix and report in one run. On repeat runs the dashboard opens with "What changed since last time". It ends with the next skills its findings point to.
+2. **`spend-analysis`** and **`fatigue-planner`**: move money off what is not working, and schedule refreshes before your winners wear out.
+3. **`creative-ideation`**: turn the gaps in the mix (and the open ground from `competitor-scan`) into concepts, each naming the ads or gap it came from.
+4. **`hook-writer`** and **`copy-tests`**: write the openings and the copy, one change per variant, and check the account can power the test.
+5. **`creative-brief`**: turn a concept and its hook into a production brief with the evidence behind it, named with `ad-namer`.
 
 Each analysis skill can also be run on its own (grade, keep or kill, mix, report).
 
@@ -186,7 +219,7 @@ The skills read your own numbers. Pick whichever you have:
 3. **Nothing.** The skills still work for ideation, and label every grade "no performance data".
 
 > [!IMPORTANT]
-> These skills only read. They never call a tool that changes your ad account. Your agent could, if you asked it to directly, through the Meta connector's own tools.
+> These skills only read. They never call a tool that changes your ad account. `ad-namer` writes a rename plan for you to apply; it renames nothing. Your agent could, if you asked it to directly, through the Meta connector's own tools.
 
 ## What the numbers mean
 
@@ -195,11 +228,13 @@ Every metric id and formula is defined once, in [skills/creative-context/referen
 - **Hook rate**: of the times the ad was shown, how often it was watched for at least 3 seconds. Also called thumb-stop rate.
 - **Hold rate**: of the 3-second watches, how many went on to a ThruPlay (Meta's measure for a long watch).
 - **CTR**: clicks divided by impressions. Each output says whether it counted link clicks or all clicks.
+- **Add-to-cart rate**: adds to cart divided by link clicks.
+- **Cart-to-purchase rate**: of the adds to cart, how many became purchases. Weak on its own, it points at checkout, price or shipping, not the landing page.
 - **CPA**: cost per purchase (spend divided by purchases).
 - **ROAS**: return on ad spend (purchase value divided by spend).
 - **Frequency**: average times each person saw the ad.
 
-A missing field or a zero denominator is shown as `n/a (missing <field>)`, never 0.
+A missing field or a zero denominator is shown as `n/a (missing <field>)`, never 0. A step that cannot be tested is shown as untested, with the reason, never read as fine.
 
 > [!NOTE]
 > Every ad is graded against your own account, never an industry benchmark. Its comparison is the median and quartiles of similar ads in your account, over the same window.
@@ -207,7 +242,7 @@ A missing field or a zero denominator is shown as `n/a (missing <field>)`, never
 ## Known limits
 
 <details>
-<summary>Seven things to know before you rely on the numbers</summary>
+<summary>Ten things to know before you rely on the numbers</summary>
 
 - Meta's ads connector does not return 3-second plays per ad. The skills derive them from the cost per 3-second view and label them "(derived)". When that cost is rounded too coarsely to trust, hook and hold rate show n/a with the reason, and an Ads Manager export fills them in.
 - A long connector pull can stop partway with no warning. The review reconciles the pulled spend and impressions against account totals and stops with a clear message when the pull is short.
@@ -215,6 +250,9 @@ A missing field or a zero denominator is shown as `n/a (missing <field>)`, never
 - The beat detection in `ad-transcript` is a keyword heuristic: treat it as a first pass over a script, not a verdict.
 - Small comparison groups give an early read, and the output says so. Very new ads are marked "too early to judge".
 - Reach and frequency do not add up across ads, so they show n/a unless you supply an account-level figure for the same scope.
+- `competitor-scan` sorts rivals' ads into angles, hook types and offers with keyword rules: a first pass to read and correct, not a verdict. It can only see that an ad exists and how long it has run, never its results.
+- `fatigue-planner`'s days left is a straight line through an ad's recent days, with its range. Real ads rarely fade in a straight line: treat it as a planning date.
+- The site side of `funnel-diagnosis` (and keep-or-kill's site check) needs landing page views, adds to cart or checkouts initiated in the export; without them it says so rather than calling the site fine.
 - Ad previews: the connector returns links, not image files, so cards show placeholders unless you save screenshots as `<ad_id>.png`. Palette extraction reads PNG without extra software; other image formats need Pillow (optional).
 
 </details>

@@ -10,8 +10,10 @@ Usage:
 `run` grades the ads, gives each a verdict, maps the creative mix, builds the
 six-tab dashboard and writes a three-bullet summary, all into one run folder
 `<cache-dir>/<account>/<window-end>_<HHMMSS>/`, then says what changed since the
-last run of the same account. Standard library only; the sibling skills'
-scripts are called by path with `python3 -I`. A known failure prints a plain
+last run of the same account. Standard library only; the four skills it runs
+(grader, keep-or-kill, mix, report) are bundled under ../siblings/ by
+tools/sync_shared.py, so this skill works on its own, and are called by path
+with `python3 -I`. A known failure prints a plain
 message and its fix and exits with its own code (see errors.py); `--debug` shows
 tracebacks.
 """
@@ -35,10 +37,11 @@ sys.path.insert(0, str(HERE))
 import changes as changes_mod  # noqa: E402
 import creative_metrics as cm  # noqa: E402
 import errors  # noqa: E402
+import next_steps  # noqa: E402
 import profile_draft  # noqa: E402
 from errors import ReviewError  # noqa: E402
 
-SKILLS = HERE.parent.parent
+SIBLINGS_DIR = HERE.parent / "siblings"
 DEMO_CSV = HERE.parent / "assets" / "demo" / "ads_daily.csv"
 DEMO_NAME = "Acme Outdoor Co. (sample data)"
 DEMO_SOURCE = "Sample data (Acme Outdoor Co.)"
@@ -60,7 +63,7 @@ REQUIRED = (("date", "date"), ("ad_name", "ad name"), ("spend", "spend"), ("impr
 
 def sibling(step: str) -> Path:
     skill, script = SIBLINGS[step]
-    path = SKILLS / skill / "scripts" / script
+    path = SIBLINGS_DIR / skill / "scripts" / script
     if not path.exists():
         raise ReviewError("E-SKILL", skill=skill)
     return path
@@ -179,16 +182,24 @@ def biggest_action(verdicts: Dict[str, Any], currency: Optional[str]) -> str:
 def biggest_opportunity(mix: Dict[str, Any]) -> str:
     if mix.get("concepts_unread"):
         return mix["concepts_unread_message"]
+    weak = sorted({g.get("concept") for g in mix.get("gaps_left_out") or [] if g.get("concept")})
+    left_out = " Left out as the account's weakest concepts: %s." % ", ".join(weak) if weak else ""
     gaps = mix.get("gaps") or []
     if not gaps:
-        return "No clear gap yet in the creative mix."
+        return "No clear gap yet in the creative mix." + left_out
     gap = gaps[0]
     why = ", ".join(gap.get("why") or []) or "not stated"
-    return "Try the %s idea as a %s (no ads like it yet): %s." % (gap.get("concept"), gap.get("format"), why)
+    if "concept_roas" in gap and gap["concept_roas"] is None:
+        why += "; no regular-price return to judge yet"
+    return "Try the %s idea as a %s (%s): %s." % (gap.get("concept"), gap.get("format"),
+                                                  "only one ad like it so far" if gap.get("ads") == 1 else "no ads like it yet",
+                                                  why) + left_out
 
 
-def summary_text(title: str, bullets: Sequence[str], report: Path) -> str:
+def summary_text(title: str, bullets: Sequence[str], report: Path, steps: Sequence[Dict[str, str]] = ()) -> str:
     lines = ["Creative review: %s" % title, ""] + ["- %s" % b for b in bullets] + ["", "Full dashboard: %s" % report]
+    if steps:
+        lines += ["", next_steps.render(steps)]
     return "\n".join(lines) + "\n"
 
 
@@ -370,7 +381,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     else:
         moves, basis = None, "first run: nothing to compare yet"
     bullets = [headline(scoped, currency, moves, basis), biggest_action(verdicts, currency), biggest_opportunity(mix)]
-    text = summary_text(title or "your ads", bullets, report.resolve())
+    text = summary_text(title or "your ads", bullets, report.resolve(), next_steps.next_steps(verdicts, mix))
     (folder / "summary.md").write_text(text, encoding="utf-8")
     write_run_info(folder, info, complete=True)
     print(text, end="")

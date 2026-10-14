@@ -1,9 +1,9 @@
 ---
 name: creative-ideation
-description: Generate Meta (Facebook and Instagram) ad concepts for any brand, spread across themes, formats, ad types, personas and funnel stages and aimed at the gaps in the current mix. Use when the user wants ad ideas, a concept pipeline, "what should we make next", a test plan for new creative, or fresh angles after a creative review. Works with no data and gets sharper with a brand profile or the mix, grade and verdict outputs.
+description: Generate Meta (Facebook and Instagram) ad concepts for any brand, spread across themes, formats, ad types, personas and funnel stages, aimed at the gaps in the account's own concept and format coverage and informed by verdicts, spend share, ad age and a competitor scan when present. Every idea names the ads or gap it came from. Use when the user wants ad ideas, a concept pipeline, "what should we make next", a test plan for new creative, or fresh angles after a creative review. Works with no data and says the ideas are unbacked.
 license: MIT
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
   role: make
 ---
 
@@ -17,10 +17,27 @@ Turns a brand and what is known about its account into a set of concepts worth m
 2. If not, ask for the five essentials in one short round: **brand, product, audience, offer or calendar, tone**. Never block on this. If the user skips something, say what you assumed and mark it "assumed".
 3. Say which data mode you are in: connector, CSV, or none (see `creative-context/references/data-inputs.md`). With none, label the output "no performance data": the ideas come from craft, not results.
 
+## Read the account first
+
+When there is data, start from what the account has tried:
+
+```
+python3 -I scripts/evidence.py ads.csv --for ideation
+python3 -I scripts/evidence.py ads.csv --for ideation --verdicts verdicts.json --competitor scan.json
+python3 -I scripts/evidence.py ads.csv --for ideation --json
+```
+
+It shows each concept as winning, mixed, middle, weakest in its format (weak for its format, yet paying back at or above the account) or losing (or ungraded or unjudged when there is too little to grade) with its ads, formats and share of spend; concept by format coverage with spend share, the best band in each cell and the youngest ad's age; the untried cells beside a winner; and, with `--competitor` (from `competitor-scan`), the open ground, the angles worth testing and the ones not to chase.
+
+- Carry winners into untried formats; do not repeat losing angles as they were; give young cells time before judging them.
+- Prefer open ground the account's own results support over angles rivals have crowded.
+- Say "proven" only for a winning concept over creative-mix's proven-spend bar (the mix output prints it; the bar measures spend, not results); otherwise say "best-returning". Never cite the result of a test that has not run ("the winning headline from the copy test"): name the test as planned, with its result still to come.
+- Every concept names its source: the ads it iterates, the gap it fills, or the competitor finding. With no data, label each "unbacked: from craft and the profile, not results".
+
 ## Inputs it can use if present
 
 - `mix.md` or the output of `creative-mix`: its gaps and top-quartile concepts steer the whole run.
-- `verdicts.md` or `keep-or-kill` output: "iterate" and "scale" ads are the best seeds for variations; "never worked" ads are things not to repeat as they were.
+- `verdicts.md` or `keep-or-kill` output: "refresh" and "scale" ads are the best seeds for variations; "never worked" ads are things not to repeat as they were.
 - `grade.md` or `creative-grader` output: the first broken funnel step says what a new concept must fix (a weak hook calls for a stronger opening, a weak click calls for a clearer offer).
 - An Ads Manager CSV or a Meta ads connector: run `creative-mix` for the grid if no mix output exists.
 
@@ -46,11 +63,11 @@ Change one choice at a time when you want to learn something.
 
 ## Output
 
-1. **Concept table.** Default **9** concepts (an arbitrary default: ask the user how many they can produce). Columns: name, theme, format, ad type, persona, stage, the one-line idea, the hook, why it should work, what would prove it wrong, which gap or winner it addresses.
+1. **Concept table.** Default **9** concepts (an arbitrary default: ask the user how many they can produce). Columns: name, theme, format, ad type, persona, stage, the one-line idea, the hook, why it should work, what would prove it wrong, which gap, winner (by ad id) or competitor finding it addresses, or "unbacked".
 2. **Test plan.**
    - Group concepts into **one-variable tests**: hold the format constant to compare concepts, hold the concept constant to compare formats.
    - Give each ad a name in the naming convention from `creative-context/references/naming-convention.md` (concept | format | creator | ad type | product | tone | launch date).
-   - Split the set into three buckets: **iterate what works**, **adapt to an adjacent audience or product**, **genuinely new**. Leave the ratios to the user and ask what they want; do not suggest numbers.
+   - Split the set into three buckets: **build on what works**, **adapt to an adjacent audience or product**, **genuinely new**. Leave the ratios to the user and ask what they want; do not suggest numbers.
 3. **Next step.** Offer `hook-writer` for the openings, `persona-builder` if personas are thin, and `creative-brief` to turn a chosen concept into a production brief.
 
 ## Guardrails
@@ -73,7 +90,8 @@ Try:
 
 ## Common questions
 
-- **Do I need data?** No; ideas without data are labelled as craft, not proof.
+- **Do I need data?** No; ideas without data are labelled unbacked: craft, not proof.
+- **Can it use competitors' ads?** Yes: run `competitor-scan` and pass its output with `--competitor`.
 - **Will it invent a discount?** No; offers and dates come from you.
 - **Are the ideas guaranteed to win?** No; each carries reasoning, not a result.
 - **Regulated category?** It flags the idea and asks you to check platform policy and local law.

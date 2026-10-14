@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TOOL = ROOT / "tools" / "build_zips.py"
 ALL_ZIP = "jumbo-creative-skills-all.zip"
+BUNDLED_SKILLS = ("creative-grader", "keep-or-kill", "creative-mix", "creative-report")
 
 
 def run_build(root, out):
@@ -101,6 +102,32 @@ class BuildZipsTest(unittest.TestCase):
     def test_timestamps_are_fixed(self):
         with zipfile.ZipFile(self.out / "creative-grader.zip") as z:
             self.assertEqual({i.date_time for i in z.infolist()}, {(1980, 1, 1, 0, 0, 0)})
+
+    def unzip_alone(self, skill, into):
+        with zipfile.ZipFile(self.out / (skill + ".zip")) as z:
+            z.extractall(into)
+        return Path(into) / skill
+
+    def test_every_script_starts_from_its_unzipped_skill_alone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for skill in self.skills:
+                folder = self.unzip_alone(skill, Path(tmp) / skill)
+                scripts = sorted(folder.glob("scripts/*.py")) + sorted(folder.glob("siblings/*/scripts/*.py"))
+                for script in scripts:
+                    done = subprocess.run([sys.executable, "-I", str(script), "--help"], cwd=tmp,
+                                          capture_output=True, text=True)
+                    self.assertEqual(done.returncode, 0, "%s/%s: %s" % (skill, script.relative_to(folder), done.stderr))
+            bundled = list((Path(tmp) / "creative-review" / "creative-review").glob("siblings/*/scripts/*.py"))
+            self.assertGreater(len(bundled), len(BUNDLED_SKILLS))
+
+    def test_creative_review_runs_from_its_unzipped_skill_alone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = self.unzip_alone("creative-review", Path(tmp) / "only")
+            done = subprocess.run([sys.executable, "-I", str(folder / "scripts" / "review.py"), "run", "--demo"],
+                                  cwd=tmp, capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            reports = list(Path(tmp).glob("creative-review-runs/*/*/report.html"))
+            self.assertEqual(len(reports), 1, done.stdout)
 
     def test_invalid_skill_fails_the_build(self):
         with tempfile.TemporaryDirectory() as tmp:

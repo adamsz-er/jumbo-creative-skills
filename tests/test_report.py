@@ -208,5 +208,17 @@ class ReportTest(unittest.TestCase):
         self.assertEqual((parser.errors, parser.stack), ([], []))
 
 
+
+class ClickBasisMethodLineTest(unittest.TestCase):
+    def test_the_method_notes_state_the_click_basis(self):
+        import panels
+        import creative_metrics as cm
+        rows = cm.load_rows(str(ROOT / "examples" / "acme" / "ads_daily.csv"))
+        ctx = panels.Ctx(rows=rows, currency="USD")
+        lines = report.method_lines(ctx, None, None, None, None, "not stated", "test", "2026-03-01 to 2026-03-30",
+                                    {"max_kb": 1, "budget_kb": 1})
+        self.assertIn(cm.click_basis_line(ctx.ads), lines)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -3,7 +3,7 @@ name: creative-review
 description: One sentence in, the whole Meta ad creative review out. Use when the user says "review my ads", "review my Meta ads for the last 30 days", "creative review", "how are my ads doing" or "what should I pause". Pulls the data (Meta ads connector or an Ads Manager CSV), reconciles it, grades every ad, gives keep, fix or pause calls, maps the creative mix, builds the six-tab dashboard, and replies with three bullets and the report path. On repeat runs it also says what changed since last time. Works with no connection on a built-in sample account.
 license: MIT
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
   role: front-door
 ---
 
@@ -26,7 +26,8 @@ If this is the first run (no `creative-profile.md` and no `creative-review-runs/
 4. **Run it.**
    `python3 -I scripts/review.py run ads.csv --profile creative-profile.md --source "Meta ads connector" --completeness reconciled`
    Pass `--where market=US`, `--target cpa=<their own number>`, `--type-map`, `--key-map`, `--prior prior.csv`, `--previews dir` and `--thumbs dir` only when the user gave them. Never invent a target. `--demo` reviews the built-in sample account and labels every output "sample data".
-5. **Reply** with the three bullets it printed and the report path, nothing more. Then offer the top action's next step (for the first Pause or Iterate ad, a one-change brief with `creative-brief`).
+5. **Reply** with the three bullets it printed, the report path, and the "Next steps" it printed: two or three skills chosen by fixed rules from this run's findings (unreadable names point to `ad-namer`, a site check or a pause with a weak site step to `funnel-diagnosis`, fatiguing ads to `fatigue-planner`, pause or scale calls to `spend-analysis`, mix gaps to `creative-ideation`, refresh calls to `hook-writer`, scale calls to `copy-tests`; with nothing found, `creative-ideation` and `creative-brief`). Offer to run the first one.
+   If you add verdict counts, quote `summary.counts` in `verdicts.json` as it stands: it is already keyed by the words a user reads (Scale, Keep, Refresh, Check before cutting, Pause, Too early, Can't judge). Never count the per-ad `verdict_id` values, which are ids (`iterate` is Refresh, `check_*` is Check before cutting, `pause_*` is Pause, `cant_judge` is Can't judge, `too_early` is Too early).
 
 ## What a run writes
 
@@ -34,7 +35,7 @@ Run folders made before the run record existed (no `run.json`) are ignored, so t
 
 One folder per run, `creative-review-runs/<account>/<window end>_<time>/`, holding `ads.csv`, `grade.json`, `verdicts.json`, `mix.json`, `changes.json`, `report.html` and `summary.md`. The dashboard opens in any browser; its first panel on the Overview tab is "What changed since last time" (an empty state on a first run).
 
-The summary is three bullets: the headline (spend, purchases, return on ad spend, and how that moved since the last review), the biggest action (the first "do first" ad with its spend at stake), and the biggest opportunity (the first gap in the creative mix, or "no clear gap yet").
+The summary ends with the next steps above. Before them come three bullets: the headline (spend, purchases, return on ad spend, and how that moved since the last review), the biggest action (the first "do first" ad with its spend at stake), and the biggest opportunity (the first gap in the creative mix, naming any of the account's weakest concepts it left out, or "no clear gap yet").
 
 ## When something goes wrong
 
@@ -48,7 +49,7 @@ Every known failure prints a plain message and its exact fix, and exits with its
 | E-RECONCILE | the pull is short | the percent short and "re-run the pull with pagination" |
 | E-CURRENCY | no currency in the header (a connector pull states it itself) | `--currency XXX` |
 | E-MIXED-CURRENCY | the pull states more than one currency | pull each currency on its own |
-| E-SKILL | a sibling skill is not installed | its name and the install command |
+| E-SKILL | the bundled copy of a skill it runs (under `siblings/`) is missing | its name and how to reinstall |
 | E-PROFILE | the profile cannot be read | fix the line it names, or pass a different `--profile` |
 | E-TARGET | a bad `--target` | the script's own message plus the accepted metrics |
 | E-REPORT | the dashboard failed its structure check | its first failing line |

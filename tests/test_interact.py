@@ -41,6 +41,14 @@ def record(ad_id, spend, **extra):
     return base
 
 
+class GradedMetricWordsTest(unittest.TestCase):
+    def test_every_metric_the_grader_grades_has_a_report_label_and_unit(self):
+        graded = run_json("creative-grader", "grade.py")
+        metrics = set(graded[0]["grades"]) if isinstance(graded, list) else set(graded["ads"][0]["grades"])
+        self.assertEqual(sorted(metrics - set(interact.LABELS)), [])
+        self.assertEqual(sorted(metrics - set(interact.METRIC_KIND)), [])
+
+
 class UniqueLabelsTest(unittest.TestCase):
     def labels(self, *recs):
         return interact.unique_labels(list(recs))
@@ -659,12 +667,12 @@ class ReviewFixTest(Fixture):
         self.assertEqual(panels._age_text(None, None), "n/a (age is not in the data)")
 
     def test_the_age_reads_without_nested_brackets(self):
-        text = panels._age_text(29, "first delivery in window (older ads may be understated)")
-        self.assertEqual(text, "29 days, counted from its first delivery in this window (it may be older)")
+        text = panels._age_text(29, cm.AGE_FROM_DELIVERY)
+        self.assertEqual(text, "29 days with delivery in this window (it may be older)")
         self.assertNotIn("((", text)
         card = panels.ad_card(self.ctx, self.verdicts["ads"][0])
-        self.assertIn("counted from its first delivery in this window (it may be older)", card)
-        self.assertNotIn("(first delivery in window (", card)
+        self.assertIn("days with delivery in this window (it may be older)", card)
+        self.assertNotIn("(days with delivery in the window (", card)
         self.assertEqual(panels._age_text(5, "its creation date"), "5 days, counted from its creation date")
         self.assertNotIn("(", panels._age_text(5, "created (as stated)"))
 
@@ -986,7 +994,7 @@ class ImprovementTest(unittest.TestCase):
             self.assertTrue(text["has_data"])
 
     def test_the_templates_are_plain_and_carry_no_numbers(self):
-        self.assertEqual(set(interact.STEP_FIX), {"hook", "hold", "click", "post-click", "reach cost", "pays back"})
+        self.assertEqual(set(interact.STEP_FIX), {"hook", "hold", "click", "post-click", "reach cost", "pays back", interact.UNTESTED_STEP})
         for step, line in list(interact.STEP_FIX.items()) + list(interact.STEP_WORDS.items()):
             self.assertNotRegex(line, r"\d", step)
 
@@ -1140,7 +1148,7 @@ class StructureTest(Fixture):
         card = next(c for c in cards if 'data-ad="120000000001"' in c)
         body = re.search(r'<div class="open-body"[^>]*>(.*)</div></details>', card, re.S).group(1)
         for text in ("among your weakest", "among your best", "Hook rate", "25.52%", "Impressions", "3-second plays", "Refresh it, keep the idea",
-                     "29 days", "Change the first 3 seconds", "Also weak: hold rate, CTR, add-to-cart rate."):
+                     "30 days", "Change the first 3 seconds", "Also weak: hold rate, CTR."):
             self.assertIn(text, body, text)
         self.assertRegex(body, r'<(svg|div) class="(pv|ph) big"')
 

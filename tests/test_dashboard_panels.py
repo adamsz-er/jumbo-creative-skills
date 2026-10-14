@@ -135,8 +135,9 @@ class PanelStateTest(unittest.TestCase):
 
     def test_board_columns_carry_counts_and_every_pause_card_the_check_line(self):
         html, _ = panels.verdict_board(self.ctx)
-        for name in ("Scale", "Keep", "Iterate", "Check before cutting", "Pause", "Too early", "Can&#x27;t judge"):
+        for name in ("Scale", "Keep", "Refresh", "Check before cutting", "Pause", "Too early", "Can&#x27;t judge"):
             self.assertIn(name, html)
+        self.assertNotIn("Iterate", html)
         pauses = [e for e in self.verdicts["ads"] if e["verdict_id"].startswith("pause")]
         self.assertTrue(pauses)
         self.assertEqual(html.count("Check first:"), 1)
@@ -1263,6 +1264,66 @@ class PreviewCountTest(unittest.TestCase):
         panels.pool_html(ctx)
         self.assertEqual(ctx.previews.coverage(), (0, 3))
         self.assertIn("Previews for 0 of 3 ads", panels.previews_note(ctx))
+
+
+
+class LinkClickGapTotalsTest(unittest.TestCase):
+    """One ad with a blank link-click cell on a day with clicks, in a file that writes an explicit 0: the key numbers and any total over
+    several ads read their click rates over the other ads, never n/a because of that one ad."""
+
+    def test_the_ctr_tile_and_a_group_total_read_over_the_other_ads(self):
+        raw = list(csv.DictReader(open(FIXTURE, newline="", encoding="utf-8")))
+        raw[0]["Link clicks"] = ""
+        raw[1].update({"Link clicks": "0", "Clicks (all)": "0"})
+        rows = cm.load_rows(raw)
+        others = [r for r in rows if str(r["ad_id"]) != raw[0]["Ad ID"]]
+        expected = cm.compute_metrics(panels.totals(others))["ctr"]
+        tile = next(t for t in panels.kpi_tiles(panels.Ctx(rows=rows, currency="USD")) if t["metric"] == "ctr")
+        self.assertAlmostEqual(tile["value"], expected)
+        ads = cm.aggregate_by_ad(rows)
+        self.assertIsNone(next(a for a in ads if str(a["ad_id"]) == raw[0]["Ad ID"])["ctr"])
+        self.assertAlmostEqual(cm.compute_metrics(panels.totals(ads))["add_to_cart_rate"],
+                               cm.compute_metrics(panels.totals([a for a in ads if str(a["ad_id"]) != raw[0]["Ad ID"]]))["add_to_cart_rate"])
+
+
+class SliceGapTest(unittest.TestCase):
+    """Days and the prior period leave out the same gap ads as the whole window, so a day without the gap row and a period without it
+    still read their click rates over the other ads."""
+
+    def setUp(self):
+        raw = list(csv.DictReader(open(FIXTURE, newline="", encoding="utf-8")))
+        self.gap_ad = raw[0]["Ad ID"]
+        raw[0]["Link clicks"] = ""
+        raw[1].update({"Link clicks": "0", "Clicks (all)": "0"})
+        self.rows = cm.load_rows(raw)
+        self.others = [r for r in self.rows if str(r["ad_id"]) != self.gap_ad]
+
+    def test_every_day_reads_ctr_over_the_other_ads(self):
+        labels, series = panels.time_series(panels.Ctx(rows=self.rows, currency="USD"))
+        days = dict(panels.calendar(self.others))
+        for day, value in zip(labels, next(s for s in series if s["key"] == "ctr")["values"]):
+            self.assertAlmostEqual(value, panels._kpi_value(panels.totals(days[day]), "ctr"), msg=day)
+
+    def test_the_change_against_a_prior_period_with_the_gap_compares_the_same_ads(self):
+        clean = cm.load_rows(list(csv.DictReader(open(FIXTURE, newline="", encoding="utf-8"))))
+        tile = next(t for t in panels.kpi_tiles(panels.Ctx(rows=clean, prior=self.rows, currency="USD")) if t["metric"] == "ctr")
+        current = [r for r in clean if str(r["ad_id"]) != self.gap_ad]
+        expected = panels._pct_change(panels._kpi_value(panels.totals(current), "ctr"), panels._kpi_value(panels.totals(self.others), "ctr"))
+        self.assertAlmostEqual(tile["change_pct"], expected)
+        self.assertAlmostEqual(tile["value"], panels._kpi_value(panels.totals(clean), "ctr"))
+
+
+class LeftOutGapsTest(unittest.TestCase):
+    def test_the_white_space_panel_names_the_concepts_left_out_of_the_gaps(self):
+        rows = cm.load_rows(str(FIXTURE))
+        mix = {"gaps": [{"concept": "social-proof", "format": "carousel", "ads": 0, "why": ["top format"], "strength": 1, "concept_roas": 6.68}],
+               "gaps_left_out": [{"concept": "before-after", "format": "carousel", "concept_roas": 2.72}], "min_proven_spend": 900.0,
+               "by_format": [], "by_concept": []}
+        html, _ = panels.gap_list(panels.Ctx(rows=rows, mix=mix, currency="USD"))
+        self.assertIn("Left out as your weakest concepts", html)
+        self.assertIn("Before after", html)
+        empty, _ = panels.gap_list(panels.Ctx(rows=rows, mix=dict(mix, gaps=[]), currency="USD"))
+        self.assertIn("Before after", empty)
 
 
 if __name__ == "__main__":

@@ -1,15 +1,15 @@
 ---
 name: keep-or-kill
-description: Give every Meta ad a pause, check, iterate, scale or keep verdict judged against its own campaign goal, with a confidence level, a plain-English sentence and the reasons shown. Use when the user asks which ads to pause, scale or refresh, runs a weekly creative review, asks "is this ad fatiguing", or wants a keep-or-kill call from an Ads Manager export or a Meta ads connector.
+description: Give every Meta ad a pause, check, refresh, scale or keep verdict judged against its own campaign goal, with a confidence level, a plain-English sentence and the reasons shown. Use when the user asks which ads to pause, scale or refresh, runs a weekly creative review, asks "is this ad fatiguing", or wants a keep-or-kill call from an Ads Manager export or a Meta ads connector.
 license: MIT
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
   role: analyse
 ---
 
 # Keep or kill
 
-One verdict per ad, with the evidence behind it. Grades are relative to the same account's own ads of the same campaign objective, in the same format and ad type. No benchmarks. An unknown is never a decision: an ad whose payback cannot be graded reads "Can't judge", not keep or iterate.
+One verdict per ad, with the evidence behind it. Grades are relative to the same account's own ads of the same campaign objective, in the same format and ad type. No benchmarks. An unknown is never a decision: an ad whose payback cannot be graded reads "Can't judge", not keep or refresh.
 
 If there is no `creative-profile.md` yet, suggest running `creative-context` first, but do not require it.
 
@@ -34,19 +34,22 @@ python3 -I scripts/verdicts.py ads.csv --target cpa=40,roas=3   # the user's own
 
 `--young-days` (5), `--window` (6), `--min-impressions` (1000) and `--min-change` (8) are arbitrary defaults, as is `--top-n` (3, how many top-spend ads the concentration line counts), `--protect-top` (3, the biggest sellers are never paused unchecked), and so is the minimum of 5 comparable ads needed to grade within a group. Set them from the account: how long its ads take to settle, how many days make a fair comparison, and how much ctr, frequency and hook rate move from one week to the next when nothing is wrong. `--min-change` is a materiality size, not a fatigue benchmark. The output states the values used. The rules are in `references/verdict-rules.md`.
 
+**The site gets checked before a Pause.** When the data has landing page views, adds to cart or checkouts initiated, every would-be Pause is read through the funnel (`funnel-diagnosis` uses the same read). If the ad still earns attention and clicks while a step on the site is weak, the call is "Check before cutting" and the sentence names the weak step: fix the page before judging the ad, or, when the only weak steps come after the cart (cart to checkout, cart to purchase), check checkout, price and shipping costs. Without those columns the Pause stands, and the output names the missing steps.
+
 **Targets decide "never worked".** Bottom quartile only means weaker than the account's other ads, which may still be profitable. So a never-worked ad is paused only when it also misses the user's own target for its payback measure (`--target cpa=40`, or `target:` in the profile's `Script settings`). With no target set it is "Check before cutting", and the sentence asks for one; when it meets a target it is "Check before cutting" too. Ask the user for their target cost per sale (or per click, per lead) and record it in the profile; never supply one yourself. A fatigued ad can still be paused without a target, because fatigue is a trend in the ad's own numbers.
 
 `--profile creative-profile.md` fills any flag you leave unset from the profile's `Script settings` (key map, type map, currency, targets), so confirmed answers apply without retyping them. `--where market=US` keeps one scope, read from a column or the ad names: use it when markets must be judged apart, pass the same `--where` to every script in the run, and say the scope the output prints. `--type-map core=bau` reads an account's own ad-type word as one of the six types.
 
 ## Present the result
 
-1. Lead with the do-these-first list the script prints (largest spend at stake first), then the verdict counts.
+1. Lead with the do-these-first list the script prints (largest spend at stake first), then the verdict counts. Quote every count, age, group size and list length exactly as the script prints them; never recount or paraphrase them ("the 4 weakest" when it lists 5). Use the verdict words it prints (Refresh, not the id `iterate`).
 2. For each ad, give the verdict, its sentence and its confidence as printed, then the reasons. Do not rephrase a sentence into stronger words.
 3. An "Early read" is a lead, not a ruling: say it rests on a small comparison group, few delivery days or one payback measure.
 4. Before any Pause, state the check line the script prints: rule out tracking, site or audience problems first. Only fatigue and never-worked are creative decisions.
-5. "Can't judge" means the data cannot support a decision: say which field is missing and how to get it. Never turn it into iterate or keep.
+5. "Can't judge" means the data cannot support a decision: say which field is missing and how to get it. Never turn it into refresh or keep.
 6. Name the ads that are too young to judge, the thin-group warning, and the spend concentration line.
 7. Say when fatigue could not be read (fewer than two windows of delivery days) and that such an ad is held, not scaled.
+8. When a `fatigue-planner` plan exists in the conversation, mark each kept ad that sits on its refresh queue as "keep, refresh queued", and say the two skills use different fade tests (the planner predicts when the ad drops below the account's own low point for its format; this skill compares its first and last days). Never tell the user to leave unchanged an ad the plan queues for a refresh.
 
 ## Guardrails
 
@@ -69,7 +72,9 @@ Try:
 ## Common questions
 
 - **Why Check before cutting?** A weakness is not proven: mixed payback, small group, top seller or no target set.
-- **Why is an ad too early?** It is younger than `--young-days` or under `--min-impressions`.
+- **Why is an ad too early?** It has delivered on fewer than `--young-days` days (with a `created_time` in the data, it was created fewer than that many days ago), or it is under `--min-impressions`.
 - **Will it pause ads?** These skills never call a tool that changes your ad account. Your agent could, if you asked it to directly, through the Meta connector's own tools. It recommends.
 - **Can I set targets?** Yes: `--target cpa=40,roas=3` or in the profile.
+- **Refresh, or "keep, refresh queued"?** Refresh is this skill's verdict: the ad is tiring now and its concept still pays. "Keep, refresh queued" is a kept ad that fatigue-planner expects to tire soon, so its refresh is already on the calendar.
+- **Why "check the site" instead of Pause?** The ad still earns clicks but people drop on the page. Fix the page first; `funnel-diagnosis` has a checklist.
 - More: creative-context/references/faq.md

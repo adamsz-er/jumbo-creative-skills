@@ -25,7 +25,7 @@ Ten ways into an idea. Pick the angle first, then choose how to make it. Each li
 
 ## Iterating a winner
 
-When an ad is marked "iterate" or "scale", keep the concept and change exactly one thing: the opening, the creator, the setting, the length, the format. Label what changed so the result can be read. Several near-copies of one concept share one fatigue clock, so they are not a wide test.
+When an ad is marked "refresh" or "scale", keep the concept and change exactly one thing: the opening, the creator, the setting, the length, the format. Label what changed so the result can be read. Several near-copies of one concept share one fatigue clock, so they are not a wide test.
 
 ## Adjacent moves
 

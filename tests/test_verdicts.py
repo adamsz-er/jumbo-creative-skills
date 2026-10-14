@@ -1,3 +1,5 @@
+import json
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -8,6 +10,8 @@ sys.path.insert(0, str(ROOT / "skills" / "keep-or-kill" / "scripts"))
 
 import creative_metrics as cm  # noqa: E402
 import verdicts  # noqa: E402
+
+SCRIPT_PATH = ROOT / "skills" / "keep-or-kill" / "scripts" / "verdicts.py"
 
 FIXTURE = ROOT / "examples" / "acme" / "ads_daily.csv"
 CHECK = "rule out tracking, site or audience problems first"
@@ -88,6 +92,18 @@ class FixtureVerdictsTest(unittest.TestCase):
         self.assertEqual(verdict["confidence"], "Can't judge yet")
         self.assertNotIn("pause", " ".join(verdict["reasons"]).lower())
 
+    def test_a_young_ads_age_counts_the_days_it_delivered_as_the_sibling_skills_do(self):
+        verdict = fixture_verdicts()["120000000030"]
+        self.assertEqual(verdict["active_days"], 4)
+        self.assertIn("learning: has delivered on 4 days, under the 5-day learning window", verdict["reasons"])
+        self.assertIn("it has delivered on 4 days", verdict["sentence"])
+
+    def test_the_json_states_the_age_in_delivery_days(self):
+        out = subprocess.run([sys.executable, str(SCRIPT_PATH), str(FIXTURE), "--json"], capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        entry = next(e for e in json.loads(out.stdout)["ads"] if str(e["ad"]) == "120000000030")
+        self.assertEqual(entry["age_days"], 4)
+
     def test_never_worked_ad_is_paused_as_never_worked(self):
         verdict = fixture_verdicts(targets=MISSED)["120000000017"]
         self.assertEqual(verdict["verdict"], "Pause: never worked")
@@ -165,6 +181,24 @@ def judge(rows, **kwargs):
     kwargs.setdefault("window", 3)
     kwargs.setdefault("currency", "USD")
     return {r["ad"]: r for r in verdicts.judge_ads(cm.load_rows(rows), **kwargs)}
+
+
+class YoungDaysBoundaryTest(unittest.TestCase):
+    """An ad with exactly --young-days delivery days has delivered long enough to judge; one day fewer is still learning."""
+
+    def test_exactly_young_days_of_delivery_is_judged_one_fewer_is_learning(self):
+        rows = crowd(6, days=9) + make_rows("acme-five", days=5) + make_rows("acme-four", days=4)
+        judged = judge(rows, young_days=5)
+        self.assertEqual(judged["acme-five"]["age_days"], 5)
+        self.assertFalse(judged["acme-five"]["learning"])
+        self.assertEqual(judged["acme-four"]["age_days"], 4)
+        self.assertTrue(judged["acme-four"]["learning"])
+
+    def test_an_ad_created_on_its_first_day_that_delivers_young_days_days_is_judged(self):
+        created = [dict(r, created_time="2026-03-01T08:00:00+0000") for r in make_rows("acme-created", days=5)]
+        judged = judge(crowd(6, days=5) + created, young_days=5)
+        self.assertEqual((judged["acme-created"]["age_days"], judged["acme-created"]["age_basis"]), (5, cm.AGE_FROM_CREATED))
+        self.assertFalse(judged["acme-created"]["learning"])
 
 
 class SafetyTest(unittest.TestCase):
@@ -320,7 +354,7 @@ class TargetTest(unittest.TestCase):
 
     def test_parse_targets_reads_aliases_and_refuses_bad_values(self):
         self.assertEqual(cm.parse_targets("CPA=40,roas=3"), {"cpa": 40.0, "roas": 3.0})
-        for bad in ("cpa=abc", "cpa=0", "nonsense=3"):
+        for bad in ("cpa=xyz", "cpa=0", "nonsense=3"):
             with self.assertRaises(ValueError):
                 cm.parse_targets(bad)
 
@@ -434,6 +468,21 @@ class OrderingTest(unittest.TestCase):
             self.assertIn(field, entry)
         self.assertIn("bands", entry["payback"])
         self.assertIn("known", entry["payback"])
+
+
+
+class RefreshWordTest(unittest.TestCase):
+    """One word for one call: the user reads "Refresh" (as fatigue-planner says it); the id stays `iterate` for the data."""
+
+    def test_the_fading_but_paying_verdict_reads_refresh_and_keeps_its_id(self):
+        import subprocess
+        script = ROOT / "skills" / "keep-or-kill" / "scripts" / "verdicts.py"
+        text = subprocess.run([sys.executable, "-I", str(script), str(FIXTURE)], capture_output=True, text=True, check=True).stdout
+        self.assertIn("Refresh", text)
+        self.assertNotIn("Iterate", text)
+        refreshed = [r for r in fixture_verdicts().values() if r["verdict_id"] == "iterate"]
+        self.assertTrue(refreshed)
+        self.assertTrue(all(r["verdict"].startswith("Refresh:") for r in refreshed))
 
 
 if __name__ == "__main__":

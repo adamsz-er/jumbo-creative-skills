@@ -5,7 +5,10 @@ Every skill must run on its own after install, so shared/creative_metrics.py and
 shared/from_mcp.py are duplicated into skills/<name>/scripts/, and the Acme example CSV
 into creative-review's demo folder. A skill gets the
 copies if it already has creative_metrics.py, and creative-context always does.
-`--check` copies nothing and exits 1 on drift.
+shared/evidence.py goes to the skills in EVIDENCE (the make skills that read account evidence).
+creative-review runs four other skills' scripts, so each skill in BUNDLED is copied whole (all but its
+SKILL.md, so no agent finds it twice) into skills/creative-review/siblings/<name>/, after the shared copies.
+`--check` copies nothing and exits 1 on drift, or on a bundled file its skill no longer has.
 """
 from __future__ import annotations
 
@@ -17,25 +20,72 @@ from pathlib import Path
 MODULE = "creative_metrics.py"
 MODULES = (MODULE, "from_mcp.py")
 ALWAYS = ("creative-context",)
+EVIDENCE_MODULE = "evidence.py"
+EVIDENCE = ("creative-brief", "creative-ideation", "hook-writer", "persona-builder")
 DEMO = (Path("examples/acme/ads_daily.csv"), Path("skills/creative-review/assets/demo/ads_daily.csv"))
+BUNDLER = "creative-review"
+BUNDLED = ("creative-grader", "keep-or-kill", "creative-mix", "creative-report")
+SKIP_NAMES = {"SKILL.md", ".DS_Store"}
 
 
 def targets(root):
     """(source, copy) pairs: the shared modules for each skill that carries them, and the demo CSV."""
     root = Path(root)
     scripts = {root / "skills" / name / "scripts" for name in ALWAYS}
+    scripts.update(root / "skills" / name / "scripts" for name in EVIDENCE if (root / "skills" / name).is_dir())
     scripts.update(p.parent for p in (root / "skills").glob("*/scripts/" + MODULE))
     pairs = [(root / "shared" / module, folder / module) for folder in sorted(scripts) for module in MODULES]
+    pairs += [(root / "shared" / EVIDENCE_MODULE, root / "skills" / name / "scripts" / EVIDENCE_MODULE)
+              for name in EVIDENCE if (root / "skills" / name).is_dir()]
     if (root / "skills" / "creative-review").is_dir() or (root / DEMO[0]).exists():
         pairs.append((root / DEMO[0], root / DEMO[1]))
     return sorted(pairs, key=lambda pair: pair[1])
 
 
-def sync(root, check=False):
-    """Return the copies that differ from shared/; write them unless check is set."""
+def shippable(path, rel):
+    return path.is_file() and path.name not in SKIP_NAMES and "__pycache__" not in rel.parts and path.suffix != ".pyc"
+
+
+def bundle_targets(root):
+    """(source, copy) pairs for every file of each BUNDLED skill under creative-review/siblings/."""
     root = Path(root)
+    if not (root / "skills" / BUNDLER).is_dir():
+        return []
+    pairs = []
+    for name in BUNDLED:
+        skill = root / "skills" / name
+        for path in sorted(skill.rglob("*")):
+            if shippable(path, path.relative_to(skill)):
+                pairs.append((path, root / "skills" / BUNDLER / "siblings" / name / path.relative_to(skill)))
+    return pairs
+
+
+def stale_bundled(root, pairs):
+    """Files under creative-review/siblings/ that no bundled skill ships (a SKILL.md copy included)."""
+    folder = Path(root) / "skills" / BUNDLER / "siblings"
+    wanted = {target for _, target in pairs}
+    return sorted(p for p in folder.rglob("*") if p.is_file() and p not in wanted and p.name != ".DS_Store"
+                  and "__pycache__" not in p.parts and p.suffix != ".pyc")
+
+
+def sync(root, check=False):
+    """Return the copies that differ from their source; write them unless check is set.
+
+    The shared copies go first, so the bundled siblings take the freshly synced modules."""
+    root = Path(root)
+    drifted = _copy(targets(root), check)
+    pairs = bundle_targets(root)
+    drifted += _copy(pairs, check)
+    for path in stale_bundled(root, pairs):
+        drifted.append(path)
+        if not check:
+            path.unlink()
+    return drifted
+
+
+def _copy(pairs, check):
     drifted = []
-    for source, target in targets(root):
+    for source, target in pairs:
         if not source.exists():
             drifted.append(target)
             continue
@@ -60,7 +110,8 @@ def main(argv=None):
         print("run: python3 tools/sync_shared.py")
         return 1
     if not drifted:
-        print("OK: all copies match shared/ (%s) and the demo CSV" % ", ".join(MODULES))
+        print("OK: all copies match shared/ (%s), the demo CSV and creative-review's bundled siblings"
+              % ", ".join(MODULES + (EVIDENCE_MODULE,)))
     return 0
 
 

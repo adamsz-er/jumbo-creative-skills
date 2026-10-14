@@ -14,7 +14,7 @@ Say "review my Meta ads". The creative-review skill does the rest: it gets the d
 
 ### Do I need to install all the skills?
 
-No. Each skill works on its own, with its own copy of the shared code. Installing them all is easiest because creative-review calls its siblings; if one is missing it stops with a message naming the skill and the install command.
+No. Each skill works on its own, with its own copy of the shared code. creative-review runs the grader, keep-or-kill, mix and report scripts, and carries its own copy of them in `siblings/`, so it works installed alone too. Installing them all is still easiest: the other skills are what its next steps point to.
 
 ### Where do my results go?
 
@@ -58,7 +58,7 @@ Because it depends on your format, your audience, your offer and your account. A
 
 ### Why does an ad say too early to judge?
 
-An ad is still learning when it is younger than a minimum age or has fewer than a minimum number of impressions. Judging it would mean reading noise. Both minimums are arbitrary defaults (`--young-days`, `--min-impressions`): set them from your own account. Ads that cannot be judged are never told to pause, iterate or scale.
+An ad is still learning when it is younger than a minimum age or has fewer than a minimum number of impressions. Judging it would mean reading noise. Both minimums are arbitrary defaults (`--young-days`, `--min-impressions`): set them from your own account. Ads that cannot be judged are never told to pause, refresh or scale.
 
 ### Why is an ad "not graded (low volume)"?
 
@@ -110,7 +110,7 @@ Only from you and your data. The skills do not invent testimonials, statistics o
 
 ### How do I make a one-change variant of a winning ad?
 
-Ask hook-writer for variants of the ad, or ask creative-brief for a one-change brief on an ad the review marked Iterate. Changing one thing at a time (the opening, the creator) lets you see what moved the result.
+Ask hook-writer for variants of the ad, or ask creative-brief for a one-change brief on an ad the review marked Refresh. Changing one thing at a time (the opening, the creator) lets you see what moved the result.
 
 ## The report
 

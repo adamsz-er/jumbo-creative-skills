@@ -157,13 +157,14 @@ def _cell(value: Any) -> str:
 
 
 def write_csv(rows: Sequence[Dict[str, Any]], path: str) -> None:
-    """Write the CSV; the spend header carries the currency ("Amount spent (USD)") when every row states the same one."""
+    """Write the CSV; the spend header carries the currency ("Amount spent (USD)") when every row states the same one. A link-click
+    count that was blank at the source stays blank, so a reload still says how many blanks were counted as 0."""
     currency = spend_currency(rows)
     with open(path, "w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(["%s (%s)" % (header, currency) if field == "spend" and currency else header for header, field in COLUMNS])
         for row in rows:
-            writer.writerow([_cell(row.get(field)) for _, field in COLUMNS])
+            writer.writerow(["" if field == "link_clicks" and row.get(cm.LINK_BLANKS) else _cell(row.get(field)) for _, field in COLUMNS])
 
 
 def _total(rows: Sequence[Dict[str, Any]], field: str) -> float:

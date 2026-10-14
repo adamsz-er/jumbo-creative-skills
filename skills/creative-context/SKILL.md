@@ -1,9 +1,9 @@
 ---
 name: creative-context
-description: Use first, before any other creative skill, when analysing or making Meta (Facebook and Instagram) ad creative. Builds or loads the brand profile, detects whether performance data comes from a Meta ads connector, a CSV export or nothing, and fixes the metric definitions, ad-type vocabulary and naming fields every later answer relies on. Also use when the user asks how to export creative data from Ads Manager.
+description: Use first, before any other creative skill, when analysing or making Meta (Facebook and Instagram) ad creative. Builds or loads the brand profile (and can seed it from public research on the brand's site and reviews, every line sourced and confirmed), detects whether performance data comes from a Meta ads connector, a CSV export or nothing, and fixes the metric definitions, ad-type vocabulary and naming fields every later answer relies on. Also use when the user asks how to export creative data from Ads Manager.
 license: MIT
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
   role: hub
 ---
 
@@ -19,7 +19,9 @@ The brand is always an input. Nothing here assumes a particular brand, category 
 2. If not, interview the user using the fields in `references/brand-profile-template.md`: brand, category, products, offer and sale calendar, personas, funnel goals, brand tone, colours. Ask in two or three short rounds, not one long form. Accept "skip" for any field and record it as unknown rather than inventing a value.
 3. If you can write files, save the answers as `creative-profile.md` in the working directory. If you cannot, print the profile in a code block and tell the user to keep it for next time.
 
-Every field in the profile comes from the user. Never fill a gap from what you assume brands in that category usually do.
+Every field in the profile comes from the user or from public research the user has confirmed. Never fill a gap from what you assume brands in that category usually do.
+
+**Seed it from public research.** Given a brand name and its website (or an existing profile), research the brand on the public web and draft its claims, proof points, the objections customers raise, its tone and its category words, following `references/brand-research.md`. Every seeded line carries its source URL and a label: "from the brand's site", "from public reviews" (paraphrased, never quoted) or "inferred". Check the draft with `python3 -I scripts/research_check.py profile-draft.md`, show it to the user, and save only what they confirm. Without web access, say so and ask the questions instead.
 
 The profile ends with a `Script settings` block (key map, type map, targets, currency). Every script reads it with `--profile creative-profile.md`, so an answer the user confirmed once (which key is the concept, what an account's own ad-type word means, their target cost per sale) is never asked again and every analysis in a run uses the same settings. A flag on the command line still wins.
 
@@ -96,6 +98,7 @@ Have ready: your brand basics (or say skip), and either a connector or a CSV.
 Try:
 
 - "Set up my brand profile and check how my ads are named."
+- "Research my brand from its website and reviews and draft the profile."
 - "How do I export my ad data from Ads Manager?"
 - "Which metrics do you use and how are they defined?"
 
@@ -103,6 +106,7 @@ Try:
 
 - **Do I have to do this first?** It runs automatically before the others when no profile exists, but you can skip any field.
 - **Where does my profile live?** In `creative-profile.md` in your working directory.
+- **Can it research my brand?** Yes, from public pages, with every line labelled and sourced; nothing is saved until you confirm it.
 - **What if my names have no convention?** Run `detect_naming.py` on all names, then give a key map; the answer is saved in the profile.
 - **Do I need the Meta MCP?** No; a daily CSV works.
 - More: creative-context/references/faq.md

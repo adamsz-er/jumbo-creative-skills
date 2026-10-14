@@ -108,7 +108,7 @@ class ErrorTriggerTest(unittest.TestCase):
         copy = self.work / "copy"
         copy.mkdir()
         script = make_repo_copy(copy)
-        stub = copy / "skills" / "creative-report" / "scripts" / "report.py"
+        stub = copy / "skills" / "creative-review" / "siblings" / "creative-report" / "scripts" / "report.py"
         stub.write_text('import sys\nif "--check" in sys.argv:\n    print("problem: tab pareto (Pareto) is missing")\n    sys.exit(1)\n'
                         'open(sys.argv[sys.argv.index("-o") + 1], "w").write("<html></html>")\n')
         self.expect(run(["run", "--demo"], self.work, script=script), "E-REPORT", "tab pareto (Pareto) is missing")
@@ -117,7 +117,7 @@ class ErrorTriggerTest(unittest.TestCase):
         copy = self.work / "copy"
         copy.mkdir()
         script = make_repo_copy(copy)
-        (copy / "skills" / "creative-mix" / "scripts" / "mix.py").write_text('import sys\nprint("the mix broke", file=sys.stderr)\nsys.exit(2)\n')
+        (copy / "skills" / "creative-review" / "siblings" / "creative-mix" / "scripts" / "mix.py").write_text('import sys\nprint("the mix broke", file=sys.stderr)\nsys.exit(2)\n')
         done = run(["run", "--demo"], self.work, script=script)
         self.expect(done, "E-ANALYSIS", "mix step stopped", "the mix broke", "creative-review-runs")
 

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This repo is a public package of Agent Skills for analysing and making Meta ad creative. Skills live in `skills/<name>/SKILL.md`, with `references/` and `scripts/` beside each. `shared/creative_metrics.py` is the one canonical metrics module. Each skill carries a synced copy in its own `scripts/` so it works after install on its own.
+This repo is a public package of Agent Skills for analysing and making Meta ad creative. Skills live in `skills/<name>/SKILL.md`, with `references/` and `scripts/` beside each. `shared/creative_metrics.py` is the one canonical metrics module, and `shared/evidence.py` the one account-evidence script the make skills read. Each skill carries synced copies in its own `scripts/` so it works after install on its own.
 
 ## Contributor rules
 
@@ -21,4 +21,4 @@ python3 tools/validate_skills.py
 python3 tools/sync_shared.py --check     # run without --check to copy shared/ into the skills
 ```
 
-After editing `shared/creative_metrics.py`, run `python3 tools/sync_shared.py`. The fixture is regenerated with `python3 tools/make_fixture.py --seed 7 --out examples/acme/ads_daily.csv`.
+After editing `shared/creative_metrics.py`, or anything in `creative-grader`, `keep-or-kill`, `creative-mix` or `creative-report` (creative-review carries copies of them in `siblings/`; never edit those by hand), run `python3 tools/sync_shared.py`. The fixture is regenerated with `python3 tools/make_fixture.py --seed 7 --out examples/acme/ads_daily.csv`.

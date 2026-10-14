@@ -47,13 +47,13 @@ Names that do not match the convention go to an `unclassified` bucket that is co
 
 1. Lead with the unclassified count, then the biggest finding: an over-reliance flag, or the strongest gaps.
 2. Then the format, concept, ad-type and grid tables.
-3. Explain the families: the output lists which ads were grouped into each, so the user can see and override the grouping.
+3. Explain the families: the output lists which ads were grouped into each, so the user can see and override the grouping. When you count inside a format ("5 of its 9 ads"), count ads, not concept families, from the format table or `--json`; say "concepts" when you count families, and never mix the two in one sentence.
 4. Say plainly when performance could not be ranked (too few concepts or formats) or the funnel view is absent.
 
 ## Guardrails
 
 - Relative reading only: "top quartile" means top quartile of this account's own BAU concepts or formats on pooled ROAS. No benchmarks, no "ideal split".
-- A gap is a place with no evidence, not a place that will win. Say "worth testing". Only gaps beside a proven concept or format (enough spend) are listed.
+- A gap is a place with no evidence, not a place that will win. Say "worth testing". Only gaps beside a proven concept or format (enough spend) are listed, and a concept in the bottom quartile on pooled BAU ROAS never leads one: the output lists it as "left out". Say so when the user asks why a concept is missing, and never suggest porting a left-out concept into a top format.
 - The 60% over-reliance line and the minimum of 5 concepts or formats before ranking are arbitrary defaults, not statistical rules. Ask the user what concentration is normal for their account.
 - Read only. Do not change anything in the ad account.
 

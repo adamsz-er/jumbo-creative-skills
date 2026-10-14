@@ -12,7 +12,7 @@ import re
 import statistics
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -128,6 +128,7 @@ class Ctx:
                  briefs: Optional[Any] = None, key_map: Optional[Dict[str, str]] = None) -> None:
         self.rows = list(rows or [])
         self.ads = cm.aggregate_by_ad(self.rows, key_map=key_map) if self.rows else []
+        self.gapped = cm.gap_ads(self.rows)
         self.ad_index = {str(a.get("ad_id") or a.get("ad_name")): a for a in self.ads}
         self.verdicts, self.grade, self.mix = verdicts, grade, mix
         self.currency, self.top_n, self.pareto_share = currency, top_n, pareto_share
@@ -301,8 +302,8 @@ def _age_text(age: Any, basis: Any) -> str:
         return "n/a (age is not in the data)"
     if not basis:
         return "%d days" % age
-    if str(basis).startswith("first delivery"):
-        return "%d days, counted from its first delivery in this window (it may be older)" % age
+    if basis == cm.AGE_FROM_DELIVERY:
+        return "%d day%s with delivery in this window (it may be older)" % (age, "" if age == 1 else "s")
     return "%d days, counted from %s" % (age, str(basis).replace("(", "- ").replace(")", ""))
 
 
@@ -534,12 +535,10 @@ def coverage(ads: Sequence[Dict[str, Any]], fields: Sequence[str]) -> List[str]:
     return notes
 
 
-def totals(rows: Sequence[Dict[str, Any]]) -> Dict[str, Optional[float]]:
-    """Sum each base field over rows. Reach never adds up across ads and days, so it stays None."""
-    out: Dict[str, Optional[float]] = {}
-    for field in cm.NUMERIC_FIELDS:
-        values = [r[field] for r in rows if r.get(field) is not None]
-        out[field] = sum(values) if values else None
+def totals(rows: Sequence[Dict[str, Any]], gapped: Optional[Set[str]] = None) -> Dict[str, Optional[float]]:
+    """Sum each base field over rows. Reach never adds up across ads and days, so it stays None. A slice in time passes `gapped`,
+    the dataset's cm.gap_ads, so its click rates leave out the same ads as the whole."""
+    out = cm._sum_rows(rows, gapped)
     out["reach"] = None
     out["video_views_3s_source"] = ("derived" if any(str(r.get("video_views_3s_source") or "").startswith("derived") for r in rows) else None)
     return out
@@ -691,7 +690,9 @@ def kpi_tiles(ctx: Ctx) -> List[Dict[str, Any]]:
     if not ctx.rows:
         return []
     total = totals(ctx.rows)
-    prior_total = totals(ctx.prior) if ctx.prior else None
+    both = ctx.gapped | cm.gap_ads(ctx.prior or [])
+    compared = totals(ctx.rows, both)
+    prior_total = totals(ctx.prior, both) if ctx.prior else None
     ctr_basis = cm.metric_basis(total, "ctr")["numerator"]
     gone = gone_metrics(ctx)
     needs = {"spend": ("spend",), "impressions": ("impressions",), "conversions": ("conversions",), "conversion_value": ("conversion_value",),
@@ -699,9 +700,9 @@ def kpi_tiles(ctx: Ctx) -> List[Dict[str, Any]]:
              "roas": ("conversion_value", "spend"), "hook_rate": ("video_views_3s", "impressions"), "hold_rate": ("video_thruplay", "video_views_3s")}
     tiles = []
     for key, name, kind in KPI_ORDER:
-        tot, ptot, video_note = total, prior_total, ""
+        tot, ctot, ptot, video_note = total, compared, prior_total, ""
         if key in VIDEO_KPIS:
-            tot = totals(video_rows(ctx.rows, key))
+            tot = ctot = totals(video_rows(ctx.rows, key))
             ptot = totals(video_rows(ctx.prior, key)) if ctx.prior else None
             video_note = "" if key in gone else video_basis(ctx, key)
         if key == "reach":
@@ -724,7 +725,7 @@ def kpi_tiles(ctx: Ctx) -> List[Dict[str, Any]]:
             if key in ACCOUNT_KPIS:
                 change_note = "n/a (reach is account-level only)"
             else:
-                change = _pct_change(_kpi_value(tot, key), _kpi_value(ptot, key)) if ptot is not None else None
+                change = _pct_change(_kpi_value(ctot, key), _kpi_value(ptot, key)) if ptot is not None else None
                 change_note = "n/a (prior value missing or zero)" if change is None else None
         unit = " (%s)" % (ctx.currency or "account currency") if kind.startswith("money") else ""
         partial = [] if video_note or key in gone else coverage(ctx.ads, needs.get(key, ()))
@@ -753,10 +754,10 @@ def kpi_strip(ctx: Ctx) -> Tuple[str, str]:
         spark = ""
         if key not in ACCOUNT_KPIS:
             cal = calendar(rows)
-            values = day_values(cal, key)
-            tips = ["%s: %s" % (charts.day_label(d), _kpi_text(ctx, totals(_day_rows(rs, key)), key, kind)) if v is not None else ""
+            values = day_values(cal, key, ctx.gapped)
+            tips = ["%s: %s" % (charts.day_label(d), _kpi_text(ctx, totals(_day_rows(rs, key), ctx.gapped), key, kind)) if v is not None else ""
                     for (d, rs), v in zip(cal, values)]
-            spark = charts.sparkline(values, "%s by day" % tile["base_name"], tips=tips, average=rolling_values(cal, key))
+            spark = charts.sparkline(values, "%s by day" % tile["base_name"], tips=tips, average=rolling_values(cal, key, ctx.gapped))
         spark_note = spark or ("" if key in ACCOUNT_KPIS or key in gone_metrics(ctx) else
                                '<span class="muted">%s</span>' % ("one day of data" if len(daily(rows)) == 1 else "no dates in the data"))
         note_html = '<p class="kpi-note">%s</p>' % esc("; ".join(tile["notes"])) if tile["notes"] else ""
@@ -815,17 +816,18 @@ def _day_rows(rows: Sequence[Dict[str, Any]], key: str) -> List[Dict[str, Any]]:
     return video_rows(rows, key) if key in VIDEO_KPIS else list(rows)
 
 
-def day_values(cal: Sequence[Tuple[str, List[Dict[str, Any]]]], key: str) -> List[Optional[float]]:
-    """A measure per calendar day as a ratio of that day's sums; a day with no usable rows is None, never 0."""
+def day_values(cal: Sequence[Tuple[str, List[Dict[str, Any]]]], key: str, gapped: Optional[Set[str]] = None) -> List[Optional[float]]:
+    """A measure per calendar day as a ratio of that day's sums; a day with no usable rows is None, never 0. `gapped` is the dataset's
+    cm.gap_ads, left out of every day's click rates."""
     out: List[Optional[float]] = []
     for _, rows in cal:
         used = _day_rows(rows, key)
-        out.append(_kpi_value(totals(used), key) if used else None)
+        out.append(_kpi_value(totals(used, gapped), key) if used else None)
     return out
 
 
-def rolling_values(cal: Sequence[Tuple[str, List[Dict[str, Any]]]], key: str, window: int = charts.SPARK_AVERAGE_DAYS,
-                   need: int = charts.ROLLING_MIN_VALUES) -> List[Optional[float]]:
+def rolling_values(cal: Sequence[Tuple[str, List[Dict[str, Any]]]], key: str, gapped: Optional[Set[str]] = None,
+                   window: int = charts.SPARK_AVERAGE_DAYS, need: int = charts.ROLLING_MIN_VALUES) -> List[Optional[float]]:
     """A rolling average over `window` days: a count (spend, impressions, ...) is its mean per day, a ratio is the ratio of the window's sums.
 
     Only days with rows on the measure's basis (see _day_rows) count, and only those rows are summed; fewer than `need` such days is a gap.
@@ -839,7 +841,7 @@ def rolling_values(cal: Sequence[Tuple[str, List[Dict[str, Any]]]], key: str, wi
         elif key in cm.NUMERIC_FIELDS:
             out.append(sum(totals(d)[key] or 0 for d in days) / len(days))
         else:
-            out.append(_kpi_value(totals([r for d in days for r in d]), key))
+            out.append(_kpi_value(totals([r for d in days for r in d], gapped), key))
     return out
 
 
@@ -848,9 +850,10 @@ def time_series(ctx: Ctx) -> Tuple[List[str], List[Dict[str, Any]]]:
     cal = calendar(ctx.rows)
     out = []
     for key, name, kind in TIME_METRICS:
-        values = day_values(cal, key)
+        values = day_values(cal, key, ctx.gapped)
         if any(v is not None for v in values):
-            out.append({"key": key, "name": name, "kind": kind, "unit": _unit_of(ctx, name, kind), "values": values, "average": rolling_values(cal, key)})
+            out.append({"key": key, "name": name, "kind": kind, "unit": _unit_of(ctx, name, kind), "values": values,
+                        "average": rolling_values(cal, key, ctx.gapped)})
     return [d for d, _ in cal], out
 
 
@@ -1163,7 +1166,7 @@ def ways_to_improve(ctx: Ctx) -> Tuple[str, str]:
                            "Run the creative-grader skill and add its grades when you rebuild this report.")
     groups = interact.weak_groups(ctx.records)
     total = len(ctx.records)
-    diagnosed = sum(g["ads"] for g in groups if g["step"] not in (None, "none"))
+    diagnosed = sum(g["ads"] for g in groups if g["step"] not in (None, "none", "untested"))
     body = []
     for g in groups:
         words = g["words"] if g["step"] is None else g["words"][:1].upper() + g["words"][1:]
@@ -1598,7 +1601,7 @@ def formats_over_time(ctx: Ctx) -> Tuple[str, str]:
         out: List[Optional[float]] = []
         for bucket in buckets:
             used = _measure_rows(bucket, key)
-            total = totals(used)
+            total = totals(used, ctx.gapped)
             out.append(_kpi_value(total, key) if used and (total.get("impressions") or 0) >= charts.MIN_WEEK_IMPRESSIONS else None)
         return out
 
@@ -1685,10 +1688,12 @@ def ad_age(ctx: Ctx) -> Tuple[str, str]:
     if not views:
         views = [("roas", "ROAS", charts.bars_with_dots(labels, shares, counts, [None] * len(labels), charts.axis_format("x"), "ROAS", "Spend share by ad age"))]
     bases = {a.get("age_basis") for a in ads}
-    basis = ("from each ad's creation date" if bases == {cm.AGE_FROM_CREATED} else
-             "from each ad's first day of delivery in this window, so an ad that started before the window reads younger than it is" if bases == {cm.AGE_FROM_DELIVERY} else
-             "from the creation date where the export has one, otherwise from the first day of delivery in this window")
-    note = ('<p class="muted">Age is counted to the last day of the data, %s. Arbitrary defaults: new buckets start at %s. '
+    basis = ("Age is counted from each ad's creation date to the last day of the data" if bases == {cm.AGE_FROM_CREATED} else
+             "Age is the days each ad delivered in this window, so an ad that started before the window reads younger than it is"
+             if bases == {cm.AGE_FROM_DELIVERY} else
+             "Age is counted from the creation date to the last day of the data where the export has one, otherwise it is the days "
+             "the ad delivered in this window")
+    note = ('<p class="muted">%s. Arbitrary defaults: new buckets start at %s. '
             'ROAS and CTR are ratios of summed counts for the ads in a bucket; a bucket with fewer than %d ads is dimmed.</p>' % (basis, age_starts_text(), charts.MIN_BUCKET_ADS))
     return charts.switcher("ad-age", views) + note, "data"
 
@@ -2018,14 +2023,29 @@ def gap_rows(ctx: Ctx) -> List[Dict[str, Any]]:
              "why": gap_reason(ctx, g)} for n, g in enumerate(ctx.gaps, 1)]
 
 
+def left_out_text(ctx: Ctx) -> str:
+    """The concepts creative-mix left out of the gaps as the account's weakest: named, never silent."""
+    weak = sorted({(g["concept"], g.get("concept_roas")) for g in (ctx.mix or {}).get("gaps_left_out") or []}, key=lambda c: c[0])
+    if not weak:
+        return ""
+    return ('Left out as your weakest concepts (bottom quarter of your always-on ROAS, so not worth porting to another format as they are): %s.'
+            % ", ".join("%s (ROAS %s)" % (_plain(c), "n/a" if r is None else "%.2fx" % r) for c, r in weak))
+
+
+def left_out_note(ctx: Ctx) -> str:
+    text = left_out_text(ctx)
+    return '<p class="muted">%s</p>' % esc(text) if text else ""
+
+
 def gap_list(ctx: Ctx) -> Tuple[str, str]:
     if not ctx.mix:
         return empty_state(*NO_MIX)
     if ctx.mix.get("concepts_unread"):
         return UNREAD_PANEL % esc(ctx.mix["concepts_unread_message"]), "empty"
     if not ctx.gaps:
-        return empty_state("creative-mix found no gap worth testing: no empty or single-ad cell sits beside a proven top-quarter concept or format.",
-                           "Widen the window, lower the minimum proven spend in creative-mix, or add more concepts and formats to compare.")
+        html, state = empty_state("creative-mix found no gap worth testing: no empty or single-ad cell sits beside a proven top-quarter concept or format.",
+                                  "Widen the window, lower the minimum proven spend in creative-mix, or add more concepts and formats to compare.")
+        return html + left_out_note(ctx), state
 
     rows = ['<tr class="gap" data-gap="%d"><td data-label="Gap"><b>#%d %s</b></td><td data-label="Why test it">%s</td></tr>'
             % (g["number"], g["number"], esc(g["label"]), esc(g["why"])) for g in gap_rows(ctx)]
@@ -2038,7 +2058,7 @@ def gap_list(ctx: Ctx) -> Tuple[str, str]:
     note = ('<p class="muted">A gap is an empty or single-ad cell beside a concept or format in the top quarter of your own ROAS, with at least %s of always-on '
             'spend behind it (an arbitrary default, set in creative-mix). The top %d show here (N=%d); the numbers match the outlines on the heatmap.</p>'
             % (esc(ctx.money(floor)) if floor is not None else "the proven spend", ctx.top_n, ctx.top_n))
-    return lead + table(head, rows[:ctx.top_n], stack=True) + rest + note, "data"
+    return lead + table(head, rows[:ctx.top_n], stack=True) + rest + left_out_note(ctx) + note, "data"
 
 
 # ----- Briefing -----
@@ -2067,7 +2087,7 @@ def _judged_on(ctx: Ctx, entry: Optional[Dict[str, Any]] = None) -> str:
 
 
 def _starters(ctx: Ctx) -> List[Dict[str, Any]]:
-    """Brief starters: the top coverage gaps, then the top Iterate ads, at most STARTERS_PER_FORMAT in any one format.
+    """Brief starters: the top coverage gaps, then the top Refresh ads, at most STARTERS_PER_FORMAT in any one format.
 
     A gap or ad whose format is already full is skipped and the next one takes its place, so each quota still fills when it can.
     """
@@ -2108,7 +2128,7 @@ def _starters(ctx: Ctx) -> List[Dict[str, Any]]:
         taken += 1
         label = rec["label"] if rec else str(entry.get("ad_name") or key)
         fix = interact.improvement(ctx.grade_index.get(key), entry)
-        why = " ".join(t for t in (fix["lead"], fix["fix"]) if t) or "Marked Iterate by keep-or-kill."
+        why = " ".join(t for t in (fix["lead"], fix["fix"]) if t) or "Marked Refresh by keep-or-kill."
         out.append({"title": "A new version of " + label, "make": "A new version of %s, keeping the concept." % label, "why": why,
                     "format": str((rec or {}).get("format") or entry.get("format") or "unknown"), "refs": [key],
                     "judged": _judged_on(ctx, entry), "prompt": briefing.starter_prompt("a new version of %s, keeping the concept" % label, why)})
@@ -2161,9 +2181,9 @@ def ready_briefs(ctx: Ctx) -> Tuple[str, str]:
                 % (len(ctx.briefs), "" if len(ctx.briefs) == 1 else "s", cards)), "data"
     starters = _starters(ctx)
     if not starters:
-        return empty_state("No briefs file was given, and there are no coverage gaps or Iterate ads to build starters from.",
+        return empty_state("No briefs file was given, and there are no coverage gaps or Refresh ads to build starters from.",
                            "Write briefs with the creative-brief and hook-writer skills and add them when you rebuild this report, or run the creative-mix and keep-or-kill skills and add their results.")
-    note = ('<p class="muted">Brief starters, not finished briefs: the top %d gaps and the top %d Iterate ads by spend at stake (arbitrary defaults). '
+    note = ('<p class="muted">Brief starters, not finished briefs: the top %d gaps and the top %d Refresh ads by spend at stake (arbitrary defaults). '
             'A starter never invents a hook or a message; the button copies a prompt for the creative-brief and hook-writer skills. '
             'To show finished briefs here, write them with those skills and add them when you rebuild this report.</p>' % (briefing.STARTER_GAPS, briefing.STARTER_ITERATE))
     return note + '<div class="brief-grid">%s</div>' % "".join(_starter_card(ctx, n, s) for n, s in enumerate(starters, 1)), "data"

@@ -177,13 +177,13 @@ def daily_rows(ctx: Ctx) -> List[Dict[str, Any]]:
     days = [day for day, _ in cal]
     found = []
     for key, name, kind in panels.TIME_METRICS + EXTRA_DAILY:
-        values = panels.day_values(cal, key)
+        values = panels.day_values(cal, key, ctx.gapped)
         if any(v is not None for v in values):
             unit = "%s (%s)" % (name, ctx.currency or "account currency") if kind == "money" else "%s (%%)" % name if kind == "pct" else \
                 "%s (x)" % name if kind == "x" else name
-            found.append({"key": key, "name": name, "kind": kind, "unit": unit, "values": values, "average": panels.rolling_values(cal, key)})
+            found.append({"key": key, "name": name, "kind": kind, "unit": unit, "values": values, "average": panels.rolling_values(cal, key, ctx.gapped)})
     gap = "n/a (fewer than %d days with data in the %d-day window)" % (panels.charts.ROLLING_MIN_VALUES, panels.charts.SPARK_AVERAGE_DAYS)
-    totals = [panels.totals(rows) if rows else None for _, rows in cal]
+    totals = [panels.totals(rows, ctx.gapped) if rows else None for _, rows in cal]
     return [{"day": day, "metric": s["key"], "name": s["name"], "kind": s["kind"], "unit": s["unit"],
              "value": _num(value), "value_note": None if value is not None else _day_note(total, s["key"]),
              "average": _num(average), "average_note": None if average is not None else gap}
@@ -276,7 +276,9 @@ def verdict_rows(ctx: Ctx) -> List[Dict[str, Any]]:
                "age_days_note": None if age_days is not None else "n/a (no ad age in the data)",
                "fatiguing": fatiguing,
                "fatiguing_note": None if fatiguing is not None else "n/a (fatigue could not be read for this ad)", "next_step": interact.NEXT_STEP.get(cls) if cls else None,
-               "check": (entry.get("check") or interact.PAUSE_CHECK) if cls == "kill" else None}
+               "check": (entry.get("check") or interact.PAUSE_CHECK) if cls == "kill" else None,
+               "weak_step": rec.get("weak"),
+               "weak_step_note": None if rec.get("weak") else "n/a (no creative-grader diagnosis for this ad)"}
         for metric in TABLE_METRICS:
             value = _blank(ad.get(metric)) if ad else None
             row[metric] = _num(value)
@@ -365,6 +367,9 @@ def note_rows(ctx: Ctx) -> List[Dict[str, Any]]:
         lines.append(("not-in-pull", REACH_NOTE))
     lines += [("method", line) for line in ctx.method_lines]
     lines += [("caveat", _plain(note)) for note in ctx.caveats] or [("caveat", "Nothing was missing from the inputs.")]
+    left_out = panels.left_out_text(ctx)
+    if left_out:
+        lines.append(("caveat", left_out))
     return [{"id": n, "section": section, "text": text} for n, (section, text) in enumerate(lines, 1)]
 
 
@@ -714,7 +719,7 @@ DATASETS = (
     ("formats", "Format scorecard", "One row per format: ads, spend share and each rate, graded only against the account's other formats."),
     ("white-space", "Concept by format grid", "Ads and spend in each concept and format cell, with the numbered gaps worth testing."),
     ("gaps", "Gaps worth testing", "Empty or single-ad cells beside a concept or format that performs well in this account, strongest first."),
-    ("briefing", "Briefs and starters", "Finished briefs from the briefs file, or brief starters built from the gaps and Iterate verdicts."),
+    ("briefing", "Briefs and starters", "Finished briefs from the briefs file, or brief starters built from the gaps and Refresh verdicts."),
     ("notes", "Method and caveats", "The basis, every default used, what was read from which column, and what was missing from the inputs."),
     ("ad-media", "Ad images and reasons", "One row per ad, largest spend first: its image as a data URL or why there is none, whether it is a video, and why it got its verdict."),
     ("ad-daily", "Daily series per ad", "Each ad's own days: spend, the payback measure, hook rate, CTR and frequency; null with the reason on a day the ad did not deliver."),

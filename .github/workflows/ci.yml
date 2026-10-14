@@ -30,3 +30,11 @@ jobs:
       - run: python -m unittest discover -s tests
       - run: python tools/validate_skills.py
       - run: python tools/sync_shared.py --check
+      - name: install smoke (one skill zip, unzipped alone)
+        run: |
+          python tools/build_zips.py --out "$RUNNER_TEMP/dist"
+          mkdir "$RUNNER_TEMP/smoke"
+          cd "$RUNNER_TEMP/smoke"
+          unzip -q "$RUNNER_TEMP/dist/creative-review.zip"
+          python -I creative-review/scripts/review.py run "$GITHUB_WORKSPACE/examples/acme/ads_daily.csv"
+          python -I creative-review/siblings/creative-report/scripts/report.py --check creative-review-runs/*/*/report.html

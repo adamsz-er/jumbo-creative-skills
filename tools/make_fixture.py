@@ -4,6 +4,11 @@
 Deterministic: the same --seed always writes the same file. The data is invented;
 it exists so the skills and tests have an export to run against.
 Usage: python3 tools/make_fixture.py --seed 7 --out examples/acme/ads_daily.csv
+       python3 tools/make_fixture.py --seed 7 --extended --out examples/acme/ads_daily_extended.csv
+
+--extended writes the same rows, unchanged, plus an ad set name that carries the audience, landing-page
+views, checkouts and new-customer purchases. One ad's landing page breaks partway through the window,
+so the funnel read has a site problem to find.
 """
 from __future__ import annotations
 
@@ -64,6 +69,18 @@ ADS = [
 def ad_id(index):
     return "1200000%05d" % (index + 1)
 
+
+EXTRA_HEADERS = ["Ad set name", "Landing page views", "Checkouts initiated", "New customer purchases"]
+# Ad set (audience) per ad, by index into ADS; ads not listed run in the broad prospecting ad set.
+AUDIENCES = {
+    0: "weekend-hikers", 1: "weekend-hikers", 9: "weekend-hikers", 17: "weekend-hikers", 22: "weekend-hikers",
+    5: "family-campers", 7: "family-campers", 8: "family-campers", 10: "family-campers", 21: "family-campers",
+    27: "family-campers", 2: "gear-upgraders", 13: "gear-upgraders", 16: "gear-upgraders", 20: "gear-upgraders",
+    25: "gear-upgraders", 3: "past-visitors", 11: "past-visitors", 18: "past-visitors", 23: "past-visitors",
+}
+BROAD = "broad-prospecting"
+SITE_BREAK_AD = 1  # its landing page breaks from SITE_BREAK_DAY on
+SITE_BREAK_DAY = 18
 
 # The four ads the tests and the CLI demo rely on (index into ADS).
 SPECIAL = {
@@ -141,21 +158,42 @@ def build(seed):
     return rows
 
 
-def write(path, seed):
+def extend(rows, seed):
+    """The same rows with the extra columns, drawn from their own generator so the base columns never move."""
+    rng = random.Random(seed * 1000 + 1)
+    kinds = {ad_id(i): spec[3] for i, spec in enumerate(ADS)}
+    broken = ad_id(SITE_BREAK_AD)
+    out = []
+    for row in rows:
+        day, ad = (dt.date.fromisoformat(row[0]) - START).days, row[2]
+        link_clicks, carts, purchases = row[9], row[21], row[22]
+        page_broken = ad == broken and day >= SITE_BREAK_DAY
+        landing = int(link_clicks * (rng.uniform(0.38, 0.47) if page_broken else rng.uniform(0.78, 0.9)))
+        checkouts = max(purchases, int(carts * (rng.uniform(0.18, 0.27) if page_broken else rng.uniform(0.45, 0.6))))
+        new_share = rng.uniform(0.18, 0.37) if kinds[ad] == "promo" else rng.uniform(0.38, 0.73)
+        index = int(ad) - int(ad_id(0))
+        out.append(row + [AUDIENCES.get(index, BROAD), landing, checkouts, int(round(purchases * new_share))])
+    return out
+
+
+def write(path, seed, extended=False):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    rows = build(seed)
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle, lineterminator="\n")
-        writer.writerow(HEADERS)
-        writer.writerows(build(seed))
+        writer.writerow(HEADERS + (EXTRA_HEADERS if extended else []))
+        writer.writerows(extend(rows, seed) if extended else rows)
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--out", default="examples/acme/ads_daily.csv")
+    parser.add_argument("--extended", action="store_true",
+                        help="add the ad set audience, landing-page views, checkouts and new-customer purchases")
     args = parser.parse_args(argv)
-    write(args.out, args.seed)
+    write(args.out, args.seed, args.extended)
     print("wrote %s" % args.out)
     return 0
 

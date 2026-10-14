@@ -18,7 +18,7 @@ import math
 import re
 import statistics
 import sys
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
 
 # metric -> (numerator fields, denominator fields, scale). The first field in a
 # tuple that has a value is used; the others are fallbacks.
@@ -31,13 +31,17 @@ METRICS: Dict[str, Tuple[Tuple[str, ...], Tuple[str, ...], float]] = {
     "cpc": (("spend",), ("link_clicks", "clicks"), 1.0),
     "cpa": (("spend",), ("conversions",), 1.0),
     "roas": (("conversion_value",), ("spend",), 1.0),
-    "cvr": (("conversions",), ("clicks", "link_clicks"), 100.0),
-    "add_to_cart_rate": (("add_to_carts",), ("clicks", "link_clicks"), 100.0),
+    "cvr": (("conversions",), ("link_clicks", "clicks"), 100.0),
+    "add_to_cart_rate": (("add_to_carts",), ("link_clicks", "clicks"), 100.0),
     "cost_per_add_to_cart": (("spend",), ("add_to_carts",), 1.0),
     "cost_per_lead": (("spend",), ("leads",), 1.0),
     "engagement_rate": (("engagements",), ("impressions",), 100.0),
     "frequency": (("impressions",), ("reach",), 1.0),
     "mer": (("revenue",), ("spend",), 1.0),
+    "landing_page_view_rate": (("landing_page_views",), ("link_clicks",), 100.0),
+    "cart_to_checkout_rate": (("checkouts",), ("add_to_carts",), 100.0),
+    "cart_to_purchase_rate": (("conversions",), ("add_to_carts",), 100.0),
+    "new_customer_purchase_share": (("new_customers",), ("conversions",), 100.0),
 }
 
 # An alias is another name for the same metric, never a second metric.
@@ -47,7 +51,19 @@ NUMERIC_FIELDS = (
     "spend", "impressions", "reach", "video_views_3s", "video_thruplay",
     "link_clicks", "clicks", "conversions", "conversion_value", "add_to_carts",
     "revenue", "leads", "shares", "saves", "comments",
+    "landing_page_views", "checkouts", "new_customers",
+    "link_click_gaps", "link_click_blanks",
 )
+# Days whose link clicks are blank while all clicks are not. Set on every row of a dataset that carries link clicks
+# anywhere (load_rows), so it sums with the other fields: above 0 makes every link-click rate n/a for that ad or total,
+# and its presence means the dataset's click basis is link clicks, so no rate ever falls back to all clicks.
+LINK_GAPS = "link_click_gaps"
+# Days whose blank link-click cell was counted as 0 because the file never writes an explicit 0 (Ads Manager leaves zeros blank).
+LINK_BLANKS = "link_click_blanks"
+# In a total over several ads where some (not all) have link-click gaps: the sums over the other ads, which the rates that
+# count link clicks read instead, so one ad never makes an account, format or day figure unreadable.
+CLICK_TOTAL = "click_total"
+CLICK_METRICS = frozenset(m for m, (num, den, _) in METRICS.items() if "link_clicks" in num + den)
 COST_PER_VIEW = "cost_per_action_type:video_view"
 DERIVED_3S = "derived: spend / cost per 3-second view"
 NOT_DERIVED_3S = "not derived: cost per 3-second view is rounded too coarsely"
@@ -56,10 +72,10 @@ NOT_DERIVED_3S = "not derived: cost per 3-second view is rounded too coarsely"
 # Meta rounds this cost to cents, so a view costing a few cents can be tens of percent out.
 DERIVE_MAX_ERROR = 2.0
 AGE_FROM_CREATED = "created_time"
-AGE_FROM_DELIVERY = "first delivery in window (older ads may be understated)"
+AGE_FROM_DELIVERY = "days with delivery in the window (older ads may be understated)"
 # The original positional convention: what a name of exactly this many parts is read as.
 LEGACY_PATTERN = ("concept", "format", "creator", "ad_type", "product", "tone", "launch_date")
-NAME_FIELDS = LEGACY_PATTERN + ("market", "funnel_stage", "collection", "range")
+NAME_FIELDS = LEGACY_PATTERN + ("market", "funnel_stage", "collection", "range", "persona", "hook", "offer", "version")
 AD_TYPES = ("bau", "promo", "launch", "hype", "partnership", "retention")
 # Words an account uses for the six ad types. A word not here is kept as written, counted, and asked about.
 SYNONYMS = {
@@ -84,6 +100,10 @@ KEY_MAP = {
     "STG": "funnel_stage", "STAGE": "funnel_stage", "FUNNEL": "funnel_stage",
     "TONE": "tone",
     "LD": "launch_date", "DATE": "launch_date", "LAUNCH": "launch_date",
+    "PER": "persona", "PERSONA": "persona",
+    "HK": "hook", "HOOK": "hook",
+    "OFFER": "offer", "OFR": "offer",
+    "VER": "version", "VERSION": "version",
 }
 SEPARATORS = (" | ", "|", " _ ", "_", " - ")
 FORMAT_WORDS = frozenset(("image", "static", "video", "carousel", "collection", "catalogue", "catalog",
@@ -125,6 +145,12 @@ _ALIASES = {
     "omnipurchasevalues": "conversion_value", "omniaddtocart": "add_to_carts",
     "costperactiontypevideoview": COST_PER_VIEW, "costpervideoview": COST_PER_VIEW,
     "createdtime": "created_time", "onsiteconversionleadgrouped": "leads",
+    "landingpageviews": "landing_page_views", "websitelandingpageviews": "landing_page_views",
+    "landingpageview": "landing_page_views",
+    "checkouts": "checkouts", "checkoutsinitiated": "checkouts", "websitecheckoutsinitiated": "checkouts",
+    "initiatecheckout": "checkouts", "initiatecheckouts": "checkouts",
+    "omniinitiatedcheckout": "checkouts",
+    "newcustomerpurchases": "new_customers", "newcustomers": "new_customers", "newcustomerorders": "new_customers",
 }
 # `id` and `name` are ad fields only on a row that is marked as an ad row.
 _ID_NAME_ALIASES = {"id": "ad_id", "name": "ad_name"}
@@ -140,6 +166,8 @@ _API_ACTION_TYPES = {
     "comment": "comments",
     "post": "shares",
     "onsite_conversion.post_save": "saves",
+    "landing_page_view": "landing_page_views",
+    "initiate_checkout": "checkouts",
 }
 _API_VALUE_TYPES = {"purchase": "conversion_value"}
 _API_LIST_FIELDS = {"video_thruplay_watched_actions": "video_thruplay"}
@@ -326,7 +354,46 @@ def load_rows(path_or_rows: Union[str, "os.PathLike[str]", Iterable[Dict[str, An
                 raw_rows = list(csv.DictReader(handle))
     else:
         raw_rows = path_or_rows
-    return [_normalise_row(dict(r), level) for r in raw_rows]
+    return _settle_click_basis([_normalise_row(dict(r), level) for r in raw_rows])
+
+
+def _settle_click_basis(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """One click basis for the whole dataset. With link clicks on any row, every row is on link clicks. Ads Manager leaves a zero
+    cell blank, so in a file that never writes an explicit 0 a blank counts as 0 and is tallied in `link_click_blanks` for the
+    basis line. In a file that does write zeros a blank is unknown: on a day with no clicks (or no click count) it is still 0,
+    and on a day with clicks it is tallied in `link_click_gaps`, which makes that ad's link-click rates n/a rather than a rate
+    over part of its days. With no link clicks at all, rates use all clicks."""
+    if not any(r.get("link_clicks") is not None for r in rows):
+        return rows
+    writes_zeros = any(r.get("link_clicks") == 0 for r in rows)
+    for row in rows:
+        blank = row.get("link_clicks") is None
+        gap = blank and writes_zeros and bool(row.get("clicks"))
+        if blank and not gap:
+            row["link_clicks"] = 0.0
+        row[LINK_GAPS] = 1.0 if gap else 0.0
+        row[LINK_BLANKS] = 1.0 if blank and not writes_zeros else 0.0
+    return rows
+
+
+CLICK_RATES = "Click-based rates (CTR, CPC, purchase and add-to-cart rates)"
+
+
+def click_basis_line(ads: Sequence[Dict[str, Any]]) -> str:
+    """The one sentence every output prints about which clicks its rates count."""
+    if any(a.get(LINK_GAPS) is not None for a in ads):
+        gaps = [str(a.get("ad_id") or a.get("ad_name")) for a in ads if (a.get(LINK_GAPS) or 0) > 0]
+        blanks = int(sum(a.get(LINK_BLANKS) or 0 for a in ads))
+        return CLICK_RATES + " use link clicks." + (
+            " They are n/a for %d ad%s whose link clicks are missing on days with clicks, and %s left out of the click rates of "
+            "every total: %s." % (len(gaps), "" if len(gaps) == 1 else "s", "it is" if len(gaps) == 1 else "they are",
+                                   ", ".join(gaps)) if gaps else "") + (
+            " %d ad-day%s had a blank link-click cell, counted as 0 (exports leave zeros blank)." % (
+                blanks, "" if blanks == 1 else "s") if blanks else "")
+    if any(a.get("clicks") is not None for a in ads):
+        return (CLICK_RATES + " use all clicks, because the data has no link clicks. All clicks include likes, profile "
+                "taps and \"see more\", so purchase and add-to-cart rates read lower than they would over link clicks.")
+    return CLICK_RATES + ": n/a (the data has no clicks)."
 
 
 def rows_from_response(loaded: Any) -> List[Dict[str, Any]]:
@@ -358,8 +425,18 @@ def response_notes(loaded: Any) -> List[str]:
     return [str(i) for i in info] if isinstance(info, list) else [str(info)]
 
 
+def _for_metric(row: Dict[str, Any], metric: str) -> Dict[str, Any]:
+    """The sums a metric reads: a total's CLICK_TOTAL for a rate that counts link clicks, else the row itself."""
+    return row[CLICK_TOTAL] if metric in CLICK_METRICS and row.get(CLICK_TOTAL) else row
+
+
 def _pick(row: Dict[str, Any], fields: Sequence[str]) -> Tuple[str, Optional[float]]:
+    link_basis = row.get(LINK_GAPS) is not None
     for field in fields:
+        if field == "clicks" and link_basis:
+            break
+        if field == "link_clicks" and (row.get(LINK_GAPS) or 0) > 0:
+            continue
         value = row.get(field)
         if value is not None:
             return field, value
@@ -384,16 +461,17 @@ def compute_metrics(row: Dict[str, Any]) -> Dict[str, Optional[float]]:
     row = _with_engagements(row)
     result: Dict[str, Optional[float]] = {}
     for name, (num_fields, den_fields, scale) in METRICS.items():
-        _, num = _pick(row, num_fields)
-        _, den = _pick(row, den_fields)
+        _, num = _pick(_for_metric(row, name), num_fields)
+        _, den = _pick(_for_metric(row, name), den_fields)
         result[name] = None if num is None or den is None or den == 0 else num / den * scale
     return result
 
 
 def metric_basis(row: Dict[str, Any], metric: str) -> Dict[str, Optional[str]]:
     """Say which fields fed a metric, e.g. whether ctr used link or all clicks."""
-    num_fields, den_fields, _ = METRICS[resolve_metric(metric)]
-    row = _with_engagements(row)
+    metric = resolve_metric(metric)
+    num_fields, den_fields, _ = METRICS[metric]
+    row = _with_engagements(_for_metric(row, metric))
     num_field, num = _pick(row, num_fields)
     den_field, den = _pick(row, den_fields)
     return {
@@ -406,11 +484,15 @@ def describe_missing(row: Dict[str, Any], metric: str) -> Optional[str]:
     """Why a metric is unavailable for a row, or None when it can be computed."""
     metric = resolve_metric(metric)
     num_fields, den_fields, _ = METRICS[metric]
-    row = _with_engagements(row)
+    row = _with_engagements(_for_metric(row, metric))
     if metric == "engagement_rate" and row["engagements"] is None:
         return "missing " + " and ".join(f for f in ENGAGEMENT_PARTS if row.get(f) is None)
     for fields in (num_fields, den_fields):
         if _pick(row, fields)[1] is None:
+            if "link_clicks" in fields and (row.get(LINK_GAPS) or 0) > 0:
+                return "link clicks missing on %d day%s with clicks" % (row[LINK_GAPS], "" if row[LINK_GAPS] == 1 else "s")
+            if "link_clicks" in fields and row.get(LINK_GAPS) is not None:
+                return "missing link_clicks"
             return "missing " + " or ".join(fields)
     den_field, den = _pick(row, den_fields)
     if den == 0:
@@ -439,12 +521,23 @@ def _parse_date(value: Any) -> Optional[dt.date]:
     return None
 
 
-def _sum_rows(rows: Sequence[Dict[str, Any]]) -> Dict[str, Optional[float]]:
-    """Sum each base field over rows; a field with no values stays None."""
-    totals: Dict[str, Optional[float]] = {}
+def gap_ads(rows: Sequence[Dict[str, Any]]) -> Set[str]:
+    """The ads (by ad id, else ad name) with a link-click gap on any of the rows: the ads every total leaves out of its click rates."""
+    return {_row_key(r) for r in rows if (r.get(LINK_GAPS) or 0) > 0}
+
+
+def _sum_rows(rows: Sequence[Dict[str, Any]], gapped: Optional[Set[str]] = None) -> Dict[str, Any]:
+    """Sum each base field over rows (or aggregated ads); a field with no values stays None. When some ads, not all, have
+    link-click gaps, every sum keeps them but the click-based rates read CLICK_TOTAL, the sums over the other ads. A slice of
+    the data (a window, a day, a period) passes `gapped`, the dataset's gap_ads, so it leaves out the same ads as the whole."""
+    totals: Dict[str, Any] = {}
     for field in NUMERIC_FIELDS:
         values = [r[field] for r in rows if r.get(field) is not None]
         totals[field] = sum(values) if values else None
+    gapped = gap_ads(rows) if gapped is None else gapped
+    clean = [r for r in rows if _row_key(r) not in gapped]
+    if clean and len(clean) < len(rows):
+        totals[CLICK_TOTAL] = _sum_rows(clean, gapped)
     return totals
 
 
@@ -475,10 +568,11 @@ def aggregate_by_ad(rows: Sequence[Dict[str, Any]],
 
     Adds first_date, last_date, active_days (days with delivery), age_days and
     age_basis. With a `created_time` on the rows (and no later than first
-    delivery), age is the days from creation to the latest date in the data.
-    Without one it is the days from first
-    delivery in the window, so an ad older than the window looks as young as the
-    window start, and age_basis says so. Reach is summed across rows, so with
+    delivery), age is the days from creation to the latest date in the data, both
+    days counted, as delivery days are.
+    Without one it is the days the ad delivered in the window (an ad live 27 to
+    30 March is 4 days old), so an ad older than the window looks younger than
+    it is, and age_basis says so. Reach is summed across rows, so with
     daily rows `frequency` is an average per-row frequency, not lifetime
     frequency; export a lifetime row for that. `video_views_3s_source` is
     "derived: ..." when any row's 3-second plays were derived from a cost per
@@ -521,7 +615,10 @@ def aggregate_by_ad(rows: Sequence[Dict[str, Any]],
         if created and first and created > first:
             created = None
         start = created or first
-        ad["age_days"] = (data_end - start).days if start and data_end else None
+        if created and data_end:
+            ad["age_days"] = (data_end - created).days + 1
+        else:
+            ad["age_days"] = ad["active_days"] if start and data_end else None
         ad["age_basis"] = (AGE_FROM_CREATED if created else AGE_FROM_DELIVERY) if ad["age_days"] is not None else None
         sources = {r["video_views_3s_source"] for r in group if r.get("video_views_3s_source")}
         derived = sorted(x for x in sources if x.startswith("derived"))
@@ -1212,7 +1309,8 @@ def _describe(found: Dict[str, Any]) -> str:
 
 BAND_TOP, BAND_MID, BAND_BOTTOM = "top quartile", "middle", "bottom quartile"
 HIGHER_IS_BETTER = ("hook_rate", "hold_rate", "video_completion_rate", "ctr", "cvr",
-                    "add_to_cart_rate", "roas", "engagement_rate")
+                    "add_to_cart_rate", "roas", "engagement_rate", "landing_page_view_rate", "cart_to_checkout_rate",
+                    "cart_to_purchase_rate")
 LOWER_IS_BETTER = ("cpm", "cpc", "cpa", "cost_per_add_to_cart", "cost_per_lead")
 # Fewer comparable ads than this is not enough to grade against. An arbitrary
 # default, not a statistical rule: set your own from how many ads you run per format.
@@ -1326,6 +1424,15 @@ def grade_with_fallback(ad: Dict[str, Any], ads: Sequence[Dict[str, Any]], metri
     grade["group_size"] = grade.get("n_comparable")
     grade["fallback"] = "; ".join(skipped) or None
     return grade
+
+
+def grade_in_objective(ad: Dict[str, Any], ads: Sequence[Dict[str, Any]], metric: str,
+                       group_by: Sequence[str] = ("format",), min_impressions: int = 1000) -> Dict[str, Any]:
+    """grade_with_fallback against the ads of the same campaign objective: the comparison group creative-grader and
+    funnel-diagnosis both judge an ad's steps in."""
+    objective = payback_metrics(ad.get("objective"))["objective"]
+    pool = [a for a in ads if payback_metrics(a.get("objective"))["objective"] == objective]
+    return grade_with_fallback(ad, pool, metric, group_by, min_impressions)
 
 
 def is_thin(group_size: Optional[int]) -> bool:
@@ -1598,6 +1705,277 @@ def window_aggregate(rows: Sequence[Dict[str, Any]], window: int = 6,
         keep = ordered[:window] if which == "first" else ordered[-window:]
         chosen.extend(r for d in keep for r in days[d])
     return aggregate_by_ad(chosen, key_map=key_map) if chosen else []
+
+
+# A delivery day's median band needs this many ads with a value that day. An arbitrary default: set your own.
+CURVE_MIN_ADS = 3
+BEFORE_WINDOW = "running before the window began; its launch day is not in the data"
+
+
+def _row_key(row: Dict[str, Any]) -> str:
+    return str(row.get("ad_id") or row.get("ad_name"))
+
+
+def ad_days(rows: Sequence[Dict[str, Any]], ad_key: str) -> List[Tuple[str, Dict[str, Optional[float]]]]:
+    """An ad's own calendar days, each with its rows summed. Reach is kept only when the day has one row."""
+    days: Dict[str, List[Dict[str, Any]]] = {}
+    for row in rows:
+        day = _parse_date(row.get("date"))
+        if day and _row_key(row) == str(ad_key):
+            days.setdefault(day.isoformat(), []).append(row)
+    out = []
+    for day in sorted(days):
+        total = _sum_rows(days[day])
+        total["reach"] = days[day][0].get("reach") if len(days[day]) == 1 else None
+        out.append((day, total))
+    return out
+
+
+def delivery_series(rows: Sequence[Dict[str, Any]], ad_key: str,
+                    metrics: Sequence[str] = ("ctr",)) -> List[Dict[str, Any]]:
+    """One entry per day the ad has a row: its spend and each metric, with `delivery_day` counting only
+    days with impressions (None on a day without). A metric is None on a day without delivery."""
+    out, delivered = [], 0
+    for day, total in ad_days(rows, ad_key):
+        live = (total.get("impressions") or 0) > 0
+        delivered += live
+        values = compute_metrics(total)
+        entry: Dict[str, Any] = {"day": day, "delivery_day": delivered if live else None, "spend": total.get("spend")}
+        for metric in metrics:
+            entry[resolve_metric(metric)] = values[resolve_metric(metric)] if live else None
+        out.append(entry)
+    return out
+
+
+def launched_in_window(rows: Sequence[Dict[str, Any]], ad_key: str,
+                       series: Optional[Sequence[Dict[str, Any]]] = None) -> Tuple[Optional[str], Optional[str]]:
+    """(launch day, reason): the ad's first day with impressions when it launched inside the data's window.
+
+    An ad with a row on the window's first day, or created before it, was already running when the window
+    opened, so its first delivery here is not its launch and its delivery days are not days since launch.
+    """
+    series = series if series is not None else delivery_series(rows, ad_key)
+    first = next((e["day"] for e in series if e["delivery_day"] == 1), None)
+    if first is None:
+        return None, "no day with impressions in the window"
+    start = data_window(rows)[0] or first
+    created = [d for d in (_parse_date(r.get("created_time")) for r in rows if _row_key(r) == str(ad_key)) if d]
+    if series[0]["day"] <= start or (created and min(created).isoformat() < start):
+        return None, BEFORE_WINDOW
+    return first, None
+
+
+def delivery_curve(rows: Sequence[Dict[str, Any]], metrics: Sequence[str] = ("hook_rate", "ctr", "frequency"),
+                   min_ads: int = CURVE_MIN_ADS) -> Dict[str, List[Dict[str, Any]]]:
+    """The account's own band by day of delivery: for each metric and delivery day, the median and quartiles
+    across the ads launched inside the window that have a value that day.
+
+    Only ads that launched inside the window count, because day N of an ad already running when the window
+    opened is not day N since launch. A day with fewer than `min_ads` values has no band (None, with a note).
+    """
+    metrics = [resolve_metric(m) for m in metrics]
+    by_metric: Dict[str, Dict[int, List[float]]] = {m: {} for m in metrics}
+    for key in dict.fromkeys(_row_key(r) for r in rows):
+        series = delivery_series(rows, key, metrics)
+        if launched_in_window(rows, key, series)[0] is None:
+            continue
+        for entry in series:
+            for metric in metrics:
+                if entry["delivery_day"] is not None and entry[metric] is not None:
+                    by_metric[metric].setdefault(entry["delivery_day"], []).append(entry[metric])
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for metric in metrics:
+        days = by_metric[metric]
+        out[metric] = []
+        for day in range(1, max(days) + 1 if days else 1):
+            stats = _stats(sorted(days.get(day, [])))
+            enough = stats["n"] >= min_ads
+            out[metric].append({"delivery_day": day, "ads": stats["n"],
+                                "median": stats["median"] if enough else None,
+                                "p25": stats["p25"] if enough else None, "p75": stats["p75"] if enough else None,
+                                "note": None if enough else "n/a (fewer than %d ads launched in the window had a value "
+                                                            "on delivery day %d)" % (min_ads, day)})
+    return out
+
+
+# The funnel in order: the steps the ad itself controls, then the steps on the site. Purchase rate (cvr) is
+# shown beside them but decides nothing: it is add to cart rate times cart to purchase rate, which are judged.
+ATTENTION_STEPS = ("hook_rate", "hold_rate", "ctr")
+SITE_STEPS = ("landing_page_view_rate", "add_to_cart_rate", "cart_to_checkout_rate", "cart_to_purchase_rate")
+CONTEXT_STEPS = ("cvr",)
+# The after-click steps creative-grader and funnel-diagnosis judge by one rule (below_group), so the two skills never
+# disagree about whether an ad's clicks turn into sales.
+AFTER_CLICK_STEPS = ("add_to_cart_rate", "cart_to_purchase_rate")
+# Steps after the cart: weak ones point at checkout, price and shipping rather than the landing page.
+CART_STEPS = ("cart_to_checkout_rate", "cart_to_purchase_rate")
+CART_WORDS = "people add to cart but do not buy"
+CART_CHECK = "check checkout, price and shipping costs first"
+CART_CALLS = {
+    "site": "the ad still earns attention and clicks, and people add to cart, but a step after the cart is weak or falling: "
+            "check checkout, price and shipping costs first, not the landing page",
+    "both": "steps on both sides are weak or falling, and the site's weak steps come after the cart: check checkout, price "
+            "and shipping costs before judging the creative",
+}
+FUNNEL_CALLS = {
+    "site": "the ad still earns attention and clicks while a step on the site is weak or falling: check the page first",
+    "creative": "a step the ad controls is weak or falling while the site steps hold: the creative is the place to work",
+    "both": "steps on both sides are weak or falling: check the page before judging the creative",
+    "neither": "no funnel step is weak or falling against the ad's own group or its own start",
+    "untested": "no step is weak or falling, but a step could not be tested, so the funnel is not known to be fine",
+    "unjudged": "too little history and too few comparable ads to judge a step on each side: no call",
+    "unreadable": "the site steps cannot be read from this data",
+}
+
+
+# How many standard errors a rate must move before the funnel read calls it real: the common two-sided 95%
+# convention from statistics, not a benchmark. Raise it to call fewer steps weak.
+FUNNEL_Z = 1.96
+
+
+def rate_counts(total: Dict[str, Any], metric: str) -> Tuple[Optional[float], Optional[float]]:
+    """(numerator, denominator) counts behind a rate metric for summed rows, as compute_metrics picks them."""
+    metric = resolve_metric(metric)
+    num_fields, den_fields, _ = METRICS[metric]
+    total = _for_metric(total, metric)
+    return _pick(total, num_fields)[1], _pick(total, den_fields)[1]
+
+
+def proportion_z(x1: Optional[float], n1: Optional[float], x2: Optional[float], n2: Optional[float]) -> Optional[float]:
+    """Two-proportion z score of x2/n2 against x1/n1 (negative when the second is lower); None when either
+    share is missing, has no denominator or is not a proportion (above 1), or there is no variation."""
+    if None in (x1, n1, x2, n2) or not n1 or not n2 or x1 > n1 or x2 > n2:
+        return None
+    pooled = (x1 + x2) / (n1 + n2)
+    se = math.sqrt(pooled * (1 - pooled) * (1 / n1 + 1 / n2))
+    return None if se == 0 else (x2 / n2 - x1 / n1) / se
+
+
+COUNT_WORDS = {"conversions": "purchases", "add_to_carts": "adds to cart", "link_clicks": "link clicks", "clicks": "clicks",
+               "landing_page_views": "landing page views", "checkouts": "checkouts", "impressions": "impressions",
+               "video_views_3s": "3-second plays", "video_thruplay": "ThruPlays"}
+
+
+def _untestable(pooled: Dict[str, Any], ad: Dict[str, Any], metric: str) -> str:
+    """Why a bottom-quartile rate's gap to its group cannot be tested (proportion_z gave None)."""
+    for who, row in (("this ad has", ad), ("its group has", pooled)):
+        basis = metric_basis(row, metric)
+        num, den = rate_counts(row, metric)
+        if num is not None and den and num > den:
+            return "%s more %s than %s" % (
+                who, COUNT_WORDS.get(basis["numerator"], basis["numerator"]), COUNT_WORDS.get(basis["denominator"], basis["denominator"]))
+    return "its group has no counts to test against"
+
+
+def below_group(ad: Dict[str, Any], ads: Sequence[Dict[str, Any]], metric: str, grade: Dict[str, Any],
+                z: float = FUNNEL_Z, min_impressions: int = 1000) -> Tuple[Optional[float], bool, Optional[str]]:
+    """(gap_z, low, untested) for a rate step. `grade` is grade_in_objective's, and the pool is the peers its band was
+    read against (same objective and group, a value, at least `min_impressions`). gap_z is the ad's rate against their
+    pooled rate in standard errors, None unless the band is bottom quartile. Low means bottom quartile AND at least `z`
+    standard errors below the pool, so a narrow spread never flags a quarter of the ads from noise. When a bottom-quartile
+    gap cannot be tested, `untested` says why: the step is unknown, never weak and never healthy."""
+    if grade["band"] != BAND_BOTTOM:
+        return None, False, None
+    objective = payback_metrics(ad.get("objective"))["objective"]
+    pool = [a for a in ads if a is not ad and payback_metrics(a.get("objective"))["objective"] == objective
+            and a.get(metric) is not None and (a.get("impressions") or 0) >= min_impressions]
+    peers = [a for a in pool if group_key(a, grade["group_by"]) == grade["group_value"]] if grade["group_by"] else pool
+    peers = [a for a in peers if None not in rate_counts(a, metric)]
+    present = {f: [a[f] for a in peers if a.get(f) is not None] for f in NUMERIC_FIELDS}
+    pooled = {f: sum(v) if v else None for f, v in present.items()}
+    gap = proportion_z(*rate_counts(pooled, metric), *rate_counts(ad, metric))
+    if gap is None:
+        return None, False, _untestable(pooled, ad, metric)
+    return gap, gap <= -z, None
+
+
+def _window_totals(rows: Sequence[Dict[str, Any]], ad_key: str, window: int) -> Optional[Tuple[Dict[str, Any], Dict[str, Any]]]:
+    days = [t for _, t in ad_days(rows, ad_key) if (t.get("impressions") or 0) > 0]
+    if len(days) < 2 * window:
+        return None
+    first, last = {}, {}
+    for target, chosen in ((first, days[:window]), (last, days[-window:])):
+        for field in NUMERIC_FIELDS:
+            values = [d[field] for d in chosen if d.get(field) is not None]
+            target[field] = sum(values) if values else None
+    return first, last
+
+
+def funnel_read(rows: Sequence[Dict[str, Any]], ad: Dict[str, Any], ads: Sequence[Dict[str, Any]],
+                group_by: Sequence[str] = ("format",), window: int = 6, min_change: float = 8.0,
+                min_impressions: int = 1000, z: float = FUNNEL_Z) -> Dict[str, Any]:
+    """Whether an ad's weak or falling result sits in the creative or on the site.
+
+    Each funnel step is judged two ways, both against the account itself:
+    - falling: down at least `min_change` percent from the ad's first `window` delivery days to its last, and
+      the drop is at least `z` standard errors on the ad's own counts;
+    - low: below_group, bottom quartile of the ad's group (grade_in_objective: same campaign objective, the
+      narrowest grouping with enough ads) and below the group's pooled rate by at least `z` standard errors.
+      creative-grader judges the AFTER_CLICK_STEPS by the same rule, so the two skills agree.
+    A step is weak when either holds. Purchase rate is reported as context and never decides the call. When every
+    weak site step comes after the cart (CART_STEPS), the reason points at checkout, price and shipping.
+    The call is "site" when a site step is weak and no attention step is,
+    "creative" for the reverse, "both", "neither", or "unreadable" when no site step has data. "neither" with a step
+    whose gap could not be tested is "untested", and a "creative" call with one says the site is not known to hold. A call that
+    says one side holds needs at least one step on that side that could be judged (a trend or a graded band);
+    otherwise the call is "unjudged". A step with no value is never read as fine: it is listed as missing.
+    """
+    key = ad.get("ad_id") or ad.get("ad_name")
+    windows = _window_totals(rows, key, window)
+    steps = []
+    for metric in ATTENTION_STEPS + SITE_STEPS + CONTEXT_STEPS:
+        grade = grade_in_objective(ad, ads, metric, group_by, min_impressions)
+        readable = ad.get(metric) is not None
+        change = trend_z = None
+        if windows and readable:
+            first, last = windows
+            first_value, last_value = compute_metrics(first)[metric], compute_metrics(last)[metric]
+            change = _pct_change(first_value, last_value)
+            trend_z = proportion_z(*rate_counts(first, metric), *rate_counts(last, metric))
+        gap_z, low, untested = below_group(ad, ads, metric, grade, z, min_impressions)
+        falling = change is not None and change <= -min_change and trend_z is not None and trend_z <= -z
+        why = []
+        if low:
+            why.append("bottom quartile of its group")
+        if falling:
+            why.append("down %.0f%% since its first %d delivery days" % (-change, window))
+        side = "attention" if metric in ATTENTION_STEPS else "site" if metric in SITE_STEPS else "context"
+        judged = readable and (trend_z is not None or (grade["band"] in (BAND_TOP, BAND_MID, BAND_BOTTOM) and not untested))
+        steps.append({"metric": metric, "side": side,
+                      "value": ad.get(metric), "band": grade["band"], "change_pct": change,
+                      "trend_z": trend_z, "gap_z": gap_z, "readable": readable, "judged": judged,
+                      "weak": falling or low, "untested": untested,
+                      "why": ", ".join(why) or None,
+                      "note": None if readable else "n/a (%s)" % (describe_missing(ad, metric) or "no value")})
+    attention = [s for s in steps if s["side"] == "attention" and s["weak"]]
+    site = [s for s in steps if s["side"] == "site" and s["weak"]]
+    judged = {side: any(s["judged"] for s in steps if s["side"] == side) for side in ("attention", "site")}
+    if not any(s["readable"] for s in steps if s["side"] == "site"):
+        call = "unreadable"
+    elif attention and site:
+        call = "both"
+    elif site and judged["attention"]:
+        call = "site"
+    elif attention and judged["site"]:
+        call = "creative"
+    elif not attention and not site and judged["attention"] and judged["site"]:
+        call = "neither"
+    else:
+        call = "unjudged"
+    cart_only = bool(site) and all(s["metric"] in CART_STEPS for s in site)
+    reason = CART_CALLS[call] if cart_only and call in CART_CALLS else FUNNEL_CALLS[call]
+    untested = [s for s in steps if s["untested"] and s["side"] in ("attention", "site")]
+    if untested and call in ("neither", "creative"):
+        named = "; ".join("%s could not be tested (%s)" % (s["metric"].replace("_", " "), s["untested"]) for s in untested)
+        if call == "neither":
+            call, reason = "untested", "no step is weak or falling, but %s, so the funnel is not known to be fine" % named
+        else:
+            reason = "a step the ad controls is weak or falling; %s, so the site is not known to hold" % named
+    return {"ad": key, "call": call, "reason": reason,
+            "weak_steps": [s["metric"] for s in attention + site], "steps": steps,
+            "trend_readable": windows is not None,
+            "missing_site_steps": [s["metric"] for s in steps if s["side"] == "site" and not s["readable"]],
+            "settings": {"window": window, "min_change": min_change, "min_impressions": min_impressions,
+                         "group_by": list(group_by), "z": z}}
 
 
 def spend_share(ads: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:

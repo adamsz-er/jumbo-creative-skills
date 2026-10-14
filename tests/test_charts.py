@@ -455,8 +455,8 @@ class AdAgeTest(unittest.TestCase):
     def test_roas_and_ctr_share_the_bars_with_one_right_axis_each_behind_a_switcher(self):
         self.assertEqual(re.findall(r'data-pick="(\w+)"', self.html), ["roas", "ctr"])
 
-    def test_the_caption_says_whether_age_comes_from_creation_or_first_delivery(self):
-        self.assertIn("first day of delivery", self.html)
+    def test_the_caption_says_whether_age_comes_from_creation_or_days_with_delivery(self):
+        self.assertIn("Age is the days each ad delivered in this window", self.html)
         rows = [row("a", name_of("static"), d, created_time="2025-12-01") for d in ("2026-03-01", "2026-03-02")]
         html, _ = panels.ad_age(panels.Ctx(rows=rows, currency="USD"))
         self.assertIn("from each ad's creation date", html)
