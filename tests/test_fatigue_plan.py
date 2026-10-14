@@ -83,8 +83,8 @@ class StaleStartTest(unittest.TestCase):
 
     def test_a_later_start_says_how_many_days_after_the_data_it_begins(self):
         text = self.text("2026-04-01")
-        self.assertIn("The calendar starts 2 days after the data ends (2026-03-30): every fade estimate is as of 2026-03-30, so "
-                      "refresh the data or start the calendar on 2026-03-31.", text.splitlines()[1])
+        self.assertEqual("WARNING the calendar starts 2 days after the data ends (2026-03-30): every fade estimate is as of 2026-03-30, "
+                         "so refresh the data or start the calendar on 2026-03-31.", text.splitlines()[1])
         self.assertIn("starts 198 days after the data ends", self.text("2026-10-14"))
 
 

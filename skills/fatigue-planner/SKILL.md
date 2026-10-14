@@ -40,7 +40,7 @@ python3 -I scripts/fatigue_plan.py ads.csv --capacity 2 --json
 
 ## Present the result
 
-1. Lead with the data window and ad count from its first line ("Data: ... to ..., N ads"). If it prints that the calendar starts days after the data ends, say so before anything else: every estimate is as of the data's last day.
+1. Lead with the data window and ad count from its first line ("Data: ... to ..., N ads"). If it prints a WARNING that the calendar starts days after the data ends, say so before anything else: every estimate is as of the data's last day.
 2. Then the two answer lines: how many ads are fading and on course, and when the queue clears at this capacity, with how many refreshes land late.
 3. Give the calendar week by week. Copy the script's late flag onto every calendar row you show: the number of rows marked late must equal the late count it prints. Name late items and anything beyond the horizon, and offer the two levers: more capacity or a longer horizon.
 4. Quote every days-left figure with its range and the straight-line caveat, as printed (when both ends of the range meet, the script prints one figure, so give one). Never round a range into a promise.

@@ -319,7 +319,7 @@ def data_lines(plan: Dict[str, Any]) -> List[str]:
     if last and start:
         gap = (dt.date.fromisoformat(start) - dt.date.fromisoformat(last)).days
         if gap > 1:
-            lines.append("The calendar starts %d days after the data ends (%s): every fade estimate is as of %s, so refresh the data "
+            lines.append("WARNING the calendar starts %d days after the data ends (%s): every fade estimate is as of %s, so refresh the data "
                          "or start the calendar on %s." % (gap, last, last, (dt.date.fromisoformat(last) + dt.timedelta(days=1)).isoformat()))
     return lines
 
