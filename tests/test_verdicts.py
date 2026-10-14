@@ -1,3 +1,5 @@
+import json
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -8,6 +10,8 @@ sys.path.insert(0, str(ROOT / "skills" / "keep-or-kill" / "scripts"))
 
 import creative_metrics as cm  # noqa: E402
 import verdicts  # noqa: E402
+
+SCRIPT_PATH = ROOT / "skills" / "keep-or-kill" / "scripts" / "verdicts.py"
 
 FIXTURE = ROOT / "examples" / "acme" / "ads_daily.csv"
 CHECK = "rule out tracking, site or audience problems first"
@@ -93,6 +97,12 @@ class FixtureVerdictsTest(unittest.TestCase):
         self.assertEqual(verdict["active_days"], 4)
         self.assertIn("learning: has delivered on 4 days, under the 5-day learning window", verdict["reasons"])
         self.assertIn("it has delivered on 4 days", verdict["sentence"])
+
+    def test_the_json_states_the_age_in_delivery_days(self):
+        out = subprocess.run([sys.executable, str(SCRIPT_PATH), str(FIXTURE), "--json"], capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        entry = next(e for e in json.loads(out.stdout)["ads"] if str(e["ad"]) == "120000000030")
+        self.assertEqual(entry["age_days"], 4)
 
     def test_never_worked_ad_is_paused_as_never_worked(self):
         verdict = fixture_verdicts(targets=MISSED)["120000000017"]

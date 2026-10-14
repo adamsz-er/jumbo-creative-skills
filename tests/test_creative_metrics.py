@@ -178,10 +178,11 @@ class AggregateTest(unittest.TestCase):
         self.assertEqual((one["first_date"], one["last_date"]), ("2026-03-01", "2026-03-04"))
         self.assertEqual(one["active_days"], 2)
 
-    def test_age_is_measured_to_latest_date_in_data(self):
+    def test_age_without_a_creation_date_is_the_days_the_ad_delivered(self):
         ads = {a["ad_id"]: a for a in cm.aggregate_by_ad(self.rows())}
-        self.assertEqual(ads["1"]["age_days"], 9)
-        self.assertEqual(ads["2"]["age_days"], 0)
+        self.assertEqual((ads["1"]["first_date"], ads["1"]["last_date"], ads["1"]["age_days"]), ("2026-03-01", "2026-03-04", 2))
+        self.assertEqual(ads["2"]["age_days"], 1)
+        self.assertEqual(ads["1"]["age_basis"], cm.AGE_FROM_DELIVERY)
 
     def test_field_with_no_values_stays_none(self):
         ads = {a["ad_id"]: a for a in cm.aggregate_by_ad(self.rows())}
@@ -314,7 +315,7 @@ class FixtureAndCliTest(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         out = done.stdout
         self.assertIn("n/a (missing video_thruplay)", out)
-        self.assertIn("young(3d)", out)
+        self.assertIn("young(4d)", out)
         fatigue_line = next(l for l in out.splitlines() if l.startswith(make_fixture.SPECIAL["fatiguing"]))
         self.assertIn("-5", fatigue_line)
 

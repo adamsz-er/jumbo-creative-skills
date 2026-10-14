@@ -24,7 +24,7 @@ Concentration (80% is a common convention, not a rule; set your own)
   top 3 ads hold 22% of spend
 
 Spend by dimension (roas vs account: 100 = the same as the account)
-  Note: age is from first delivery in the window, so older ads may be understated.
+  Note: age is the days each ad delivered in the window, so older ads may be understated.
   Concept:
     comparison: 1 ad; spend USD 9973.18 (8%); purchases 359; value 44462.71; roas 4.46; cpa 27.78; vs account 102
     durability-test: 1 ad; spend USD 9061.59 (8%); purchases 295; value 30759.34; roas 3.39; cpa 30.72; vs account 77
@@ -67,8 +67,8 @@ Spend by dimension (roas vs account: 100 = the same as the account)
     launch: 7 ads; spend USD 20266.24 (17%); purchases 624; value 75259.36; roas 3.71; cpa 32.48; vs account 85
     promo: 7 ads; spend USD 17188.14 (14%); purchases 660; value 82326.32; roas 4.79; cpa 26.04; vs account 109
   Age:
-    18-35 days: 23 ads; spend USD 100245.13 (84%); purchases 3590; value 452970.61; roas 4.52; cpa 27.92; vs account 103
-    9-17 days: 6 ads; spend USD 18590.82 (16%); purchases 575; value 69515.82; roas 3.74; cpa 32.33; vs account 85
+    18-35 days: 25 ads; spend USD 108918.87 (91%); purchases 3867; value 480956.43; roas 4.42; cpa 28.17; vs account 101
+    9-17 days: 4 ads; spend USD 9917.08 (8%); purchases 298; value 41530.00; roas 4.19; cpa 33.28; vs account 96
     under 9 days: 1 ad; spend USD 670.39 (1%); purchases 8; value 1321.27; roas 1.97; cpa 83.80; vs account 45
   Verdict:
     Keep: 17 ads; spend USD 69640.53 (58%); purchases 2428; value 299912.46; roas 4.31; cpa 28.68; vs account 98

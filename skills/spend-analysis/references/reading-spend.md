@@ -11,7 +11,7 @@ The "vs account" column is the group's pooled return as a percent of the account
 
 Read it together with the share of spend. A concept with a high "vs account" and a small share is the first place to look for more budget. A concept with a low "vs account" and a large share is where money is leaking, unless it is doing another job (a launch building awareness, a retargeting ad finishing sales started elsewhere).
 
-Age bands use each ad's age. With no creation date in the data, age starts at the ad's first delivery in the window, so an ad that started before the window looks younger than it is: the output says so.
+Age bands use each ad's age. With no creation date in the data, age is the days the ad delivered in the window, so an ad that started before the window looks younger than it is: the output says so.
 
 ## Spend on pause and never-worked ads
 

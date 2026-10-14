@@ -667,12 +667,12 @@ class ReviewFixTest(Fixture):
         self.assertEqual(panels._age_text(None, None), "n/a (age is not in the data)")
 
     def test_the_age_reads_without_nested_brackets(self):
-        text = panels._age_text(29, "first delivery in window (older ads may be understated)")
-        self.assertEqual(text, "29 days, counted from its first delivery in this window (it may be older)")
+        text = panels._age_text(29, cm.AGE_FROM_DELIVERY)
+        self.assertEqual(text, "29 days with delivery in this window (it may be older)")
         self.assertNotIn("((", text)
         card = panels.ad_card(self.ctx, self.verdicts["ads"][0])
-        self.assertIn("counted from its first delivery in this window (it may be older)", card)
-        self.assertNotIn("(first delivery in window (", card)
+        self.assertIn("days with delivery in this window (it may be older)", card)
+        self.assertNotIn("(days with delivery in the window (", card)
         self.assertEqual(panels._age_text(5, "its creation date"), "5 days, counted from its creation date")
         self.assertNotIn("(", panels._age_text(5, "created (as stated)"))
 
@@ -1148,7 +1148,7 @@ class StructureTest(Fixture):
         card = next(c for c in cards if 'data-ad="120000000001"' in c)
         body = re.search(r'<div class="open-body"[^>]*>(.*)</div></details>', card, re.S).group(1)
         for text in ("among your weakest", "among your best", "Hook rate", "25.52%", "Impressions", "3-second plays", "Refresh it, keep the idea",
-                     "29 days", "Change the first 3 seconds", "Also weak: hold rate, CTR."):
+                     "30 days", "Change the first 3 seconds", "Also weak: hold rate, CTR."):
             self.assertIn(text, body, text)
         self.assertRegex(body, r'<(svg|div) class="(pv|ph) big"')
 

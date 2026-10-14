@@ -87,8 +87,8 @@ class LoaderMappingTest(unittest.TestCase):
     def test_age_falls_back_to_first_delivery_and_says_so(self):
         stripped = [{k: v for k, v in r.items() if k != "created_time"} for r in self.rows]
         ad = next(a for a in cm.aggregate_by_ad(stripped) if a["ad_id"] == VIDEO_AD)
-        self.assertEqual(ad["age_days"], 2)
-        self.assertTrue(ad["age_basis"].startswith("first delivery in window"))
+        self.assertEqual(ad["age_days"], 3)
+        self.assertTrue(ad["age_basis"].startswith("days with delivery in the window"))
         self.assertIn("understated", ad["age_basis"])
 
     def test_id_and_name_are_not_remapped_on_a_non_ad_row(self):
@@ -123,7 +123,7 @@ class ReviewFixesTest(unittest.TestCase):
         rows = cm.load_rows([{"ad_name": "a", "date_start": "2026-03-01", "created_time": "2026-03-05T00:00:00+0000",
                               "impressions": 100}])
         ad = cm.aggregate_by_ad(rows)[0]
-        self.assertEqual(ad["age_days"], 0)
+        self.assertEqual((ad["age_days"], ad["age_basis"]), (1, cm.AGE_FROM_DELIVERY))
         later = cm.load_rows([{"ad_name": "a", "date_start": "2026-03-01", "created_time": "2026-02-25T00:00:00+0000",
                                "impressions": 100}, {"ad_name": "a", "date_start": "2026-03-04", "impressions": 100}])
         ad = cm.aggregate_by_ad(later)[0]
@@ -133,8 +133,8 @@ class ReviewFixesTest(unittest.TestCase):
         rows = cm.load_rows([{"ad_name": "a", "date_start": "2026-03-01", "created_time": "2026-03-02T00:00:00+0000",
                               "impressions": 100}, {"ad_name": "a", "date_start": "2026-03-05", "impressions": 100}])
         ad = cm.aggregate_by_ad(rows)[0]
-        self.assertEqual(ad["age_days"], 4)
-        self.assertTrue(ad["age_basis"].startswith("first delivery"))
+        self.assertEqual(ad["age_days"], 2)
+        self.assertEqual(ad["age_basis"], cm.AGE_FROM_DELIVERY)
 
 
 class FromMcpTest(unittest.TestCase):

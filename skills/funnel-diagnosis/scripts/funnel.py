@@ -215,6 +215,9 @@ def render(result: Dict[str, Any]) -> str:
             if step["weak"]:
                 out.append("  weak: %s, %s" % (_label(step["metric"]), step["why"]))
         for step in read["steps"]:
+            if step["untested"]:
+                out.append("  could not test: %s is bottom quartile of its group, but %s" % (_label(step["metric"]), step["untested"]))
+        for step in read["steps"]:
             if not step["readable"]:
                 out.append("  %s: %s%s" % (_label(step["metric"]), step["note"], _remedy([step["note"]])))
         if not read["trend_readable"]:

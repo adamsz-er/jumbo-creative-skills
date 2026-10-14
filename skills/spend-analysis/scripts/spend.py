@@ -31,7 +31,7 @@ NEEDS_VERDICTS = "Budget moves need verdicts: run keep-or-kill with --json and p
 NO_SCALE_AD = "hold the money back or test new creative: no ad has earned a scale call"
 NO_MOVE = "no move is supported by the data"
 STEP_ADVICE = "raise in steps you have seen your account absorb before"
-AGE_NOTE = "age is from first delivery in the window, so older ads may be understated"
+AGE_NOTE = "age is the days each ad delivered in the window, so older ads may be understated"
 DIMENSIONS = (("concept", "Concept"), ("format", "Format"), ("ad_type", "Ad type"), ("age_band", "Age"),
               ("verdict_group", "Verdict"))
 PAYBACK_FIELDS = ("roas", "cpa")
@@ -294,7 +294,7 @@ def build_spend(rows: Sequence[Dict[str, Any]], key_map: Optional[Dict[str, str]
                    **{n + "_note": None if account[n] is not None else cm.describe_missing(account, n) for n in PAYBACK_FIELDS}},
         "concentration": _concentration(ads, pareto_share, top_n),
         "dimensions": _dimensions(ads, total_spend, account, records is not None),
-        "age_note": AGE_NOTE if any(b and b.startswith("first delivery") for b in bases) else None,
+        "age_note": AGE_NOTE if cm.AGE_FROM_DELIVERY in bases else None,
         "age_bands": labels,
     }
     if records is None:

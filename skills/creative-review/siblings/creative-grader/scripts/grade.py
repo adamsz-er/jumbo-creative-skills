@@ -113,7 +113,10 @@ def grade_ads(rows: Sequence[Dict[str, Any]], group_by: Optional[Sequence[str]] 
             grade["display"] = cm.format_value(ad, metric)
             grades[metric] = grade
         for metric in cm.AFTER_CLICK_STEPS:
-            grades[metric]["gap_z"], grades[metric]["significant"] = cm.below_group(ad, ads, metric, grades[metric])
+            gap, low, untested = cm.below_group(ad, ads, metric, grades[metric], min_impressions=min_impressions)
+            grades[metric]["gap_z"], grades[metric]["significant"] = gap, None if untested else low
+            if untested and graded:
+                grades[metric]["band"] = "not graded (bottom quartile of its group, but %s)" % untested
         if graded:
             bands = {m: NOT_SIGNIFICANT if g["band"] == cm.BAND_BOTTOM and g.get("significant") is False else g["band"]
                      for m, g in grades.items()}

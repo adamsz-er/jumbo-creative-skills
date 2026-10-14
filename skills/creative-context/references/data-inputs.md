@@ -41,7 +41,7 @@ The connector rounds that cost to cents, and a view that costs a few cents can t
 
 Hold rate uses ThruPlays, which are returned per ad, but it needs 3-second plays as its denominator, so it is n/a whenever they are.
 
-Ad age uses `created_time` when the rows carry it, and the scripts say so ("age basis"). Without it, age is the first delivery day inside the window and older ads are understated.
+Ad age uses `created_time` when the rows carry it, and the scripts say so ("age basis"). Without it, age is the number of days the ad delivered inside the window (an ad live 27 to 30 March is 4 days old), and older ads are understated.
 
 Pass the attribution window explicitly. Meta removed the 7-day and 28-day view windows in January 2026, so do not request them. The connector does not return the attribution setting it used, so the report header reads it only from what you pass with `--attribution`; if you did not set one, say "account default (not stated by the connector)".
 
@@ -82,5 +82,5 @@ Work in ideation-only mode. Label every grade, ranking and recommendation "no pe
 | Grade ads against the account's baseline | if fields present (hook rate derived) | yes | no |
 | Fatigue trend | needs daily rows | needs daily rows | no |
 | Hook and hold rate | only when the cost per 3-second view is precise enough | yes | no |
-| Ad age | `created_time`, or first delivery day | first delivery day in the export | no |
+| Ad age | `created_time`, or the days with delivery | days with delivery in the export | no |
 | Brief and ideate | yes, from evidence | yes, from evidence | yes, labelled |

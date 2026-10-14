@@ -72,7 +72,7 @@ NOT_DERIVED_3S = "not derived: cost per 3-second view is rounded too coarsely"
 # Meta rounds this cost to cents, so a view costing a few cents can be tens of percent out.
 DERIVE_MAX_ERROR = 2.0
 AGE_FROM_CREATED = "created_time"
-AGE_FROM_DELIVERY = "first delivery in window (older ads may be understated)"
+AGE_FROM_DELIVERY = "days with delivery in the window (older ads may be understated)"
 # The original positional convention: what a name of exactly this many parts is read as.
 LEGACY_PATTERN = ("concept", "format", "creator", "ad_type", "product", "tone", "launch_date")
 NAME_FIELDS = LEGACY_PATTERN + ("market", "funnel_stage", "collection", "range", "persona", "hook", "offer", "version")
@@ -569,9 +569,9 @@ def aggregate_by_ad(rows: Sequence[Dict[str, Any]],
     Adds first_date, last_date, active_days (days with delivery), age_days and
     age_basis. With a `created_time` on the rows (and no later than first
     delivery), age is the days from creation to the latest date in the data.
-    Without one it is the days from first
-    delivery in the window, so an ad older than the window looks as young as the
-    window start, and age_basis says so. Reach is summed across rows, so with
+    Without one it is the days the ad delivered in the window (an ad live 27 to
+    30 March is 4 days old), so an ad older than the window looks younger than
+    it is, and age_basis says so. Reach is summed across rows, so with
     daily rows `frequency` is an average per-row frequency, not lifetime
     frequency; export a lifetime row for that. `video_views_3s_source` is
     "derived: ..." when any row's 3-second plays were derived from a cost per
@@ -614,7 +614,10 @@ def aggregate_by_ad(rows: Sequence[Dict[str, Any]],
         if created and first and created > first:
             created = None
         start = created or first
-        ad["age_days"] = (data_end - start).days if start and data_end else None
+        if created and data_end:
+            ad["age_days"] = (data_end - created).days
+        else:
+            ad["age_days"] = ad["active_days"] if start and data_end else None
         ad["age_basis"] = (AGE_FROM_CREATED if created else AGE_FROM_DELIVERY) if ad["age_days"] is not None else None
         sources = {r["video_views_3s_source"] for r in group if r.get("video_views_3s_source")}
         derived = sorted(x for x in sources if x.startswith("derived"))
@@ -1843,21 +1846,42 @@ def proportion_z(x1: Optional[float], n1: Optional[float], x2: Optional[float], 
     return None if se == 0 else (x2 / n2 - x1 / n1) / se
 
 
+COUNT_WORDS = {"conversions": "purchases", "add_to_carts": "adds to cart", "link_clicks": "link clicks", "clicks": "clicks",
+               "landing_page_views": "landing page views", "checkouts": "checkouts", "impressions": "impressions",
+               "video_views_3s": "3-second plays", "video_thruplay": "ThruPlays"}
+
+
+def _untestable(pooled: Dict[str, Any], ad: Dict[str, Any], metric: str) -> str:
+    """Why a bottom-quartile rate's gap to its group cannot be tested (proportion_z gave None)."""
+    for who, row in (("this ad has", ad), ("its group has", pooled)):
+        basis = metric_basis(row, metric)
+        num, den = rate_counts(row, metric)
+        if num is not None and den and num > den:
+            return "%s more %s than %s, so the gap can't be tested" % (
+                who, COUNT_WORDS.get(basis["numerator"], basis["numerator"]), COUNT_WORDS.get(basis["denominator"], basis["denominator"]))
+    return "its group has no counts to test the gap against"
+
+
 def below_group(ad: Dict[str, Any], ads: Sequence[Dict[str, Any]], metric: str, grade: Dict[str, Any],
-                z: float = FUNNEL_Z) -> Tuple[Optional[float], bool]:
-    """(gap_z, low) for a rate step. `grade` is grade_in_objective's; gap_z is the ad's rate against its group's
-    pooled rate in standard errors, None unless the band is bottom quartile. Low means bottom quartile AND at
-    least `z` standard errors below the pool, so a narrow spread never flags a quarter of the ads from noise."""
+                z: float = FUNNEL_Z, min_impressions: int = 1000) -> Tuple[Optional[float], bool, Optional[str]]:
+    """(gap_z, low, untested) for a rate step. `grade` is grade_in_objective's, and the pool is the peers its band was
+    read against (same objective and group, a value, at least `min_impressions`). gap_z is the ad's rate against their
+    pooled rate in standard errors, None unless the band is bottom quartile. Low means bottom quartile AND at least `z`
+    standard errors below the pool, so a narrow spread never flags a quarter of the ads from noise. When a bottom-quartile
+    gap cannot be tested, `untested` says why: the step is unknown, never weak and never healthy."""
     if grade["band"] != BAND_BOTTOM:
-        return None, False
+        return None, False, None
     objective = payback_metrics(ad.get("objective"))["objective"]
-    pool = [a for a in ads if a is not ad and payback_metrics(a.get("objective"))["objective"] == objective]
+    pool = [a for a in ads if a is not ad and payback_metrics(a.get("objective"))["objective"] == objective
+            and a.get(metric) is not None and (a.get("impressions") or 0) >= min_impressions]
     peers = [a for a in pool if group_key(a, grade["group_by"]) == grade["group_value"]] if grade["group_by"] else pool
     peers = [a for a in peers if None not in rate_counts(a, metric)]
     present = {f: [a[f] for a in peers if a.get(f) is not None] for f in NUMERIC_FIELDS}
     pooled = {f: sum(v) if v else None for f, v in present.items()}
     gap = proportion_z(*rate_counts(pooled, metric), *rate_counts(ad, metric))
-    return gap, gap is not None and gap <= -z
+    if gap is None:
+        return None, False, _untestable(pooled, ad, metric)
+    return gap, gap <= -z, None
 
 
 def _window_totals(rows: Sequence[Dict[str, Any]], ad_key: str, window: int) -> Optional[Tuple[Dict[str, Any], Dict[str, Any]]]:
@@ -1902,7 +1926,7 @@ def funnel_read(rows: Sequence[Dict[str, Any]], ad: Dict[str, Any], ads: Sequenc
             first_value, last_value = compute_metrics(first)[metric], compute_metrics(last)[metric]
             change = _pct_change(first_value, last_value)
             trend_z = proportion_z(*rate_counts(first, metric), *rate_counts(last, metric))
-        gap_z, low = below_group(ad, ads, metric, grade, z)
+        gap_z, low, untested = below_group(ad, ads, metric, grade, z, min_impressions)
         falling = change is not None and change <= -min_change and trend_z is not None and trend_z <= -z
         why = []
         if low:
@@ -1910,11 +1934,11 @@ def funnel_read(rows: Sequence[Dict[str, Any]], ad: Dict[str, Any], ads: Sequenc
         if falling:
             why.append("down %.0f%% since its first %d delivery days" % (-change, window))
         side = "attention" if metric in ATTENTION_STEPS else "site" if metric in SITE_STEPS else "context"
-        judged = readable and (trend_z is not None or grade["band"] in (BAND_TOP, BAND_MID, BAND_BOTTOM))
+        judged = readable and (trend_z is not None or (grade["band"] in (BAND_TOP, BAND_MID, BAND_BOTTOM) and not untested))
         steps.append({"metric": metric, "side": side,
                       "value": ad.get(metric), "band": grade["band"], "change_pct": change,
                       "trend_z": trend_z, "gap_z": gap_z, "readable": readable, "judged": judged,
-                      "weak": falling or low,
+                      "weak": falling or low, "untested": untested,
                       "why": ", ".join(why) or None,
                       "note": None if readable else "n/a (%s)" % (describe_missing(ad, metric) or "no value")})
     attention = [s for s in steps if s["side"] == "attention" and s["weak"]]

@@ -1845,20 +1845,31 @@ class ParentHtmlTest(unittest.TestCase):
     @staticmethod
     def allowed(html, path):
         """The parent's HTML with each deliberate sentence change applied: the head's ad count names the ads with spend it is out of, and the
-        click step says people see the ad (an image ad is not watched), and the purchase-value coverage line and each field's coverage note name the ads with spend they count."""
+        click step says people see the ad (an image ad is not watched), the purchase-value coverage line and each field's coverage note name the ads with spend they count,
+        and an age without a creation date is the days the ad delivered."""
         total = len(panels.pareto_cut(panels.Ctx(rows=cm.load_rows(str(path)), currency="USD"))["ranked"])
         html = re.sub(r"Purchase value was recorded on (\d+) of (\d+) ads;", r"Purchase value was recorded on \1 of the \2 ads with spend;", html)
         html = re.sub(r"recorded on (\d+) of (\d+) ads; the rest had none", lambda m: "recorded on %s of the %s ads with spend; the rest had none" % (m.group(1), total), html)
         html = re.sub(r"(\d+) ads \((\d+)% of ads\) drive", lambda m: "%s ads (%s%% of the %s ads with spend) drive" % (m.group(1), m.group(2), total), html)
+        html = re.sub(r"(\d+) days, counted from days with delivery in the window - older ads may be understated",
+                      lambda m: "%s day%s with delivery in this window (it may be older)" % (m.group(1), "" if m.group(1) == "1" else "s"), html)
+        html = html.replace("Age is counted to the last day of the data, from each ad's first day of delivery in this window, so an ad that "
+                            "started before the window reads younger than it is", "Age is the days each ad delivered in this window, so an ad "
+                            "that started before the window reads younger than it is")
         return html.replace("people watch but do not click", "people see the ad but do not click").replace(
             "People watch but do not click", "People see the ad but do not click")
 
     @staticmethod
     def apply_later_changes(tree):
-        """Give the parent the later deliberate changes: the verdict a user reads as "Refresh" (its id stays `iterate`), and today's
-        metrics module (link clicks as the one click basis for purchase and add-to-cart rates)."""
+        """Give the parent the later deliberate changes: the verdict a user reads as "Refresh" (its id stays `iterate`), today's
+        metrics module (link clicks as the one click basis for purchase and add-to-cart rates), and the label and unit of the
+        cart-to-purchase rate that module grades."""
         for path in (tree / "skills" / "creative-report" / "scripts").glob("*.py"):
             path.write_text(path.read_text(encoding="utf-8").replace("Iterate", "Refresh"), encoding="utf-8")
+        interact = tree / "skills" / "creative-report" / "scripts" / "interact.py"
+        interact.write_text(interact.read_text(encoding="utf-8").replace(
+            '"add_to_cart_rate": "Add-to-cart rate",', '"add_to_cart_rate": "Add-to-cart rate", "cart_to_purchase_rate": "Cart-to-purchase rate",').replace(
+            '"add_to_cart_rate": "pct",', '"add_to_cart_rate": "pct", "cart_to_purchase_rate": "pct",'), encoding="utf-8")
         for path in tree.glob("**/creative_metrics.py"):
             path.write_text((ROOT / "shared" / "creative_metrics.py").read_text(encoding="utf-8"), encoding="utf-8")
 

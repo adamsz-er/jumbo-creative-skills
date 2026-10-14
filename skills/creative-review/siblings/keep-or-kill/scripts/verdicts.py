@@ -257,11 +257,11 @@ def _confidence(vid: str, entry: Dict[str, Any], pb: Optional[Dict[str, Any]], w
 
 
 def _age(ad: Dict[str, Any]) -> Tuple[Optional[int], str]:
-    """(age, its words) as the sibling skills count it: days since creation when the data has a creation date, else
-    the days the ad delivered (an ad live 27 to 30 March delivered on 4 days)."""
+    """(age, its words): aggregate_by_ad's age_days, days since creation when the data has a creation date, else the
+    days the ad delivered (an ad live 27 to 30 March delivered on 4 days)."""
+    days = ad.get("age_days")
     if ad.get("age_basis") == cm.AGE_FROM_CREATED:
-        return ad["age_days"], "was created %d day%s ago" % (ad["age_days"], "" if ad["age_days"] == 1 else "s")
-    days = ad.get("active_days")
+        return days, "was created %d day%s ago" % (days, "" if days == 1 else "s")
     return days, "has delivered on %s day%s" % ("no" if days is None else days, "" if days == 1 else "s")
 
 
@@ -566,7 +566,7 @@ def render(results: Sequence[Dict[str, Any]], args: argparse.Namespace, rows: Se
     for gid, _ in GROUPS:
         for entry in sorted((e for e in results if group_of(e["verdict_id"]) == gid), key=lambda e: -_stake(e)):
             out.append("%s  [%s]  age %s d, %s  (spend %s)" % (
-                entry["ad"], entry["format"] or "-", "n/a" if _age(entry)[0] is None else _age(entry)[0],
+                entry["ad"], entry["format"] or "-", "n/a" if entry["age_days"] is None else entry["age_days"],
                 entry["verdict"], _money(entry["spend_at_stake"], currency)))
             out.append("    " + entry["sentence"])
             out.append("    confidence: %s (%s)" % (entry["confidence"], entry["confidence_reason"]))

@@ -10,7 +10,7 @@ Settings used (arbitrary defaults, set them from your own account): young-days=5
 Money is shown in USD.
 Objective: not in the data (or not a known objective) for 30 ads, so they are judged as sales: add an objective column to judge each ad on its own goal.
 WARNING small comparison groups (fewer than twice the 5-ad minimum; their verdicts are an early read at most): carousel, sales objective n=7, static, sales objective n=6, ugc-video / bau, sales objective n=6, ugc-video, sales objective n=9.
-Age basis: first delivery in window (older ads may be understated).
+Age basis: days with delivery in the window (older ads may be understated).
 
 Summary:
   Scale                    6

@@ -302,8 +302,8 @@ def _age_text(age: Any, basis: Any) -> str:
         return "n/a (age is not in the data)"
     if not basis:
         return "%d days" % age
-    if str(basis).startswith("first delivery"):
-        return "%d days, counted from its first delivery in this window (it may be older)" % age
+    if basis == cm.AGE_FROM_DELIVERY:
+        return "%d day%s with delivery in this window (it may be older)" % (age, "" if age == 1 else "s")
     return "%d days, counted from %s" % (age, str(basis).replace("(", "- ").replace(")", ""))
 
 
@@ -1688,10 +1688,12 @@ def ad_age(ctx: Ctx) -> Tuple[str, str]:
     if not views:
         views = [("roas", "ROAS", charts.bars_with_dots(labels, shares, counts, [None] * len(labels), charts.axis_format("x"), "ROAS", "Spend share by ad age"))]
     bases = {a.get("age_basis") for a in ads}
-    basis = ("from each ad's creation date" if bases == {cm.AGE_FROM_CREATED} else
-             "from each ad's first day of delivery in this window, so an ad that started before the window reads younger than it is" if bases == {cm.AGE_FROM_DELIVERY} else
-             "from the creation date where the export has one, otherwise from the first day of delivery in this window")
-    note = ('<p class="muted">Age is counted to the last day of the data, %s. Arbitrary defaults: new buckets start at %s. '
+    basis = ("Age is counted from each ad's creation date to the last day of the data" if bases == {cm.AGE_FROM_CREATED} else
+             "Age is the days each ad delivered in this window, so an ad that started before the window reads younger than it is"
+             if bases == {cm.AGE_FROM_DELIVERY} else
+             "Age is counted from the creation date to the last day of the data where the export has one, otherwise it is the days "
+             "the ad delivered in this window")
+    note = ('<p class="muted">%s. Arbitrary defaults: new buckets start at %s. '
             'ROAS and CTR are ratios of summed counts for the ads in a bucket; a bucket with fewer than %d ads is dimmed.</p>' % (basis, age_starts_text(), charts.MIN_BUCKET_ADS))
     return charts.switcher("ad-age", views) + note, "data"
 
