@@ -183,6 +183,23 @@ class SkippedCountTest(unittest.TestCase):
         self.assertEqual(len(hook), 1, hook)
         self.assertTrue(hook[0].startswith("  hook_rate not graded (missing video_views_3s) on 14 ads: "), hook[0])
         self.assertEqual(len(hook[0].split(": ", 1)[1].split(", ")), 14)
+        self.assertIn("  hold_rate not graded (missing video_thruplay) on 15 ads: ", text)
+        self.assertIn("  cpa not graded (zero conversions) on 1 ad: 120000000017", text)
+
+    def test_one_step_skipped_for_two_reasons_is_one_line_with_both_counts(self):
+        raw = []
+        for ad in range(8):
+            for day in range(3):
+                row = {"Day": "2026-04-%02d" % (day + 1), "Ad name": "ad-%d | static | house | bau" % ad, "Ad ID": "9000%d" % ad,
+                       "Amount spent (USD)": 100 + ad, "Impressions": 20000, "Link clicks": 300 + ad, "Purchases": 10 + ad}
+                if ad < 3:
+                    row["3-second video plays"] = 5000 + 100 * ad
+                raw.append(row)
+        rows = cm.load_rows(raw)
+        lines = [l for l in grade.render(rows, grade.grade_ads(rows)).splitlines() if l.startswith("  hook_rate not graded")]
+        self.assertEqual(len(lines), 1, lines)
+        self.assertTrue(lines[0].startswith("  hook_rate not graded on 8 ads: 3 too little comparison data: 3 comparable ads, need 5, "
+                                            "5 missing video_views_3s: "), lines[0])
 
 
 class ObjectiveAndGroupingTest(unittest.TestCase):

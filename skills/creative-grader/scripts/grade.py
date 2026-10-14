@@ -30,6 +30,8 @@ LOW_VOLUME = "not graded (low volume)"
 NOT_SIGNIFICANT = "bottom quartile, not significantly below its group"
 # An after-click step in the bottom quartile whose gap to its group could not be tested: unknown, so no summary reads it as fine.
 UNTESTED = "not graded (bottom quartile of its group, but the gap can't be tested: %s)"
+# What the text output counts and lists an ad under when nothing reads weak but a step could not be tested: never plain "none".
+NONE_UNTESTED = "none (with an untested step)"
 
 HOOK_ACTION = "Change the first 3 seconds: the opening is not stopping the scroll."
 ACTIONS = {
@@ -83,13 +85,15 @@ def diagnose(bands: Dict[str, str], notes: Sequence[str] = (),
               for step, metrics in steps]
     broken = [(step, metrics) for step, metrics in broken if metrics]
     prefix = UNTESTED.split("%s")[0]
-    untested = ["%s could not be tested (%s)" % (m.replace("_", " "), bands[m][len(prefix):-1])
-                for m in cm.AFTER_CLICK_STEPS if str(bands.get(m) or "").startswith(prefix)]
+    unknown = [m for m in cm.AFTER_CLICK_STEPS if str(bands.get(m) or "").startswith(prefix)]
+    untested = ["%s could not be tested (%s)" % (m.replace("_", " "), bands[m][len(prefix):-1]) for m in unknown]
     if not broken:
-        action = ("Nothing graded reads weak, but %s, so the funnel is not known to read normally." % "; ".join(untested)
-                  if untested else "Nothing in the funnel reads weak against this account.")
-        return {"step": "none", "metrics": [], "summary": "no broken step", "action": action,
-                "also_weak": [], "skipped": skipped}
+        if unknown:
+            return {"step": "none", "metrics": [], "untested": unknown, "also_weak": [], "skipped": skipped,
+                    "summary": "no broken step found; %s could not be tested" % ", ".join(unknown),
+                    "action": "Nothing graded reads weak, but %s, so the funnel is not known to read normally." % "; ".join(untested)}
+        return {"step": "none", "metrics": [], "untested": [], "summary": "no broken step",
+                "action": "Nothing in the funnel reads weak against this account.", "also_weak": [], "skipped": skipped}
     step, metrics = broken[0]
     also_weak = [m for _, later in broken[1:] for m in later]
     cart_only = step == "post-click" and all(m in cm.CART_STEPS for m in metrics)
@@ -97,7 +101,7 @@ def diagnose(bands: Dict[str, str], notes: Sequence[str] = (),
     if step == "pays back" and untested:
         action = ("Payback is weak, and %s, so the funnel is not known to read normally: check that step, then price, margin, "
                   "offer and attribution before blaming the creative." % "; ".join(untested))
-    return {"step": step, "metrics": metrics, "also_weak": also_weak,
+    return {"step": step, "metrics": metrics, "also_weak": also_weak, "untested": unknown,
             "summary": "%s (%s bottom quartile)" % (step, ", ".join(metrics)),
             "action": action, "skipped": skipped}
 
@@ -148,6 +152,12 @@ def grade_ads(rows: Sequence[Dict[str, Any]], group_by: Optional[Sequence[str]] 
             "grades": grades, "diagnosis": diagnosis,
         })
     return results
+
+
+def _shown_step(entry: Dict[str, Any]) -> str:
+    """The step the text output counts an ad under: plain "none" only when no step was left untested."""
+    diagnosis = entry["diagnosis"]
+    return NONE_UNTESTED if diagnosis["step"] == "none" and diagnosis.get("untested") else diagnosis["step"]
 
 
 def _used_group(entry: Dict[str, Any]) -> Tuple[str, Optional[int]]:
@@ -232,24 +242,29 @@ def render(rows, results, group_by=("format",), min_impressions=1000, group_note
     out += ["  ".join(c.ljust(w) for c, w in zip(r, widths)).rstrip() for r in lines]
     counts: Dict[str, int] = {}
     for entry in results:
-        counts[entry["diagnosis"]["step"]] = counts.get(entry["diagnosis"]["step"], 0) + 1
+        counts[_shown_step(entry)] = counts.get(_shown_step(entry), 0) + 1
     out += ["", "Diagnoses: " + ", ".join("%s=%d" % kv for kv in sorted(counts.items(), key=lambda kv: -kv[1]))]
     out += ["", "What to do, by first broken step (fix that step first, then re-read; 'also weak' lists later bottom-quartile metrics):"]
-    for step, _ in STEPS:
-        hits = [e for e in results if e["diagnosis"]["step"] == step]
+    for step in [s for s, _ in STEPS] + [NONE_UNTESTED]:
+        hits = [e for e in results if _shown_step(e) == step]
         for action in dict.fromkeys(e["diagnosis"]["action"] for e in hits):
             out.append("  %s: %s" % (step, action))
             for e in (e for e in hits if e["diagnosis"]["action"] == action):
                 extra = " (also weak: %s)" % ", ".join(e["diagnosis"]["also_weak"]) if e["diagnosis"]["also_weak"] else ""
                 out.append("    %s%s" % (e["ad"], extra))
-    skipped: Dict[str, List[str]] = {}
+    skipped: Dict[str, Dict[str, List[str]]] = {}
     for e in results:
-        for step in e["diagnosis"]["skipped"]:
-            skipped.setdefault(step, []).append(str(e["ad"]))
+        for item in e["diagnosis"]["skipped"]:
+            metric, _, band = item.partition(" ")
+            reason = band[len("not graded ("):-1] if band.startswith("not graded (") and band.endswith(")") else band
+            skipped.setdefault(metric, {}).setdefault(reason, []).append(str(e["ad"]))
     if skipped:
         out += ["", "Steps skipped, never read as healthy (one line per step: quote its count, never recount):"]
-        for step, ads in skipped.items():
-            out.append("  %s on %d ad%s: %s" % (step, len(ads), "" if len(ads) == 1 else "s", ", ".join(ads)))
+        for metric, reasons in skipped.items():
+            ads = [a for found in reasons.values() for a in found]
+            why = " (%s)" % next(iter(reasons)) if len(reasons) == 1 else ""
+            counted = "" if len(reasons) == 1 else ", ".join("%d %s" % (len(found), reason) for reason, found in reasons.items()) + ": "
+            out.append("  %s not graded%s on %d ad%s: %s%s" % (metric, why, len(ads), "" if len(ads) == 1 else "s", counted, ", ".join(ads)))
     out += ["", "LOW = bottom quartile, top = top quartile, mid = middle; n/a = missing or zero operand, never 0."]
     return "\n".join(out)
 

@@ -194,6 +194,12 @@ class YoungDaysBoundaryTest(unittest.TestCase):
         self.assertEqual(judged["acme-four"]["age_days"], 4)
         self.assertTrue(judged["acme-four"]["learning"])
 
+    def test_an_ad_created_on_its_first_day_that_delivers_young_days_days_is_judged(self):
+        created = [dict(r, created_time="2026-03-01T08:00:00+0000") for r in make_rows("acme-created", days=5)]
+        judged = judge(crowd(6, days=5) + created, young_days=5)
+        self.assertEqual((judged["acme-created"]["age_days"], judged["acme-created"]["age_basis"]), (5, cm.AGE_FROM_CREATED))
+        self.assertFalse(judged["acme-created"]["learning"])
+
 
 class SafetyTest(unittest.TestCase):
     def test_true_pause_in_a_big_group_is_confident(self):

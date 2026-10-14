@@ -118,5 +118,37 @@ class AfterClickAgreementTest(unittest.TestCase):
         self.assertAlmostEqual(cm.below_group(target, ads, "cart_to_purchase_rate", grade_)[0], expected)
 
 
+    def test_an_ad_whose_only_issue_is_an_untested_step_never_reads_no_broken_step(self):
+        out = []
+        for ad in range(8):
+            for day in range(20):
+                out.append({"Day": "2026-04-%02d" % (day + 1), "Ad name": "ad-%d | static | house | bau" % ad, "Ad ID": "9000%d" % ad,
+                            "Amount spent (USD)": 25 if ad == 3 else 100 + ad, "Impressions": 20000, "Link clicks": 300,
+                            "Adds to cart": 20, "Purchases": 8 if ad == 3 else 30 + ad})
+        data = cm.load_rows(out)
+        results = grade.grade_ads(data)
+        entry = next(e for e in results if str(e["ad"]) == TARGET)
+        self.assertEqual(entry["diagnosis"]["summary"], "no broken step found; cart_to_purchase_rate could not be tested")
+        text = grade.render(data, results)
+        self.assertIn("none (with an untested step)=1", text)
+        section = text.split("What to do, by first broken step")[1].split("Steps skipped")[0]
+        untested = section.split("  none (with an untested step): Nothing graded reads weak, but cart to purchase rate could not be tested")
+        self.assertEqual(len(untested), 2, section)
+        self.assertIn("    %s" % TARGET, untested[1])
+        self.assertNotIn("    %s" % TARGET, untested[0])
+
+    def test_a_creative_call_with_an_untested_site_step_never_says_the_site_holds(self):
+        out = []
+        for ad in range(8):
+            for day in range(20):
+                out.append({"Day": "2026-04-%02d" % (day + 1), "Ad name": "ad-%d | static | house | bau" % ad, "Ad ID": "9000%d" % ad,
+                            "Amount spent (USD)": 100, "Impressions": 20000, "Link clicks": 60 if ad == 3 else 300 + ad,
+                            "Adds to cart": 20, "Purchases": 8 if ad == 3 else 30 + ad})
+        _, funnels, _ = reads(cm.load_rows(out))
+        self.assertEqual(funnels[TARGET]["call"], "creative")
+        self.assertEqual(funnels[TARGET]["reason"], "a step the ad controls is weak or falling; cart to purchase rate could not be tested "
+                                                    "(its group has more purchases than adds to cart), so the site is not known to hold")
+
+
 if __name__ == "__main__":
     unittest.main()
