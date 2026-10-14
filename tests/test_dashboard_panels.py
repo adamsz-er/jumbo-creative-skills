@@ -298,9 +298,15 @@ class PartialCoverageTest(unittest.TestCase):
 
     def test_a_tile_with_partial_coverage_shows_its_value_and_how_many_rows_lack_it(self):
         html, _ = panels.kpi_strip(panels.Ctx(rows=self.half_blank(), currency="USD"))
-        self.assertIn("purchase value recorded on 3 of 6 ads; the rest had none in this window", html)
-        self.assertEqual(html.count("purchase value recorded on 3 of 6 ads; the rest had none in this window"), 2)
+        self.assertIn("purchase value recorded on 3 of the 6 ads with spend; the rest had none in this window", html)
+        self.assertEqual(html.count("purchase value recorded on 3 of the 6 ads with spend; the rest had none in this window"), 2)
         self.assertIn("USD 630", html)
+
+    def test_the_coverage_line_counts_out_of_the_ads_with_spend_as_the_headline_does(self):
+        rows = self.half_blank() + [ad_row("g", "G", 0, 0)]
+        html, _ = panels.kpi_strip(panels.Ctx(rows=rows, currency="USD"))
+        self.assertIn("purchase value recorded on 3 of the 6 ads with spend;", html)
+        self.assertNotIn("of 7 ads", html)
 
     def test_fully_present_and_fully_missing_are_not_partial(self):
         full, _ = panels.kpi_strip(panels.Ctx(rows=self.ROWS, currency="USD"))
@@ -311,7 +317,7 @@ class PartialCoverageTest(unittest.TestCase):
 
     def test_the_pareto_sentence_states_value_coverage_when_partial(self):
         html, _ = panels.pareto(panels.Ctx(rows=self.half_blank(), currency="USD"))
-        self.assertIn("Purchase value was recorded on 3 of 6 ads; the rest had none in this window and count as no value.", html)
+        self.assertIn("Purchase value was recorded on 3 of the 6 ads with spend; the rest had none in this window and count as no value.", html)
         clean, _ = panels.pareto(panels.Ctx(rows=self.ROWS, currency="USD"))
         self.assertNotIn("was recorded on", clean)
 
@@ -419,12 +425,17 @@ class ParetoTest(unittest.TestCase):
     def test_the_cut_sentence_on_known_numbers(self):
         html, state = panels.pareto(panels.Ctx(rows=self.ROWS, currency="USD"))
         self.assertEqual(state, "data")
-        self.assertIn("2 ads (33% of ads) drive 80% of purchase value.", html)
+        self.assertIn("2 ads (33% of the 6 ads with spend) drive 80% of purchase value.", html)
         self.assertIn("you can change it when you rebuild the report", html)
+
+    def test_the_head_counts_out_of_the_ads_with_spend_not_every_ad(self):
+        rows = self.ROWS + [ad_row("g", "G", 0, 0)]
+        html, _ = panels.pareto(panels.Ctx(rows=rows, currency="USD"))
+        self.assertIn("2 ads (33% of the 6 ads with spend) drive 80% of purchase value.", html)
 
     def test_the_share_is_settable(self):
         html, _ = panels.pareto(panels.Ctx(rows=self.ROWS, currency="USD", pareto_share=90.0))
-        self.assertIn("3 ads (50% of ads) drive 90% of purchase value.", html)
+        self.assertIn("3 ads (50% of the 6 ads with spend) drive 90% of purchase value.", html)
 
     def test_without_purchase_value_the_cut_reads_spend_and_says_so(self):
         rows = [dict(r, conversion_value=None) for r in self.ROWS]
@@ -742,8 +753,8 @@ class ReaderWordsTest(unittest.TestCase):
 
     def test_partial_coverage_is_said_in_ads(self):
         text = reader_text(self.pages["partial"])
-        self.assertRegex(text, r"purchases recorded on \d+ of \d+ ads; the rest had none in this window")
-        self.assertRegex(text, r"purchase value recorded on \d+ of \d+ ads")
+        self.assertRegex(text, r"purchases recorded on \d+ of the \d+ ads with spend; the rest had none in this window")
+        self.assertRegex(text, r"purchase value recorded on \d+ of the \d+ ads with spend")
 
     def test_the_method_details_are_where_flags_and_row_counts_may_live(self):
         method = self.pages["full"].split('<details class="method"')[1].split("</details>")[0]

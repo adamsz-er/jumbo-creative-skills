@@ -30,10 +30,10 @@ def day(ad_id, name, date, spend, impressions, **extra):
 
 
 ROWS = [
-    day("1", "CAMP:BAU | PLR:Trail | RNG:SS26 | Polished | Ana | AT:Video | US | 2026/03/01", "2026-03-01", 10, 1000),
-    day("1", "CAMP:BAU | PLR:Trail | RNG:SS26 | Polished | Ana | AT:Video | US | 2026/03/01", "2026-03-02", 20, 2000),
+    day("1", "TH:BAU | CN:Trail | SN:SS26 | Polished | Ana | FT:Video | US | 2026/03/01", "2026-03-01", 10, 1000),
+    day("1", "TH:BAU | CN:Trail | SN:SS26 | Polished | Ana | FT:Video | US | 2026/03/01", "2026-03-02", 20, 2000),
     # one segment short: the market sits one place earlier, but still second from the end
-    day("2", "CAMP:BAU | PLR:Camp | RNG:SS26 | Polished | AT:Image | CA | 2026/03/01", "2026-03-01", 5, 500),
+    day("2", "TH:BAU | CN:Camp | SN:SS26 | Polished | FT:Image | CA | 2026/03/01", "2026-03-01", 5, 500),
     # a second, older convention with another separator
     day("3", "Trail_BAU_Ecom_SS26_V1_Catalogue__US", "2026-03-01", 7, 700),
     day("4", "Camp_BAU_Ecom_SS26_V2_Catalogue__CA", "2026-03-01", 3, 300),

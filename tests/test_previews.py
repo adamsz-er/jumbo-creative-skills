@@ -85,6 +85,15 @@ class PreviewsTest(unittest.TestCase):
         self.assertEqual(kinds[-1], "placeholder")
         self.assertEqual(found.reasons[previews.BUDGET], kinds.count("placeholder"))
 
+    def test_a_too_large_preview_whose_thumbnail_hits_the_budget_names_the_budget(self):
+        previews_dir = self.put("1.png", png(pad=3000))
+        thumbs_dir = self.put("1.png", png(pad=3000), sub="thumbs")
+        found = previews.Previews(str(previews_dir), str(thumbs_dir), max_kb=1, budget_kb=1)
+        self.assertEqual(found.resolve("1")["reason"], previews.TOO_LARGE)
+        found = previews.Previews(str(previews_dir), str(thumbs_dir), max_kb=8, budget_kb=1)
+        self.dir.joinpath("previews", "1.png").write_bytes(png(pad=9000))
+        self.assertEqual(found.resolve("1")["reason"], previews.BUDGET)
+
     def test_preference_is_preview_then_thumbnail_then_placeholder(self):
         previews_dir = self.put("1.png", png())
         thumbs_dir = self.put("1.jpg", jpeg(), sub="thumbs")

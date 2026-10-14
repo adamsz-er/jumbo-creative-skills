@@ -78,7 +78,7 @@ STEP_WORDS = {
     "reach cost": "reaching people costs more than for your similar ads",
     "hook": "the opening is not stopping the scroll",
     "hold": "people drop off before the message lands",
-    "click": "people watch but do not click",
+    "click": "people see the ad but do not click",
     "post-click": "clicks do not turn into carts or purchases",
     "pays back": "the funnel reads normally but payback is weak",
 }

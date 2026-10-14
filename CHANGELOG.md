@@ -18,4 +18,5 @@
 - README restyled for GitHub: copyable install steps, dashboard screenshot.
 - Docs: the README is rewritten as the front door (install, quick start, a diagram of how the skills fit, a which-skill table, known limits). New `docs/how-it-works.md` (with every command-line flag, kept in step with the scripts by a test), `docs/faq.md` and `docs/troubleshooting.md`; every skill gains "How to use" and "Common questions" sections, and `creative-context` carries an agent-facing FAQ so a single installed skill can still answer how-do-I questions.
 - Dashboard spacing and layout polish.
+- The Claude dashboard carries the report's brand (the Jumbo by Elephant Room lockup, its colours in light and dark, embedded DM Sans and Roboto Mono: DM Sans under the SIL Open Font License 1.1, Roboto Mono under the Apache License 2.0, both licences beside the font file) and gains ad cards with images and per-ad daily lines, an ad detail page, fatigue curves, spend share and spend against value over time, and a date range for every chart; dashboard schema version 2 (images move from `verdicts` to `ad-media`).
 - creative-report can publish the dashboard as a native Claude dashboard.

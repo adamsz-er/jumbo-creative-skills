@@ -7,11 +7,26 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    env:
+      CR_REQUIRE_PAGE_TESTS: "1"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: page test tools (pinned)
+        env:
+          JSDOM_VERSION: "25.0.1"
+          D3_VERSION: "7.9.0"
+        run: |
+          npm install --no-save --prefix "$RUNNER_TEMP/page" "jsdom@$JSDOM_VERSION" "d3@$D3_VERSION"
+          echo "CR_JSDOM=$RUNNER_TEMP/page/node_modules/jsdom" >> "$GITHUB_ENV"
+          echo "CR_D3=$RUNNER_TEMP/page/node_modules/d3/dist/d3.min.js" >> "$GITHUB_ENV"
       - run: python -m unittest discover -s tests
       - run: python tools/validate_skills.py
       - run: python tools/sync_shared.py --check

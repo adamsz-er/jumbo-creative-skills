@@ -590,11 +590,12 @@ class RollingAverageTest(unittest.TestCase):
         self.assertAlmostEqual(out[7], 1000.0)
         self.assertAlmostEqual(self.roll(day_rows(8, spend=10.0, impressions=1000.0), "spend")[7], 10.0)
 
-    def test_a_ratio_counts_and_sums_only_days_that_carry_both_operands(self):
+    def test_a_ratio_sums_every_row_in_the_window_as_its_key_number_does(self):
         rows = day_rows(8, spend=10.0, impressions=1000.0, conversion_value=lambda i: None if i < 3 else 50.0)
+        self.assertEqual(panels.day_values(panels.calendar(rows), "roas")[:3], [None, None, None])
         out = self.roll(rows, "roas")
-        self.assertIsNone(out[6])
-        self.assertAlmostEqual(out[7], 5.0)
+        self.assertAlmostEqual(out[6], 4 * 50.0 / 70.0)
+        self.assertAlmostEqual(out[7], 5 * 50.0 / 70.0)
 
     def test_a_day_with_rows_but_no_spend_is_not_a_zero_in_the_average(self):
         rows = day_rows(7, impressions=1000.0, spend=lambda i: None if i == 2 else 10.0)
@@ -794,13 +795,13 @@ class ZeroDenominatorTest(unittest.TestCase):
         self.assertEqual(panels.day_values(cal, "cpa")[3], 200.0)
         self.assertAlmostEqual(panels.rolling_values(cal, "cpa")[6], 200.0)
 
-    def test_a_zero_impression_row_stays_in_ctr_and_a_missing_one_does_not(self):
+    def test_a_day_rate_sums_every_row_that_day_on_the_key_numbers_basis(self):
         rows = self.two_ads()
         rows.append({"ad_id": "c", "ad_name": name_of("static", 3), "date": "2026-03-01", "spend": 50.0, "impressions": 0.0, "link_clicks": 0.0})
         rows.append({"ad_id": "d", "ad_name": name_of("static", 4), "date": "2026-03-01", "spend": 50.0, "link_clicks": 400.0})
-        used = panels._measure_rows([r for r in rows if r["date"] == "2026-03-01"], "ctr")
-        self.assertEqual(sorted(r["ad_id"] for r in used), ["a", "b", "c"])
-        self.assertAlmostEqual(panels.day_values(panels.calendar(rows), "ctr")[0], 20 / 2000 * 100)
+        day = [r for r in rows if r["date"] == "2026-03-01"]
+        self.assertAlmostEqual(panels.day_values(panels.calendar(rows), "ctr")[0], panels._kpi_value(panels.totals(day), "ctr"))
+        self.assertAlmostEqual(panels.day_values(panels.calendar(rows), "cpa")[0], 300 / 1)
 
     def test_a_zero_spend_row_stays_in_roas(self):
         rows = self.two_ads() + [{"ad_id": "e", "ad_name": name_of("static", 5), "date": "2026-03-01", "spend": 0.0, "conversion_value": 40.0}]

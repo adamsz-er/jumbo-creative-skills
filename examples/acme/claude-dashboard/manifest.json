@@ -91,10 +91,53 @@
       "description": "The basis, every default used, what was read from which column, and what was missing from the inputs.",
       "file": "datasets/notes.json",
       "format": "json"
+    },
+    {
+      "id": "ad-media",
+      "title": "Ad images and reasons",
+      "description": "One row per ad, largest spend first: its image as a data URL or why there is none, whether it is a video, and why it got its verdict.",
+      "file": "datasets/ad-media.json",
+      "format": "json"
+    },
+    {
+      "id": "ad-daily",
+      "title": "Daily series per ad",
+      "description": "Each ad's own days: spend, the payback measure, hook rate, CTR and frequency; null with the reason on a day the ad did not deliver.",
+      "file": "datasets/ad-daily.json",
+      "format": "json"
+    },
+    {
+      "id": "ad-metrics",
+      "title": "Ads against comparable ads",
+      "description": "Each ad's key rates beside the median and middle half of ads in the same format in this account, or of all ads when too few share it.",
+      "file": "datasets/ad-metrics.json",
+      "format": "json"
+    },
+    {
+      "id": "age-curve",
+      "title": "Rates by delivery day",
+      "description": "For each series measure and day of an ad's delivery, the median and middle half across the ads with a value that day.",
+      "file": "datasets/age-curve.json",
+      "format": "json"
+    },
+    {
+      "id": "share-daily",
+      "title": "Daily spend share",
+      "description": "Each day's spend split by format and by verdict, as a share of that day's spend; days with no spend are left out.",
+      "file": "datasets/share-daily.json",
+      "format": "json"
+    },
+    {
+      "id": "cumulative",
+      "title": "Spend against value over time",
+      "description": "Spend and purchase value per day and summed from the first day, with the running return on spend.",
+      "file": "datasets/cumulative.json",
+      "format": "json"
     }
   ],
   "files": [
     "index.html",
+    "fonts.css",
     "dashboard.css",
     "dashboard.js"
   ],
@@ -106,6 +149,10 @@
     {
       "doc": "files/index.html",
       "file": "store/files-index.html.json"
+    },
+    {
+      "doc": "files/fonts.css",
+      "file": "store/files-fonts.css.json"
     },
     {
       "doc": "files/dashboard.css",
