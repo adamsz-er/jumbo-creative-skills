@@ -141,6 +141,11 @@ class TranscriptClaimsTest(unittest.TestCase):
 class FatiguePlannerLateFlagTest(unittest.TestCase):
     """The answer marks as many calendar rows late as the script counts."""
 
+    def test_the_answer_leads_with_the_data_window_and_never_starts_on_today_for_old_data(self):
+        text = read("fatigue-planner", "SKILL.md")
+        self.assertIn("1. Lead with the data window and ad count", text.split("## Present the result")[1])
+        self.assertIn("Never pass today's date for older data.", text.split("## Before you start")[1])
+
     def test_every_shown_row_keeps_the_scripts_late_flag(self):
         text = read("fatigue-planner", "SKILL.md").split("## Present the result")[1]
         self.assertIn("Copy the script's late flag onto every calendar row you show", text)

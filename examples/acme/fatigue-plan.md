@@ -5,6 +5,7 @@ Generated, not hand-written, on the fictional Acme Outdoor Co. fixture (syntheti
 `python3 -I skills/fatigue-planner/scripts/fatigue_plan.py examples/acme/ads_daily.csv --capacity 2 --start 2026-03-31`
 
 ```text
+Data: 2026-03-01 to 2026-03-30, 30 ads.
 1 ad is fading, 8 are on course to fade within 6 weeks;
 at 2 refreshes a week the queue clears by 2026-05-04 (8 late).
 Fading (1):

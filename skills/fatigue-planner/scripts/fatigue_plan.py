@@ -312,10 +312,22 @@ def answer_lines(plan: Dict[str, Any]) -> List[str]:
     return [first + ";", second + "."]
 
 
+def data_lines(plan: Dict[str, Any]) -> List[str]:
+    """The data window and ad count, and a warning when the calendar starts later than the day after the data ends."""
+    first, last, start = plan["data_window"]["first"], plan["data_window"]["last"], plan["settings"]["start"]
+    lines = ["Data: %s to %s, %d ad%s." % (first or "n/a", last or "n/a", len(plan["ads"]), "" if len(plan["ads"]) == 1 else "s")]
+    if last and start:
+        gap = (dt.date.fromisoformat(start) - dt.date.fromisoformat(last)).days
+        if gap > 1:
+            lines.append("The calendar starts %d days after the data ends (%s): every fade estimate is as of %s, so refresh the data "
+                         "or start the calendar on %s." % (gap, last, last, (dt.date.fromisoformat(last) + dt.timedelta(days=1)).isoformat()))
+    return lines
+
+
 def render(plan: Dict[str, Any]) -> str:
     if not plan["ads"]:
         return "No ads with delivery in this data."
-    lines = answer_lines(plan)
+    lines = data_lines(plan) + answer_lines(plan)
     sections = (("fading", "Fading"), ("on course to fade", "On course to fade"), ("steady", "Steady"),
                 ("too little history", "Too little history"), ("too little delivery", "Too little delivery"),
                 ("unreadable", "Unreadable"))

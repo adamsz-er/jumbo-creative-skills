@@ -16,6 +16,7 @@ Turns fatigue from a surprise into a schedule. It reads each ad's own trajectory
 1. Get daily rows (a daily Ads Manager export or a connector pull run through `from_mcp.py`): fatigue cannot be read from totals. Say which mode you are in.
 2. Ask how many new or refreshed ads the team can make a week (`--capacity`), and how many days a refresh takes from brief to live (`--lead-days`). Without a capacity the skill gives the read but no calendar.
 3. With no data, say so and stop: a refresh calendar from no data is a guess.
+4. Leave `--start` out unless the user names a start date: the calendar then starts the day after the data ends. Never pass today's date for older data.
 
 ## Run it
 
@@ -39,10 +40,11 @@ python3 -I scripts/fatigue_plan.py ads.csv --capacity 2 --json
 
 ## Present the result
 
-1. Lead with the two lines it prints: how many ads are fading and on course, and when the queue clears at this capacity, with how many refreshes land late.
-2. Give the calendar week by week. Copy the script's late flag onto every calendar row you show: the number of rows marked late must equal the late count it prints. Name late items and anything beyond the horizon, and offer the two levers: more capacity or a longer horizon.
-3. Quote every days-left figure with its range and the straight-line caveat, as printed (when both ends of the range meet, the script prints one figure, so give one). Never round a range into a promise.
-4. **Next step:** `hook-writer` for one-change variants of a fading ad whose concept still pays, `creative-brief` for each refresh in the calendar.
+1. Lead with the data window and ad count from its first line ("Data: ... to ..., N ads"). If it prints that the calendar starts days after the data ends, say so before anything else: every estimate is as of the data's last day.
+2. Then the two answer lines: how many ads are fading and on course, and when the queue clears at this capacity, with how many refreshes land late.
+3. Give the calendar week by week. Copy the script's late flag onto every calendar row you show: the number of rows marked late must equal the late count it prints. Name late items and anything beyond the horizon, and offer the two levers: more capacity or a longer horizon.
+4. Quote every days-left figure with its range and the straight-line caveat, as printed (when both ends of the range meet, the script prints one figure, so give one). Never round a range into a promise.
+5. **Next step:** `hook-writer` for one-change variants of a fading ad whose concept still pays, `creative-brief` for each refresh in the calendar.
 
 ## Guardrails
 

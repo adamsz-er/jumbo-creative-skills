@@ -59,15 +59,33 @@ class FixtureTest(unittest.TestCase):
         self.assertIsNone(found["days_left"])
         self.assertIn("delivery days, needs 9", found["reason"])
 
-    def test_text_leads_with_the_answer(self):
+    def test_text_leads_with_the_data_window_then_the_answer(self):
         text = fatigue_plan.render(self.plan)
-        self.assertRegex(text.splitlines()[0], r"^\d+ ads? (is|are) fading, \d+ (is|are) on course to fade within 6 weeks")
-        self.assertIn("the queue clears by", text.splitlines()[1])
+        self.assertEqual(text.splitlines()[0], "Data: 2026-03-01 to 2026-03-30, 30 ads.")
+        self.assertRegex(text.splitlines()[1], r"^\d+ ads? (is|are) fading, \d+ (is|are) on course to fade within 6 weeks")
+        self.assertIn("the queue clears by", text.splitlines()[2])
         self.assertIn("Week of 2026-03-31:", text)
 
     def test_default_start_is_the_day_after_the_last_date(self):
         plan = fatigue_plan.build_plan(cm.load_rows(str(FIXTURE)), capacity=2)
         self.assertEqual(plan["settings"]["start"], "2026-03-31")
+
+
+class StaleStartTest(unittest.TestCase):
+    """A calendar that starts after the day after the data ends says so, with how far, so old data never reads as today's."""
+
+    def text(self, start=None):
+        return fatigue_plan.render(fatigue_plan.build_plan(cm.load_rows(str(FIXTURE)), capacity=2, start=start))
+
+    def test_no_warning_at_the_default_start_or_the_day_after_the_data(self):
+        for start in (None, "2026-03-31"):
+            self.assertNotIn("after the data ends", self.text(start))
+
+    def test_a_later_start_says_how_many_days_after_the_data_it_begins(self):
+        text = self.text("2026-04-01")
+        self.assertIn("The calendar starts 2 days after the data ends (2026-03-30): every fade estimate is as of 2026-03-30, so "
+                      "refresh the data or start the calendar on 2026-03-31.", text.splitlines()[1])
+        self.assertIn("starts 198 days after the data ends", self.text("2026-10-14"))
 
 
 class TrajectoryTest(unittest.TestCase):
