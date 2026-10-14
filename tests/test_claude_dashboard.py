@@ -1175,7 +1175,7 @@ class NewDatasetTest(unittest.TestCase):
         rows = [{"date": "2026-03-01", "ad_id": "1", "spend": 100.0, "impressions": 1000.0, "conversions": 2.0, "conversion_value": 300.0},
                 {"date": "2026-03-02", "ad_id": "1", "spend": 100.0, "impressions": 1000.0, "conversions": 0.0, "conversion_value": 0.0},
                 {"date": "2026-03-04", "ad_id": "1", "spend": 100.0, "impressions": 1000.0, "conversions": 1.0, "conversion_value": 90.0}]
-        daily = {(r["day"], r["metric"]): r for r in dashboard.daily_rows(type("Ctx", (), {"rows": rows, "currency": "USD"})())}
+        daily = {(r["day"], r["metric"]): r for r in dashboard.daily_rows(type("Ctx", (), {"rows": rows, "currency": "USD", "gapped": panels.cm.gap_ads(rows)})())}
         self.assertIsNone(daily[("2026-03-02", "cpa")]["value"])
         self.assertEqual(daily[("2026-03-02", "cpa")]["value_note"], "n/a (zero purchases)")
         self.assertEqual(daily[("2026-03-03", "cpa")]["value_note"], "n/a (no data this day)")
