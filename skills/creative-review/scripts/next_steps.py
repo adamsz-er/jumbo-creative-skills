@@ -5,9 +5,13 @@ MAX_STEPS rules that fire are the answer. When fewer than MIN_STEPS fire, the al
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
-from creative_metrics import SITE_STEPS
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from creative_metrics import CART_STEPS, SITE_STEPS  # noqa: E402
 
 MAX_STEPS = 3
 MIN_STEPS = 2
@@ -28,14 +32,29 @@ def _unread_names(verdicts: Dict[str, Any], mix: Dict[str, Any]) -> Optional[str
     return None
 
 
+def _site_steps(ad: Dict[str, Any]) -> List[str]:
+    return [s for s in (ad.get("funnel") or {}).get("weak_steps") or [] if s in SITE_STEPS]
+
+
+def _after_cart(ads: Sequence[Dict[str, Any]]) -> bool:
+    """Whether every weak site step of these ads comes after the cart, which points at checkout, price and shipping."""
+    steps = [s for a in ads for s in _site_steps(a)]
+    return bool(steps) and all(s in CART_STEPS for s in steps)
+
+
 def _site(verdicts: Dict[str, Any], mix: Dict[str, Any]) -> Optional[str]:
     ads = _ads(verdicts, "check_site")
     if ads:
+        if _after_cart(ads):
+            return "%s would be paused but %s to a weak step after the cart: check checkout, price and shipping before cutting" % (
+                _count(len(ads), "ad"), "points" if len(ads) == 1 else "point")
         return "%s would be paused but %s to the landing page or checkout: check the site before cutting" % (
             _count(len(ads), "ad"), "points" if len(ads) == 1 else "point")
-    paused = [a for a in _ads(verdicts, "pause_*")
-              if any(s in SITE_STEPS for s in (a.get("funnel") or {}).get("weak_steps") or [])]
+    paused = [a for a in _ads(verdicts, "pause_*") if _site_steps(a)]
     if paused:
+        if _after_cart(paused):
+            return "%s judged pause also %s a weak step after the cart: check checkout, price and shipping before the replacement runs" % (
+                _count(len(paused), "ad"), "shows" if len(paused) == 1 else "show")
         return "%s judged pause also %s a weak landing page or checkout step: fix the page before the replacement runs" % (
             _count(len(paused), "ad"), "shows" if len(paused) == 1 else "show")
     return None

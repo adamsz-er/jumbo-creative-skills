@@ -37,6 +37,14 @@ class RuleTest(unittest.TestCase):
         paused = dict(ad("pause_fatigued", fatiguing=True), funnel={"weak_steps": ["ctr", "landing_page_view_rate"]})
         self.assertEqual(skills({"ads": [paused]})[0], "funnel-diagnosis")
 
+    def test_a_weak_step_after_the_cart_points_at_checkout_not_the_page(self):
+        paused = dict(ad("pause_fatigued", fatiguing=True), funnel={"weak_steps": ["ctr", "cart_to_purchase_rate"]})
+        checked = dict(ad("check_site"), funnel={"weak_steps": ["cart_to_purchase_rate"]})
+        for verdicts in ({"ads": [paused]}, {"ads": [checked]}):
+            why = next_steps.next_steps(verdicts, {})[0]["why"]
+            self.assertIn("check checkout, price and shipping", why)
+            self.assertNotIn("page", why)
+
     def test_a_pause_with_only_weak_attention_steps_does_not(self):
         paused = dict(ad("pause_fatigued"), funnel={"weak_steps": ["ctr"]})
         self.assertNotIn("funnel-diagnosis", skills({"ads": [paused]}))
