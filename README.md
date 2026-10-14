@@ -228,11 +228,13 @@ Every metric id and formula is defined once, in [skills/creative-context/referen
 - **Hook rate**: of the times the ad was shown, how often it was watched for at least 3 seconds. Also called thumb-stop rate.
 - **Hold rate**: of the 3-second watches, how many went on to a ThruPlay (Meta's measure for a long watch).
 - **CTR**: clicks divided by impressions. Each output says whether it counted link clicks or all clicks.
+- **Add-to-cart rate**: adds to cart divided by link clicks.
+- **Cart-to-purchase rate**: of the adds to cart, how many became purchases. Weak on its own, it points at checkout, price or shipping, not the landing page.
 - **CPA**: cost per purchase (spend divided by purchases).
 - **ROAS**: return on ad spend (purchase value divided by spend).
 - **Frequency**: average times each person saw the ad.
 
-A missing field or a zero denominator is shown as `n/a (missing <field>)`, never 0.
+A missing field or a zero denominator is shown as `n/a (missing <field>)`, never 0. A step that cannot be tested is shown as untested, with the reason, never read as fine.
 
 > [!NOTE]
 > Every ad is graded against your own account, never an industry benchmark. Its comparison is the median and quartiles of similar ads in your account, over the same window.
